@@ -1,4 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -12,7 +13,6 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import Data.Void
 import Newtype.Syntax
-import qualified Prettyprinter as PP
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -60,6 +60,8 @@ colon = symbol ":"
 
 dot = symbol "."
 
+equals = symbol "="
+
 -- list of reserved words
 reservedWords :: [String]
 reservedWords =
@@ -76,7 +78,8 @@ reservedWords =
     "do",
     "yield",
     "await",
-    "async"
+    "async",
+    "readonly"
   ]
 
 pKeyword :: Text -> Parser Text
@@ -121,12 +124,33 @@ pStatement :: Parser Statement
 pStatement =
   choice
     [ pExport,
-      pImport
+      pImport,
+      pTypeDefinition
     ]
   where
     pExport = ExportStatement <$ string "export"
     pImport = do
       pKeyword "import"
-      from <- lexeme stringLiteral <?> "from clause"
+      fromClause <- lexeme stringLiteral <?> "from clause"
       importClause <- pImportClause
-      return (ImportDeclaration importClause from)
+      return ImportDeclaration {..}
+    pTypeDefinition = do
+      pKeyword "type"
+      name <- pIdentifier
+      equals
+      body <- pExpression
+      return TypeDefinition {..}
+      where
+        params = Nothing
+
+pExpression :: Parser Expression
+pExpression =
+  choice
+    [ NumberIntegerLiteral <$> integer,
+      NumberDoubleLiteral <$> float,
+      BooleanLiteral <$> bool,
+      StringLiteral <$> stringLiteral
+    ]
+
+bool :: Parser Bool
+bool = choice [True <$ pKeyword "true", False <$ pKeyword "false"]

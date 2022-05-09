@@ -1,4 +1,3 @@
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -13,6 +12,8 @@ instance Pretty Program where
 instance Pretty Statement where
   pretty ImportDeclaration {..} =
     "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
+  pretty TypeDefinition {..} =
+    "type" <+> pretty name <+> "=" <+> pretty body
   pretty ExportStatement = emptyDoc
 
   prettyList statements = vsep (map pretty statements)
@@ -29,3 +30,10 @@ instance Pretty ImportSpecifier where
   pretty ImportedAlias {..} = pretty from <+> "as" <+> pretty to
   prettyList lst =
     braces . hsep . punctuate comma . map pretty $ lst
+
+instance Pretty Expression where
+  pretty (NumberIntegerLiteral value) = pretty value
+  pretty (NumberDoubleLiteral value) = pretty value
+  pretty (BooleanLiteral True) = "true"
+  pretty (BooleanLiteral False) = "false"
+  pretty (StringLiteral value) = dquotes . pretty $ value

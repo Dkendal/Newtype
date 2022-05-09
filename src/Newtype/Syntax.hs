@@ -9,6 +9,11 @@ data Statement
         fromClause :: String
       }
   | ExportStatement
+  | TypeDefinition
+      { name :: String,
+        params :: Maybe TypeParams,
+        body :: Expression
+      }
   deriving (Eq, Show)
 
 data ImportClause
@@ -30,14 +35,12 @@ data ImportSpecifier
   | ImportedAlias {from :: String, to :: String}
   deriving (Eq, Show)
 
-data Declaration
-  = Var String
-  | Const String
-  | Let String
-  | Function String
+data TypeParams = TypeParams
   deriving (Eq, Show)
 
-data Definition
-  = Type String
-  | Interface String
+data Expression
+  = StringLiteral String
+  | NumberIntegerLiteral Integer
+  | NumberDoubleLiteral Double
+  | BooleanLiteral Bool
   deriving (Eq, Show)
