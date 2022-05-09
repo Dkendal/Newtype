@@ -2,16 +2,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Lib
-  ( main,
-  )
-where
+module Newtype.Parser where
 
 import Control.Applicative hiding (many, some)
 import Control.Monad
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
 import Data.Void
+import Newtype.Syntax
+import qualified Prettyprinter as PP
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -59,49 +60,6 @@ colon = symbol ":"
 
 dot = symbol "."
 
-newtype Program = Program {programStatements :: [Statement]}
-  deriving (Eq, Show)
-
-data Statement
-  = ImportDeclaration
-      { importClause :: ImportClause,
-        fromClause :: String
-      }
-  | ExportStatement
-  deriving (Eq, Show)
-
-data ImportClause
-  = ImportClauseDefault String
-  | ImportClauseNS String
-  | ImportClauseNamed NamedImports
-  | ImportClauseDefaultAndNS
-      { defaultBinding :: String,
-        namespace :: String
-      }
-  | ImportClauseDefaultAndNamed
-      { defaultBinding :: String,
-        named :: NamedImports
-      }
-  deriving (Eq, Show)
-
-data NamedImports = NamedImports [Either Alias String]
-  deriving (Eq, Show)
-
-data Alias = Alias {aliasFrom :: String, aliasTo :: String}
-  deriving (Eq, Show)
-
-data Declaration
-  = Var String
-  | Const String
-  | Let String
-  | Function String
-  deriving (Eq, Show)
-
-data Definition
-  = Type String
-  | Interface String
-  deriving (Eq, Show)
-
 -- list of reserved words
 reservedWords :: [String]
 reservedWords =
@@ -139,17 +97,36 @@ pProgram =
     statements <- many pStatement <* eof
     return (Program statements)
 
+pImportClause :: Parser ImportClause
+pImportClause =
+  ImportClauseNamed <$> parens (pSpecifier `sepBy` comma)
+  where
+    pSpecifier = do
+      id <- pIdentifier
+      alias <- optional $ do
+        pKeyword "as"
+        pIdentifier
+      case alias of
+        Just importedBinding -> return (ImportedAlias id importedBinding)
+        Nothing -> return (ImportedBinding id)
+
+    pBinding = ImportedBinding <$> pIdentifier
+    pAlias = do
+      from <- pIdentifier
+      pKeyword "as"
+      to <- pIdentifier
+      return ImportedAlias {..}
+
 pStatement :: Parser Statement
 pStatement =
   choice
     [ pExport,
-      pImportDeclaration
+      pImport
     ]
   where
-    pImportDeclaration = do
-      pKeyword "import"
-      binding <- pIdentifier <?> "default binding"
-      pKeyword "from"
-      from <- lexeme stringLiteral <?> "from clause"
-      return (ImportDeclaration (ImportClauseDefault binding) from)
     pExport = ExportStatement <$ string "export"
+    pImport = do
+      pKeyword "import"
+      from <- lexeme stringLiteral <?> "from clause"
+      importClause <- pImportClause
+      return (ImportDeclaration importClause from)

@@ -25,8 +25,9 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
-      Parser
+      Newtype.Parser
+      Newtype.Pretty
+      Newtype.Syntax
   other-modules:
       Paths_newtype
   hs-source-dirs:
@@ -34,6 +35,7 @@ library
   build-depends:
       base >=4.7 && <5
     , megaparsec
+    , prettyprinter
     , text
   default-language: Haskell2010
 
@@ -48,6 +50,7 @@ executable newtype-exe
       base >=4.7 && <5
     , megaparsec
     , newtype
+    , prettyprinter
     , text
   default-language: Haskell2010
 
@@ -63,5 +66,6 @@ test-suite newtype-test
       base >=4.7 && <5
     , megaparsec
     , newtype
+    , prettyprinter
     , text
   default-language: Haskell2010

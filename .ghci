@@ -1,0 +1,5 @@
+:set prompt "λ "
+:set -XOverloadedStrings
+:l Newtype.Parser
+import Text.Megaparsec
+import Prettyprinter
