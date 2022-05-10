@@ -37,3 +37,4 @@ instance Pretty Expression where
   pretty (BooleanLiteral True) = "true"
   pretty (BooleanLiteral False) = "false"
   pretty (StringLiteral value) = dquotes . pretty $ value
+  pretty (TypeApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)

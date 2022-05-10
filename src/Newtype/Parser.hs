@@ -149,8 +149,14 @@ pExpression =
     [ NumberIntegerLiteral <$> integer,
       NumberDoubleLiteral <$> float,
       BooleanLiteral <$> bool,
-      StringLiteral <$> stringLiteral
+      StringLiteral <$> stringLiteral,
+      pTypeApplication
     ]
+  where
+    pTypeApplication = do
+      typeName <- pIdentifier
+      params <- many pExpression
+      return (TypeApplication typeName params)
 
 bool :: Parser Bool
 bool = choice [True <$ pKeyword "true", False <$ pKeyword "false"]

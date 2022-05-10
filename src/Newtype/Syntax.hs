@@ -43,4 +43,5 @@ data Expression
   | NumberIntegerLiteral Integer
   | NumberDoubleLiteral Double
   | BooleanLiteral Bool
+  | TypeApplication String [Expression]
   deriving (Eq, Show)
