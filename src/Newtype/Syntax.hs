@@ -45,6 +45,7 @@ data Expression
   | BooleanLiteral Bool
   | ObjectLiteral [ObjectLiteralProperty]
   | TypeApplication String [Expression]
+  | Identifier String
   deriving (Eq, Show)
 
 data ObjectLiteralProperty = KeyValue

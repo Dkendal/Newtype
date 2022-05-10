@@ -84,17 +84,20 @@ reservedWords =
     "readonly"
   ]
 
-pKeyword :: Text -> Parser Text
-pKeyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
+keyword :: Text -> Parser Text
+keyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
 
-pIdentifier :: Parser String
-pIdentifier = (lexeme . try) (p >>= check)
+identifier :: Parser String
+identifier = (lexeme . try) (p >>= check)
   where
     p = (:) <$> letterChar <*> many alphaNumChar
     check x =
       if x `elem` reservedWords
         then fail $ "keyword " ++ show x ++ " cannot be an identifier"
         else return x
+
+bool :: Parser Bool
+bool = choice [True <$ keyword "true", False <$ keyword "false"]
 
 pProgram :: Parser Program
 pProgram =
@@ -107,19 +110,19 @@ pImportClause =
   ImportClauseNamed <$> parens (pSpecifier `sepBy` comma)
   where
     pSpecifier = do
-      id <- pIdentifier
+      id <- identifier
       alias <- optional $ do
-        pKeyword "as"
-        pIdentifier
+        keyword "as"
+        identifier
       case alias of
         Just importedBinding -> return (ImportedAlias id importedBinding)
         Nothing -> return (ImportedBinding id)
 
-    pBinding = ImportedBinding <$> pIdentifier
+    pBinding = ImportedBinding <$> identifier
     pAlias = do
-      from <- pIdentifier
-      pKeyword "as"
-      to <- pIdentifier
+      from <- identifier
+      keyword "as"
+      to <- identifier
       return ImportedAlias {..}
 
 pStatement :: Parser Statement
@@ -132,13 +135,13 @@ pStatement =
   where
     pExport = ExportStatement <$ string "export"
     pImport = do
-      pKeyword "import"
+      keyword "import"
       fromClause <- lexeme stringLiteral <?> "from clause"
       importClause <- pImportClause
       return ImportDeclaration {..}
     pTypeDefinition = do
-      pKeyword "type"
-      name <- pIdentifier
+      keyword "type"
+      name <- identifier
       equals
       body <- pExpression
       return TypeDefinition {..}
@@ -153,7 +156,10 @@ pExpression =
       BooleanLiteral <$> bool,
       StringLiteral <$> stringLiteral,
       pTypeApplication,
-      pObjectLiteral
+      Identifier <$> identifier,
+      pObjectLiteral,
+      -- Allow expressions to have an arbitrary number of parens surrounding them
+      parens pExpression
     ]
   where
     pObjectLiteral =
@@ -162,24 +168,26 @@ pExpression =
     pObjectLiteralProperty = do
       isReadonly <-
         optional . choice $
-          [ True <$ pKeyword "readonly",
-            False <$ pKeyword "-readonly"
+          [ True <$ keyword "readonly",
+            False <$ keyword "-readonly"
           ]
 
-      key <- pIdentifier
+      key <- identifier
       isOptional <-
         optional . choice $
           [ True <$ qmark,
-            False <$ pKeyword "-?"
+            False <$ keyword "-?"
           ]
       colon
       value <- pExpression
       return (KeyValue {..})
 
     pTypeApplication = do
-      typeName <- pIdentifier
-      params <- many pExpression
+      typeName <- identifier
+      -- Give Identifier a higher precedence when it's nested in an existing
+      -- expression
+      params <- many . choice $ [pIdentifier, pExpression]
       return (TypeApplication typeName params)
 
-bool :: Parser Bool
-bool = choice [True <$ pKeyword "true", False <$ pKeyword "false"]
+pIdentifier :: Parser Expression
+pIdentifier = Identifier <$> identifier

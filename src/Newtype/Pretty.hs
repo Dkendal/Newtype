@@ -41,6 +41,7 @@ instance Pretty Expression where
   pretty (TypeApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
   pretty (ObjectLiteral props) =
     braces . vsep . punctuate comma . map pretty $ props
+  pretty (Identifier name) = pretty name
 
 instance Pretty ObjectLiteralProperty where
   pretty KeyValue {..} =
