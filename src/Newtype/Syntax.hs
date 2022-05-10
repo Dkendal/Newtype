@@ -1,3 +1,5 @@
+{-# LANGUAGE DuplicateRecordFields #-}
+
 module Newtype.Syntax where
 
 newtype Program = Program {statements :: [Statement]}
@@ -46,6 +48,17 @@ data Expression
   | ObjectLiteral [ObjectLiteralProperty]
   | TypeApplication String [Expression]
   | Identifier String
+  | ExtendsExpression
+      { lhs :: Expression,
+        op :: ComparisionOperator,
+        rhs :: Expression,
+        ifBody :: Expression,
+        elseBody :: Expression
+      }
+  deriving (Eq, Show)
+data ComparisionOperator
+  = ExtendsLeft
+  | ExtendsRight
   deriving (Eq, Show)
 
 data ObjectLiteralProperty = KeyValue
@@ -55,4 +68,3 @@ data ObjectLiteralProperty = KeyValue
     value :: Expression
   }
   deriving (Eq, Show)
-

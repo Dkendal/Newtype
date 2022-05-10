@@ -70,6 +70,7 @@ reservedWords =
   [ "from",
     "if",
     "else",
+    "then",
     "while",
     "for",
     "goto",
@@ -151,17 +152,33 @@ pStatement =
 pExpression :: Parser Expression
 pExpression =
   choice
-    [ NumberIntegerLiteral <$> integer,
+    [ pTypeApplication,
+      pExtendsExpression,
+      NumberIntegerLiteral <$> integer,
       NumberDoubleLiteral <$> float,
       BooleanLiteral <$> bool,
       StringLiteral <$> stringLiteral,
-      pTypeApplication,
       Identifier <$> identifier,
       pObjectLiteral,
       -- Allow expressions to have an arbitrary number of parens surrounding them
       parens pExpression
     ]
   where
+    pExtendsExpression = do
+      keyword "if"
+      lhs <- pExpression
+      op <-
+        choice
+          [ ExtendsLeft <$ keyword "<:",
+            ExtendsRight <$ keyword ":>"
+          ]
+      rhs <- pExpression
+      keyword "then"
+      ifBody <- pExpression
+      keyword "else"
+      elseBody <- pExpression
+      return (ExtendsExpression {..})
+
     pObjectLiteral =
       ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
 

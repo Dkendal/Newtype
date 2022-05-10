@@ -14,7 +14,7 @@ instance Pretty Statement where
   pretty ImportDeclaration {..} =
     "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
   pretty TypeDefinition {..} =
-    group ("type" <+> pretty name <+> "=") <> group (nest  2 (line <> pretty body))
+    group ("type" <+> pretty name <+> "=") <> group (nest 2 (line <> pretty body))
   pretty ExportStatement = emptyDoc
 
   prettyList statements = vsep (map pretty statements)
@@ -38,6 +38,7 @@ instance Pretty Expression where
   pretty (BooleanLiteral True) = "true"
   pretty (BooleanLiteral False) = "false"
   pretty (StringLiteral value) = dquotes . pretty $ value
+  pretty (TypeApplication typeName []) = pretty typeName
   pretty (TypeApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
   pretty (ObjectLiteral props) =
     group
@@ -48,6 +49,21 @@ instance Pretty Expression where
           (map pretty props)
       )
   pretty (Identifier name) = pretty name
+  pretty ExtendsExpression {op = ExtendsLeft, ..} =
+    pretty lhs <+> "extends" <+> pretty rhs
+      <+> "?"
+      <+> pretty ifBody
+      <+> ":"
+      <+> pretty elseBody
+  pretty ExtendsExpression {op = ExtendsRight, ..} =
+    pretty
+      ExtendsExpression
+        { lhs = rhs,
+          rhs = lhs,
+          op = ExtendsLeft,
+          ifBody = elseBody,
+          elseBody = ifBody
+        }
 
 instance Pretty ObjectLiteralProperty where
   pretty KeyValue {..} =
