@@ -163,7 +163,7 @@ pExpression =
     ]
   where
     pObjectLiteral =
-      ObjectLiteral <$> braces (many pObjectLiteralProperty)
+      ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
 
     pObjectLiteralProperty = do
       isReadonly <-

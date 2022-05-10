@@ -14,7 +14,7 @@ instance Pretty Statement where
   pretty ImportDeclaration {..} =
     "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
   pretty TypeDefinition {..} =
-    "type" <+> pretty name <+> "=" <+> pretty body
+    group ("type" <+> pretty name <+> "=") <> group (nest  2 (line <> pretty body))
   pretty ExportStatement = emptyDoc
 
   prettyList statements = vsep (map pretty statements)
@@ -40,17 +40,23 @@ instance Pretty Expression where
   pretty (StringLiteral value) = dquotes . pretty $ value
   pretty (TypeApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
   pretty (ObjectLiteral props) =
-    braces . vsep . punctuate comma . map pretty $ props
+    group
+      ( encloseSep
+          (flatAlt "{ " "{")
+          (flatAlt " }" "}")
+          ", "
+          (map pretty props)
+      )
   pretty (Identifier name) = pretty name
 
 instance Pretty ObjectLiteralProperty where
   pretty KeyValue {..} =
-    readonly <+> pretty key <> optional <> ":" <+> pretty value
+    (group readonly <> pretty key <> optional <> ":") <+> pretty value
     where
       readonly =
         case isReadonly of
-          Just True -> "readonly"
-          Just False -> "-readonly"
+          Just True -> "readonly" <> space
+          Just False -> "-readonly" <> space
           Nothing -> emptyDoc
       optional =
         case isOptional of
