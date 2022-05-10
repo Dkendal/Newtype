@@ -8,9 +8,6 @@ module Newtype.Parser where
 import Control.Applicative hiding (many, some)
 import Control.Monad
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Builder as TLB
 import Data.Void
 import Newtype.Syntax
 import Text.Megaparsec hiding (State)
@@ -44,24 +41,64 @@ integer = lexeme L.decimal
 float :: Parser Double
 float = lexeme L.float
 
-parens = between (symbol "(") (symbol ")")
+lparen :: Parser Text
+lparen = symbol "("
 
-braces = between (symbol "{") (symbol "}")
+rparen :: Parser Text
+rparen = symbol ")"
 
-angles = between (symbol "<") (symbol ">")
+parens :: Parser a -> Parser a
+parens = between lparen rparen
 
-brackets = between (symbol "[") (symbol "]")
+lbrace :: Parser Text
+lbrace = symbol "{"
 
+rbrace :: Parser Text
+rbrace = symbol "}"
+
+braces :: Parser a -> Parser a
+braces = between lbrace rbrace
+
+langle :: Parser Text
+langle = symbol "<"
+
+rangle :: Parser Text
+rangle = symbol ">"
+
+angles :: Parser Text -> Parser Text
+angles = between langle rangle
+
+lbracket :: Parser Text
+lbracket = symbol "["
+
+rbracket :: Parser Text
+rbracket = symbol "]"
+
+brackets :: Parser a -> Parser a
+brackets = between lbracket rbracket
+
+semicolon :: Parser Text
 semicolon = symbol ";"
 
+comma :: Parser Text
 comma = symbol ","
 
+colon :: Parser Text
 colon = symbol ":"
 
+qmark :: Parser Text
 qmark = symbol "?"
 
+pound :: Parser Text
+pound = symbol "#"
+
+caret :: Parser Text
+caret = symbol "^"
+
+dot :: Parser Text
 dot = symbol "."
 
+equals :: Parser Text
 equals = symbol "="
 
 -- list of reserved words
@@ -86,7 +123,7 @@ reservedWords =
   ]
 
 keyword :: Text -> Parser Text
-keyword keyword = lexeme (string keyword <* notFollowedBy alphaNumChar)
+keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
 
 identifier :: Parser String
 identifier = (lexeme . try) (p >>= check)
@@ -111,20 +148,13 @@ pImportClause =
   ImportClauseNamed <$> parens (pSpecifier `sepBy` comma)
   where
     pSpecifier = do
-      id <- identifier
+      binding <- identifier
       alias <- optional $ do
-        keyword "as"
+        void $ keyword "as"
         identifier
       case alias of
-        Just importedBinding -> return (ImportedAlias id importedBinding)
-        Nothing -> return (ImportedBinding id)
-
-    pBinding = ImportedBinding <$> identifier
-    pAlias = do
-      from <- identifier
-      keyword "as"
-      to <- identifier
-      return ImportedAlias {..}
+        Just importedBinding -> return (ImportedAlias binding importedBinding)
+        Nothing -> return (ImportedBinding binding)
 
 pStatement :: Parser Statement
 pStatement =
@@ -136,14 +166,14 @@ pStatement =
   where
     pExport = ExportStatement <$ string "export"
     pImport = do
-      keyword "import"
+      void $ keyword "import"
       fromClause <- lexeme stringLiteral <?> "from clause"
       importClause <- pImportClause
       return ImportDeclaration {..}
     pTypeDefinition = do
-      keyword "type"
+      void $ keyword "type"
       name <- identifier
-      equals
+      void equals
       body <- pExpression
       return TypeDefinition {..}
       where
@@ -152,20 +182,26 @@ pStatement =
 pExpression :: Parser Expression
 pExpression =
   choice
-    [ pTypeApplication,
+    [ try pTypeApplication,
+      try (parens pTypeApplication),
+      try pTuple,
       pExtendsExpression,
       NumberIntegerLiteral <$> integer,
       NumberDoubleLiteral <$> float,
       BooleanLiteral <$> bool,
       StringLiteral <$> stringLiteral,
-      Identifier <$> identifier,
+      Identifier <$> identifier <?> "identifier",
+      -- Not actually valid outside of the extends expression
+      -- but make my life a lot easier
+      do void caret; InferIdentifier <$> identifier <?> "identifier",
       pObjectLiteral,
       -- Allow expressions to have an arbitrary number of parens surrounding them
       parens pExpression
     ]
   where
+    pTuple = Tuple <$> brackets (pExpression `sepBy` comma)
     pExtendsExpression = do
-      keyword "if"
+      void $ keyword "if"
       lhs <- pExpression
       op <-
         choice
@@ -173,9 +209,9 @@ pExpression =
             ExtendsRight <$ keyword ":>"
           ]
       rhs <- pExpression
-      keyword "then"
+      void $ keyword "then"
       ifBody <- pExpression
-      keyword "else"
+      void $ keyword "else"
       elseBody <- pExpression
       return (ExtendsExpression {..})
 
@@ -195,15 +231,16 @@ pExpression =
           [ True <$ qmark,
             False <$ keyword "-?"
           ]
-      colon
+      void colon
       value <- pExpression
       return (KeyValue {..})
 
     pTypeApplication = do
-      typeName <- identifier
+      typeName <- identifier <?> "type function"
       -- Give Identifier a higher precedence when it's nested in an existing
       -- expression
-      params <- many . choice $ [pIdentifier, pExpression]
+      params <-
+        (some . choice $ [pIdentifier, pExpression]) <?> "type parameter"
       return (TypeApplication typeName params)
 
 pIdentifier :: Parser Expression

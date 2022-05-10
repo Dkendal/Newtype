@@ -26,7 +26,6 @@ source-repository head
 library
   exposed-modules:
       Newtype.Parser
-      Newtype.Pretty
       Newtype.Syntax
   other-modules:
       Paths_newtype
