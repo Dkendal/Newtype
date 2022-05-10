@@ -43,5 +43,15 @@ data Expression
   | NumberIntegerLiteral Integer
   | NumberDoubleLiteral Double
   | BooleanLiteral Bool
+  | ObjectLiteral [ObjectLiteralProperty]
   | TypeApplication String [Expression]
   deriving (Eq, Show)
+
+data ObjectLiteralProperty = KeyValue
+  { isReadonly :: Maybe Bool,
+    isOptional :: Maybe Bool,
+    key :: String,
+    value :: Expression
+  }
+  deriving (Eq, Show)
+

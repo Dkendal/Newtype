@@ -58,6 +58,8 @@ comma = symbol ","
 
 colon = symbol ":"
 
+qmark = symbol "?"
+
 dot = symbol "."
 
 equals = symbol "="
@@ -150,9 +152,30 @@ pExpression =
       NumberDoubleLiteral <$> float,
       BooleanLiteral <$> bool,
       StringLiteral <$> stringLiteral,
-      pTypeApplication
+      pTypeApplication,
+      pObjectLiteral
     ]
   where
+    pObjectLiteral =
+      ObjectLiteral <$> braces (many pObjectLiteralProperty)
+
+    pObjectLiteralProperty = do
+      isReadonly <-
+        optional . choice $
+          [ True <$ pKeyword "readonly",
+            False <$ pKeyword "-readonly"
+          ]
+
+      key <- pIdentifier
+      isOptional <-
+        optional . choice $
+          [ True <$ qmark,
+            False <$ pKeyword "-?"
+          ]
+      colon
+      value <- pExpression
+      return (KeyValue {..})
+
     pTypeApplication = do
       typeName <- pIdentifier
       params <- many pExpression

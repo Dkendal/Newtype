@@ -3,6 +3,7 @@
 
 module Newtype.Pretty where
 
+import Control.Monad
 import Newtype.Syntax
 import Prettyprinter
 
@@ -38,3 +39,20 @@ instance Pretty Expression where
   pretty (BooleanLiteral False) = "false"
   pretty (StringLiteral value) = dquotes . pretty $ value
   pretty (TypeApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
+  pretty (ObjectLiteral props) =
+    braces . vsep . punctuate comma . map pretty $ props
+
+instance Pretty ObjectLiteralProperty where
+  pretty KeyValue {..} =
+    readonly <+> pretty key <> optional <> ":" <+> pretty value
+    where
+      readonly =
+        case isReadonly of
+          Just True -> "readonly"
+          Just False -> "-readonly"
+          Nothing -> emptyDoc
+      optional =
+        case isOptional of
+          Just True -> "?"
+          Just False -> "-?"
+          Nothing -> emptyDoc
