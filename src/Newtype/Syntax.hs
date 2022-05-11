@@ -66,6 +66,8 @@ data Expression
 data ComparisionOperator
   = ExtendsLeft
   | ExtendsRight
+  | Equals
+  | NotEquals
   deriving (Eq, Show)
 
 data ObjectLiteralProperty = KeyValue
@@ -130,6 +132,22 @@ instance Pretty Expression where
       ExtendsExpression
         { lhs = rhs,
           rhs = lhs,
+          op = ExtendsLeft,
+          ..
+        }
+  pretty ExtendsExpression {op = Equals, ..} =
+    pretty
+      ExtendsExpression
+        { lhs = Tuple [lhs],
+          rhs = Tuple [rhs],
+          op = ExtendsLeft,
+          ..
+        }
+  pretty ExtendsExpression {op = NotEquals, ..} =
+    pretty
+      ExtendsExpression
+        { lhs = Tuple [lhs],
+          rhs = Tuple [rhs],
           op = ExtendsLeft,
           ifBody = elseBody,
           elseBody = ifBody

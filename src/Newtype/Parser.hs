@@ -1,4 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -7,6 +8,7 @@ module Newtype.Parser where
 
 import Control.Applicative hiding (many, some)
 import Control.Monad
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Void
 import Newtype.Syntax
@@ -206,14 +208,22 @@ pExpression =
       op <-
         choice
           [ ExtendsLeft <$ keyword "<:",
-            ExtendsRight <$ keyword ":>"
+            ExtendsRight <$ keyword ":>",
+            NotEquals <$ keyword "!=",
+            Equals <$ keyword "=="
           ]
       rhs <- pExpression
       void $ keyword "then"
       ifBody <- pExpression
-      void $ keyword "else"
-      elseBody <- pExpression
-      return (ExtendsExpression {..})
+      elseBody <- do optional (keyword "else" >> pExpression)
+      return
+        ( ExtendsExpression
+            { elseBody = fromMaybe never elseBody,
+              ..
+            }
+        )
+      where
+        never = Identifier "never"
 
     pObjectLiteral =
       ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
