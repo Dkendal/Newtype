@@ -130,11 +130,19 @@ keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
 identifier :: Parser String
 identifier = (lexeme . try) (p >>= check)
   where
-    p = (:) <$> letterChar <*> many alphaNumChar
+    p = (:) <$> (letterChar <|> underscore <|> dollar) <*> many (alphaNumChar <|> underscore <|> dollar)
     check x =
       if x `elem` reservedWords
         then fail $ "keyword " ++ show x ++ " cannot be an identifier"
         else return x
+
+underscore :: Parser (Token Text)
+underscore = char '_'
+{-# INLINE underscore #-}
+
+dollar :: Parser (Token Text)
+dollar = char '$'
+{-# INLINE dollar #-}
 
 bool :: Parser Bool
 bool = choice [True <$ keyword "true", False <$ keyword "false"]
