@@ -4,6 +4,7 @@
 
 module Newtype.Syntax where
 
+import Control.Monad
 import Prettyprinter
 
 newtype Program = Program {statements :: [Statement]}
@@ -61,7 +62,11 @@ data Expression
         ifBody :: Expression,
         elseBody :: Expression
       }
+  | Union Expression Expression
+  | Intersection Expression Expression
   deriving (Eq, Show)
+
+data BinaryOp
 
 data ComparisionOperator
   = ExtendsLeft
@@ -85,7 +90,7 @@ instance Pretty Statement where
   pretty ImportDeclaration {..} =
     "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
   pretty TypeDefinition {..} =
-    group ("type" <+> pretty name <+> "=") <> group (nest 2 (line <> pretty body))
+    group ("type" <+> pretty name) <> group (nest 2 (line <> "=" <+> pretty body))
   pretty ExportStatement = emptyDoc
 
   prettyList statements = vsep (map pretty statements)
@@ -152,7 +157,17 @@ instance Pretty Expression where
           ifBody = elseBody,
           elseBody = ifBody
         }
-  pretty (Tuple items) = prettyList items
+  pretty (Tuple exprs) = prettyList exprs
+  pretty (Intersection left right) =
+    fmt left <> line <> "&" <+> fmt right
+    where
+      fmt (Union a b) = prettyOpList (Union a b)
+      fmt a = pretty a
+  pretty (Union left right) =
+    fmt left <> line <> "|" <+> fmt right
+    where
+      fmt (Intersection a b) = prettyOpList (Intersection a b)
+      fmt a = pretty a
 
 instance Pretty ObjectLiteralProperty where
   pretty KeyValue {..} =
@@ -168,3 +183,7 @@ instance Pretty ObjectLiteralProperty where
           Just True -> "?"
           Just False -> "-?"
           Nothing -> emptyDoc
+
+prettyOpList :: Expression -> Doc ann
+prettyOpList a =
+  group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a

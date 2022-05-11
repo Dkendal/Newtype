@@ -1,6 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -8,6 +6,7 @@ module Newtype.Parser where
 
 import Control.Applicative hiding (many, some)
 import Control.Monad
+import Control.Monad.Combinators.Expr
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Void
@@ -15,6 +14,7 @@ import Newtype.Syntax
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
+import Text.Megaparsec.Debug
 
 type Parser = Parsec Void Text
 
@@ -81,6 +81,12 @@ brackets = between lbracket rbracket
 
 semicolon :: Parser Text
 semicolon = symbol ";"
+
+pipe :: Parser Text
+pipe = symbol "|"
+
+amp :: Parser Text
+amp = symbol "&"
 
 comma :: Parser Text
 comma = symbol ","
@@ -189,77 +195,114 @@ pStatement =
       where
         params = Nothing
 
-pExpression :: Parser Expression
-pExpression =
+-- Same as expression, but with recursive terms removed
+pTerm :: Parser Expression
+pTerm =
   choice
     [ try pTypeApplication,
       try (parens pTypeApplication),
       try pTuple,
+      parens pOperator,
       pExtendsExpression,
-      NumberIntegerLiteral <$> integer,
-      NumberDoubleLiteral <$> float,
-      BooleanLiteral <$> bool,
-      StringLiteral <$> stringLiteral,
-      Identifier <$> identifier <?> "identifier",
+      pNumberIntegerLiteral,
+      pNumberDoubleLiteral,
+      pBooleanLiteral,
+      pStringLiteral,
+      pIdentifier,
       -- Not actually valid outside of the extends expression
       -- but make my life a lot easier
-      do void caret; InferIdentifier <$> identifier <?> "identifier",
-      pObjectLiteral,
-      -- Allow expressions to have an arbitrary number of parens surrounding them
-      parens pExpression
+      pInferIdentifier,
+      pObjectLiteral
     ]
-  where
-    pTuple = Tuple <$> brackets (pExpression `sepBy` comma)
-    pExtendsExpression = do
-      void $ keyword "if"
-      lhs <- pExpression
-      op <-
-        choice
-          [ ExtendsLeft <$ keyword "<:",
-            ExtendsRight <$ keyword ":>",
-            NotEquals <$ keyword "!=",
-            Equals <$ keyword "=="
-          ]
-      rhs <- pExpression
-      void $ keyword "then"
-      ifBody <- pExpression
-      elseBody <- do optional (keyword "else" >> pExpression)
-      return
-        ( ExtendsExpression
-            { elseBody = fromMaybe never elseBody,
-              ..
-            }
-        )
-      where
-        never = Identifier "never"
 
-    pObjectLiteral =
-      ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
+pExpression :: Parser Expression
+pExpression =
+  choice
+    [ pOperator,
+      pTerm
+    ]
 
-    pObjectLiteralProperty = do
-      isReadonly <-
-        optional . choice $
-          [ True <$ keyword "readonly",
-            False <$ keyword "-readonly"
-          ]
+pOperator :: Parser Expression
+pOperator = makeExprParser pTerm operatorTable
 
-      key <- identifier
-      isOptional <-
-        optional . choice $
-          [ True <$ qmark,
-            False <$ keyword "-?"
-          ]
-      void colon
-      value <- pExpression
-      return (KeyValue {..})
+operatorTable :: [[Operator Parser Expression]]
+operatorTable =
+  [ [InfixL $ Intersection <$ amp],
+    [InfixL $ Union <$ pipe]
+  ]
 
-    pTypeApplication = do
-      typeName <- identifier <?> "type function"
-      -- Give Identifier a higher precedence when it's nested in an existing
-      -- expression
-      params <-
-        (some . choice $ [pIdentifier, pExpression]) <?> "type parameter"
-      return (TypeApplication typeName params)
+pInferIdentifier :: Parser Expression
+pInferIdentifier = caret >> InferIdentifier <$> identifier <?> "identifier"
+
+pNumberIntegerLiteral :: Parser Expression
+pNumberIntegerLiteral = NumberIntegerLiteral <$> integer
+
+pNumberDoubleLiteral :: Parser Expression
+pNumberDoubleLiteral = NumberDoubleLiteral <$> float
+
+pBooleanLiteral :: Parser Expression
+pBooleanLiteral = BooleanLiteral <$> bool
+
+pStringLiteral :: Parser Expression
+pStringLiteral = StringLiteral <$> stringLiteral
+
+pTuple :: Parser Expression
+pTuple = Tuple <$> brackets (pExpression `sepBy` comma)
 
 pIdentifier :: Parser Expression
-pIdentifier = Identifier <$> identifier
+pIdentifier = Identifier <$> identifier <?> "identifier"
+
+pExtendsExpression :: Parser Expression
+pExtendsExpression = do
+  void $ keyword "if"
+  lhs <- pExpression
+  op <-
+    choice
+      [ ExtendsLeft <$ keyword "<:",
+        ExtendsRight <$ keyword ":>",
+        NotEquals <$ keyword "!=",
+        Equals <$ keyword "=="
+      ]
+  rhs <- pExpression
+  void $ keyword "then"
+  ifBody <- pExpression
+  elseBody <- do optional (keyword "else" >> pExpression)
+  return
+    ( ExtendsExpression
+        { elseBody = fromMaybe never elseBody,
+          ..
+        }
+    )
+  where
+    never = Identifier "never"
+
+pObjectLiteral :: Parser Expression
+pObjectLiteral =
+  ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
+
+pTypeApplication :: Parser Expression
+pTypeApplication = do
+  typeName <- identifier <?> "type function"
+  -- Give Identifier a higher precedence when it's nested in an existing
+  -- expression
+  params <-
+    (some . choice $ [pIdentifier, pExpression]) <?> "type parameter"
+  return (TypeApplication typeName params)
+
+pObjectLiteralProperty :: Parser ObjectLiteralProperty
+pObjectLiteralProperty = do
+  isReadonly <-
+    optional . choice $
+      [ True <$ keyword "readonly",
+        False <$ keyword "-readonly"
+      ]
+
+  key <- identifier
+  isOptional <-
+    optional . choice $
+      [ True <$ qmark,
+        False <$ keyword "-?"
+      ]
+  void colon
+  value <- pExpression
+  return (KeyValue {..})

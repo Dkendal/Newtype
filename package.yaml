@@ -24,6 +24,7 @@ dependencies:
 - megaparsec
 - text
 - prettyprinter
+- parser-combinators
 
 library:
   source-dirs: src
