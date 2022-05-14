@@ -57,6 +57,7 @@ data Expression
   | Tuple [Expression]
   | ExtendsExpression
       { lhs :: Expression,
+        negate :: Bool,
         op :: ComparisionOperator,
         rhs :: Expression,
         ifBody :: Expression,
@@ -126,6 +127,14 @@ instance Pretty Expression where
       )
   pretty (Identifier name) = pretty name
   pretty (InferIdentifier name) = group "infer" <+> pretty name
+  pretty ExtendsExpression {negate = True, ..} =
+    pretty
+      ExtendsExpression
+        { negate = False,
+          ifBody = elseBody,
+          elseBody = ifBody,
+          ..
+        }
   pretty ExtendsExpression {op = ExtendsLeft, ..} =
     pretty lhs <+> "extends" <+> pretty rhs
       <+> "?"
@@ -155,7 +164,8 @@ instance Pretty Expression where
           rhs = Tuple [rhs],
           op = ExtendsLeft,
           ifBody = elseBody,
-          elseBody = ifBody
+          elseBody = ifBody,
+          ..
         }
   pretty (Tuple exprs) = prettyList exprs
   pretty (Intersection left right) =

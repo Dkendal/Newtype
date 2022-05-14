@@ -7,7 +7,7 @@ module Newtype.Parser where
 import Control.Applicative hiding (many, some)
 import Control.Monad
 import Control.Monad.Combinators.Expr
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import Data.Void
 import Newtype.Syntax
@@ -109,6 +109,9 @@ dot = symbol "."
 equals :: Parser Text
 equals = symbol "="
 
+inferSym :: Parser Text
+inferSym = qmark
+
 -- list of reserved words
 reservedWords :: [String]
 reservedWords =
@@ -202,7 +205,7 @@ pTerm =
     [ try pTypeApplication,
       try (parens pTypeApplication),
       try pTuple,
-      parens pOperator,
+      parens pSetOperator,
       pExtendsExpression,
       pNumberIntegerLiteral,
       pNumberDoubleLiteral,
@@ -218,12 +221,12 @@ pTerm =
 pExpression :: Parser Expression
 pExpression =
   choice
-    [ pOperator,
+    [ pSetOperator,
       pTerm
     ]
 
-pOperator :: Parser Expression
-pOperator = makeExprParser pTerm operatorTable
+pSetOperator :: Parser Expression
+pSetOperator = makeExprParser pTerm operatorTable
 
 operatorTable :: [[Operator Parser Expression]]
 operatorTable =
@@ -232,7 +235,7 @@ operatorTable =
   ]
 
 pInferIdentifier :: Parser Expression
-pInferIdentifier = caret >> InferIdentifier <$> identifier <?> "identifier"
+pInferIdentifier = inferSym >> InferIdentifier <$> identifier <?> "identifier"
 
 pNumberIntegerLiteral :: Parser Expression
 pNumberIntegerLiteral = NumberIntegerLiteral <$> integer
@@ -255,6 +258,8 @@ pIdentifier = Identifier <$> identifier <?> "identifier"
 pExtendsExpression :: Parser Expression
 pExtendsExpression = do
   void $ keyword "if"
+  negate <-
+    fmap isJust (optional (keyword "not"))
   lhs <- pExpression
   op <-
     choice
