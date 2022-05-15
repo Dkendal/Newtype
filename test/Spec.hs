@@ -22,6 +22,16 @@ tests =
           "type A = 1",
       testCase "if extends else then expression" $
         assertPretty
+          (pStatement <* eof)
+          "interface A where\n\
+          \  foo: 0\n\
+          \  bar: 1"
+          "interface A {\n\
+          \  foo: 0;\n\
+          \  bar: 1;\n\
+          \}",
+      testCase "if extends else then expression" $
+        assertPretty
           (pExpression <* eof)
           "if LHS <: RHS then Then else Else"
           "LHS extends RHS ? Then : Else",

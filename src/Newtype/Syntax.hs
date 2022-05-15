@@ -13,6 +13,9 @@ class TypescriptAST a where
 newtype Program = Program {statements :: [Statement]}
   deriving (Eq, Show)
 
+instance Pretty Program where
+  pretty (Program statements) = prettyList statements
+
 data Statement
   = ImportDeclaration
       { importClause :: ImportClause,
@@ -24,7 +27,26 @@ data Statement
         params :: Maybe TypeParams,
         body :: Expression
       }
+  | InterfaceDefinition
+      { name :: String,
+        params :: Maybe TypeParams,
+        extends :: [Expression],
+        props :: [ObjectLiteralProperty]
+      }
   deriving (Eq, Show)
+
+instance Pretty Statement where
+  pretty ImportDeclaration {..} =
+    "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
+  pretty TypeDefinition {..} =
+    group ("type" <+> pretty name) <> group (nest 2 (line <> "=" <+> pretty body))
+  pretty ExportStatement = emptyDoc
+  pretty InterfaceDefinition {..} =
+    (group "interface" <+> pretty name) <+> vsep [lbrace, body, rbrace]
+    where
+      body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
+
+  prettyList statements = vsep (map pretty statements)
 
 data ImportClause
   = ImportClauseDefault String
@@ -40,10 +62,23 @@ data ImportClause
       }
   deriving (Eq, Show)
 
+instance Pretty ImportClause where
+  pretty (ImportClauseDefault binding) = pretty binding
+  pretty (ImportClauseNS binding) = "* as " <> pretty binding
+  pretty (ImportClauseNamed namedBindings) = prettyList namedBindings
+  pretty ImportClauseDefaultAndNS {..} = pretty defaultBinding <+> pretty namespaceBinding
+  pretty ImportClauseDefaultAndNamed {..} = pretty defaultBinding <+> prettyList namedBindings
+
 data ImportSpecifier
   = ImportedBinding String
   | ImportedAlias {from :: String, to :: String}
   deriving (Eq, Show)
+
+instance Pretty ImportSpecifier where
+  pretty (ImportedBinding binding) = pretty binding
+  pretty ImportedAlias {..} = pretty from <+> "as" <+> pretty to
+  prettyList lst =
+    braces . hsep . punctuate comma . map pretty $ lst
 
 data TypeParams = TypeParams
   deriving (Eq, Show)
@@ -71,47 +106,24 @@ data Expression
   | CaseStatement Expression [(Expression, Expression)]
   deriving (Eq, Show)
 
-data BinaryOp
-
-data ComparisionOperator
-  = ExtendsLeft
-  | ExtendsRight
-  | Equals
-  | NotEquals
-  deriving (Eq, Show)
-
-data ObjectLiteralProperty = KeyValue
-  { isReadonly :: Maybe Bool,
-    isOptional :: Maybe Bool,
-    key :: String,
-    value :: Expression
-  }
-  deriving (Eq, Show)
-
-instance Pretty Program where
-  pretty (Program statements) = prettyList statements
-
-instance Pretty Statement where
-  pretty ImportDeclaration {..} =
-    "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
-  pretty TypeDefinition {..} =
-    group ("type" <+> pretty name) <> group (nest 2 (line <> "=" <+> pretty body))
-  pretty ExportStatement = emptyDoc
-
-  prettyList statements = vsep (map pretty statements)
-
-instance Pretty ImportClause where
-  pretty (ImportClauseDefault binding) = pretty binding
-  pretty (ImportClauseNS binding) = "* as " <> pretty binding
-  pretty (ImportClauseNamed namedBindings) = prettyList namedBindings
-  pretty ImportClauseDefaultAndNS {..} = pretty defaultBinding <+> pretty namespaceBinding
-  pretty ImportClauseDefaultAndNamed {..} = pretty defaultBinding <+> prettyList namedBindings
-
-instance Pretty ImportSpecifier where
-  pretty (ImportedBinding binding) = pretty binding
-  pretty ImportedAlias {..} = pretty from <+> "as" <+> pretty to
-  prettyList lst =
-    braces . hsep . punctuate comma . map pretty $ lst
+instance TypescriptAST Expression where
+  simplify (CaseStatement term [(rhs, ifBody)]) =
+    ExtendsExpression
+      { lhs = simplify term,
+        op = ExtendsLeft,
+        negate = False,
+        elseBody = never,
+        ..
+      }
+  simplify (CaseStatement term ((rhs, ifBody) : tl)) =
+    ExtendsExpression
+      { lhs = simplify term,
+        op = ExtendsLeft,
+        negate = False,
+        elseBody = simplify (CaseStatement term tl),
+        ..
+      }
+  simplify a = a
 
 instance Pretty Expression where
   pretty (NumberIntegerLiteral value) = pretty value
@@ -185,6 +197,23 @@ instance Pretty Expression where
   pretty (CaseStatement a b) =
     pretty (simplify (CaseStatement a b))
 
+data BinaryOp
+
+data ComparisionOperator
+  = ExtendsLeft
+  | ExtendsRight
+  | Equals
+  | NotEquals
+  deriving (Eq, Show)
+
+data ObjectLiteralProperty = KeyValue
+  { isReadonly :: Maybe Bool,
+    isOptional :: Maybe Bool,
+    key :: String,
+    value :: Expression
+  }
+  deriving (Eq, Show)
+
 instance Pretty ObjectLiteralProperty where
   pretty KeyValue {..} =
     (group readonly <> pretty key <> optional <> ":") <+> pretty value
@@ -199,25 +228,6 @@ instance Pretty ObjectLiteralProperty where
           Just True -> "?"
           Just False -> "-?"
           Nothing -> emptyDoc
-
-instance TypescriptAST Expression where
-  simplify (CaseStatement term [(rhs, ifBody)]) =
-    ExtendsExpression
-      { lhs = simplify term,
-        op = ExtendsLeft,
-        negate = False,
-        elseBody = never,
-        ..
-      }
-  simplify (CaseStatement term ((rhs, ifBody) : tl)) =
-    ExtendsExpression
-      { lhs = simplify term,
-        op = ExtendsLeft,
-        negate = False,
-        elseBody = simplify (CaseStatement term tl),
-        ..
-      }
-  simplify a = a
 
 prettyOpList :: Expression -> Doc ann
 prettyOpList a =

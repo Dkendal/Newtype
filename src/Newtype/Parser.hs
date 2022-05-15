@@ -185,7 +185,8 @@ pStatement =
   choice
     [ pExport,
       pImport,
-      pTypeDefinition
+      pTypeDefinition,
+      pInterfaceDefintion
     ]
   where
     pExport = ExportStatement <$ string "export"
@@ -194,14 +195,27 @@ pStatement =
       fromClause <- lexeme stringLiteral <?> "from clause"
       importClause <- pImportClause
       return ImportDeclaration {..}
-    pTypeDefinition = do
-      void $ keyword "type"
-      name <- identifier
-      void equals
-      body <- pExpression
-      return TypeDefinition {..}
-      where
-        params = Nothing
+
+pTypeDefinition :: Parser Statement
+pTypeDefinition = do
+  void $ keyword "type"
+  name <- identifier
+  void equals
+  body <- pExpression
+  return TypeDefinition {..}
+  where
+    params = Nothing
+
+pInterfaceDefintion :: Parser Statement
+pInterfaceDefintion = do
+  void $ keyword "interface"
+  name <- identifier
+  void $ keyword "where"
+  props <- many $ pObjectLiteralProperty <* space -- temporary fix, need to support indentation
+  return InterfaceDefinition {..}
+  where
+    params = Nothing
+    extends = []
 
 -- Same as expression, but with recursive terms removed
 pTerm :: Parser Expression
