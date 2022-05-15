@@ -22,29 +22,36 @@ tests =
           "type A = 1",
       testCase "if extends else then expression" $
         assertPretty
-          pExpression
+          (pExpression <* eof)
           "if LHS <: RHS then Then else Else"
           "LHS extends RHS ? Then : Else",
       testCase "if extends else then expression" $
         assertPretty
-          pExpression
+          (pExpression <* eof)
           "if LHS <: RHS then Then"
           "LHS extends RHS ? Then : never",
       testCase "if right-extends then expression" $
         assertPretty
-          pExpression
+          (pExpression <* eof)
           "if LHS :> RHS then Then"
           "RHS extends LHS ? Then : never",
       testCase "if expressions may be negated" $
         assertPretty
-          pExpression
+          (pExpression <* eof)
           "if not LHS <: RHS then Then"
           "LHS extends RHS ? never : Then",
       testCase "if with infer operator" $
         assertPretty
-          pExpression
+          (pExpression <* eof)
           "if Left <: Right ?Infer then Then"
-          "Left extends Right<infer Infer> ? Then : never"
+          "Left extends Right<infer Infer> ? Then : never",
+      testCase "match expression" $
+        assertPretty
+          (pExpression <* eof)
+          "case A of\n\
+          \  B -> 1\n\
+          \  C -> 2"
+          "A extends B ? 1 : A extends C ? 2 : never"
     ]
 
 assertPretty ::

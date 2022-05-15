@@ -7,6 +7,9 @@ module Newtype.Syntax where
 import Control.Monad
 import Prettyprinter
 
+class TypescriptAST a where
+  simplify :: a -> a
+
 newtype Program = Program {statements :: [Statement]}
   deriving (Eq, Show)
 
@@ -65,6 +68,7 @@ data Expression
       }
   | Union Expression Expression
   | Intersection Expression Expression
+  | CaseStatement Expression [(Expression, Expression)]
   deriving (Eq, Show)
 
 data BinaryOp
@@ -178,6 +182,8 @@ instance Pretty Expression where
     where
       fmt (Intersection a b) = prettyOpList (Intersection a b)
       fmt a = pretty a
+  pretty (CaseStatement a b) =
+    pretty (simplify (CaseStatement a b))
 
 instance Pretty ObjectLiteralProperty where
   pretty KeyValue {..} =
@@ -194,6 +200,28 @@ instance Pretty ObjectLiteralProperty where
           Just False -> "-?"
           Nothing -> emptyDoc
 
+instance TypescriptAST Expression where
+  simplify (CaseStatement term [(rhs, ifBody)]) =
+    ExtendsExpression
+      { lhs = simplify term,
+        op = ExtendsLeft,
+        negate = False,
+        elseBody = never,
+        ..
+      }
+  simplify (CaseStatement term ((rhs, ifBody) : tl)) =
+    ExtendsExpression
+      { lhs = simplify term,
+        op = ExtendsLeft,
+        negate = False,
+        elseBody = simplify (CaseStatement term tl),
+        ..
+      }
+  simplify a = a
+
 prettyOpList :: Expression -> Doc ann
 prettyOpList a =
   group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a
+
+never :: Expression
+never = Identifier "never"

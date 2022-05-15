@@ -21,18 +21,21 @@ type Parser = Parsec Void Text
 main :: IO ()
 main = putStrLn "main"
 
-spaceConsumer :: Parser ()
-spaceConsumer =
-  L.space
-    space1
-    (L.skipLineComment "//")
-    (L.skipBlockComment "{-" "-}")
+lineComment = L.skipLineComment "//"
+
+blockComment = L.skipBlockComment "{-" "-}"
+
+sc :: Parser ()
+sc = L.space (void $ char ' ' <|> char '\t') lineComment blockComment
+
+scn :: Parser ()
+scn = L.space space1 lineComment blockComment
 
 lexeme :: Parser a -> Parser a
-lexeme = L.lexeme spaceConsumer
+lexeme = L.lexeme scn
 
 symbol :: Text -> Parser Text
-symbol = L.symbol spaceConsumer
+symbol = L.symbol scn
 
 stringLiteral :: Parser String
 stringLiteral = char '\"' *> manyTill L.charLiteral (char '\"')
@@ -124,6 +127,8 @@ reservedWords =
     "goto",
     "require",
     "import",
+    "case",
+    "of",
     "from",
     "as",
     "do",
@@ -209,6 +214,7 @@ pTerm =
       pExtendsExpression,
       pNumberIntegerLiteral,
       pNumberDoubleLiteral,
+      pCaseStatement,
       pBooleanLiteral,
       pStringLiteral,
       pIdentifier,
@@ -217,6 +223,21 @@ pTerm =
       pInferIdentifier,
       pObjectLiteral
     ]
+
+pCaseStatement :: Parser Expression
+pCaseStatement =
+  do
+    void $ keyword "case"
+    value <- pExpression
+    void $ keyword "of"
+    cases <-
+      some $ do
+        lhs <- pExpression
+        void $ keyword "->"
+        rhs <- pExpression
+        return (lhs, rhs)
+
+    return (CaseStatement value cases)
 
 pExpression :: Parser Expression
 pExpression =
