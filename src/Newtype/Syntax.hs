@@ -88,8 +88,8 @@ data Expr
   | BooleanLiteral Bool
   | ObjectLiteral [ObjectLiteralProperty]
   | TypeApplication String [Expr]
-  | Identifier String
-  | InferIdentifier String
+  | ID String
+  | InferID String
   | Tuple [Expr]
   | ExtendsExpr
       { lhs :: Expr,
@@ -120,8 +120,8 @@ instance Pretty Expr where
           ", "
           (map pretty props)
       )
-  pretty (Identifier name) = pretty name
-  pretty (InferIdentifier name) = group "infer" <+> pretty name
+  pretty (ID name) = pretty name
+  pretty (InferID name) = group "infer" <+> pretty name
   pretty ExtendsExpr {negate = True, ..} =
     pretty
       ExtendsExpr
@@ -209,14 +209,14 @@ instance Pretty ObjectLiteralProperty where
           Nothing -> emptyDoc
 
 never :: Expr
-never = Identifier "never"
+never = ID "never"
 
 prettyOpList :: Expr -> Doc ann
 prettyOpList a =
   group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a
 
 simplify :: Expr -> Expr
-simplify (CaseStatement term [(rhs, ifBody), (Identifier "_", elseBody)]) =
+simplify (CaseStatement term [(rhs, ifBody), (ID "_", elseBody)]) =
   ExtendsExpr
     { lhs = simplify term,
       op = ExtendsLeft,

@@ -231,10 +231,10 @@ pTerm =
       pCaseStatement,
       pBooleanLiteral,
       pStringLiteral,
-      pIdentifier,
+      pID,
       -- Not actually valid outside of the extends expression
       -- but make my life a lot easier
-      pInferIdentifier,
+      pInferID,
       pObjectLiteral
     ]
 
@@ -271,8 +271,8 @@ operatorTable =
     [InfixL $ Union <$ pipe]
   ]
 
-pInferIdentifier :: Parser Expr
-pInferIdentifier = inferSym >> InferIdentifier <$> identifier <?> "identifier"
+pInferID :: Parser Expr
+pInferID = inferSym >> InferID <$> identifier <?> "identifier"
 
 pNumberIntegerLiteral :: Parser Expr
 pNumberIntegerLiteral = NumberIntegerLiteral <$> integer
@@ -289,8 +289,8 @@ pStringLiteral = StringLiteral <$> stringLiteral
 pTuple :: Parser Expr
 pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
 
-pIdentifier :: Parser Expr
-pIdentifier = Identifier <$> identifier <?> "identifier"
+pID :: Parser Expr
+pID = ID <$> identifier <?> "identifier"
 
 pExtendsExpr :: Parser Expr
 pExtendsExpr = do
@@ -316,7 +316,7 @@ pExtendsExpr = do
         }
     )
   where
-    never = Identifier "never"
+    never = ID "never"
 
 pObjectLiteral :: Parser Expr
 pObjectLiteral =
@@ -325,10 +325,10 @@ pObjectLiteral =
 pTypeApplication :: Parser Expr
 pTypeApplication = do
   typeName <- identifier <?> "type function"
-  -- Give Identifier a higher precedence when it's nested in an existing
+  -- Give ID a higher precedence when it's nested in an existing
   -- expression
   params <-
-    (some . choice $ [pIdentifier, pExpr]) <?> "type parameter"
+    (some . choice $ [pID, pExpr]) <?> "type parameter"
   return (TypeApplication typeName params)
 
 pObjectLiteralProperty :: Parser ObjectLiteralProperty
