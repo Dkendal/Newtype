@@ -25,6 +25,8 @@ dependencies:
 - text
 - prettyprinter
 - parser-combinators
+- syb
+- uniplate
 
 library:
   source-dirs: src

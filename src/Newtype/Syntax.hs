@@ -5,10 +5,8 @@
 module Newtype.Syntax where
 
 import Control.Monad
+import Data.Generics.Uniplate
 import Prettyprinter
-
-class TypescriptAST a where
-  simplify :: a -> a
 
 newtype Program = Program {statements :: [Statement]}
   deriving (Eq, Show)
@@ -25,12 +23,12 @@ data Statement
   | TypeDefinition
       { name :: String,
         params :: Maybe TypeParams,
-        body :: Expression
+        body :: Expr
       }
   | InterfaceDefinition
       { name :: String,
         params :: Maybe TypeParams,
-        extends :: [Expression],
+        extends :: [Expr],
         props :: [ObjectLiteralProperty]
       }
   deriving (Eq, Show)
@@ -83,49 +81,30 @@ instance Pretty ImportSpecifier where
 data TypeParams = TypeParams
   deriving (Eq, Show)
 
-data Expression
+data Expr
   = StringLiteral String
   | NumberIntegerLiteral Integer
   | NumberDoubleLiteral Double
   | BooleanLiteral Bool
   | ObjectLiteral [ObjectLiteralProperty]
-  | TypeApplication String [Expression]
+  | TypeApplication String [Expr]
   | Identifier String
   | InferIdentifier String
-  | Tuple [Expression]
-  | ExtendsExpression
-      { lhs :: Expression,
+  | Tuple [Expr]
+  | ExtendsExpr
+      { lhs :: Expr,
         negate :: Bool,
         op :: ComparisionOperator,
-        rhs :: Expression,
-        ifBody :: Expression,
-        elseBody :: Expression
+        rhs :: Expr,
+        ifBody :: Expr,
+        elseBody :: Expr
       }
-  | Union Expression Expression
-  | Intersection Expression Expression
-  | CaseStatement Expression [(Expression, Expression)]
+  | Union Expr Expr
+  | Intersection Expr Expr
+  | CaseStatement Expr [(Expr, Expr)]
   deriving (Eq, Show)
 
-instance TypescriptAST Expression where
-  simplify (CaseStatement term [(rhs, ifBody)]) =
-    ExtendsExpression
-      { lhs = simplify term,
-        op = ExtendsLeft,
-        negate = False,
-        elseBody = never,
-        ..
-      }
-  simplify (CaseStatement term ((rhs, ifBody) : tl)) =
-    ExtendsExpression
-      { lhs = simplify term,
-        op = ExtendsLeft,
-        negate = False,
-        elseBody = simplify (CaseStatement term tl),
-        ..
-      }
-  simplify a = a
-
-instance Pretty Expression where
+instance Pretty Expr where
   pretty (NumberIntegerLiteral value) = pretty value
   pretty (NumberDoubleLiteral value) = pretty value
   pretty (BooleanLiteral True) = "true"
@@ -143,39 +122,39 @@ instance Pretty Expression where
       )
   pretty (Identifier name) = pretty name
   pretty (InferIdentifier name) = group "infer" <+> pretty name
-  pretty ExtendsExpression {negate = True, ..} =
+  pretty ExtendsExpr {negate = True, ..} =
     pretty
-      ExtendsExpression
+      ExtendsExpr
         { negate = False,
           ifBody = elseBody,
           elseBody = ifBody,
           ..
         }
-  pretty ExtendsExpression {op = ExtendsLeft, ..} =
+  pretty ExtendsExpr {op = ExtendsLeft, ..} =
     pretty lhs <+> "extends" <+> pretty rhs
       <+> "?"
       <+> pretty ifBody
       <+> ":"
       <+> pretty elseBody
-  pretty ExtendsExpression {op = ExtendsRight, ..} =
+  pretty ExtendsExpr {op = ExtendsRight, ..} =
     pretty
-      ExtendsExpression
+      ExtendsExpr
         { lhs = rhs,
           rhs = lhs,
           op = ExtendsLeft,
           ..
         }
-  pretty ExtendsExpression {op = Equals, ..} =
+  pretty ExtendsExpr {op = Equals, ..} =
     pretty
-      ExtendsExpression
+      ExtendsExpr
         { lhs = Tuple [lhs],
           rhs = Tuple [rhs],
           op = ExtendsLeft,
           ..
         }
-  pretty ExtendsExpression {op = NotEquals, ..} =
+  pretty ExtendsExpr {op = NotEquals, ..} =
     pretty
-      ExtendsExpression
+      ExtendsExpr
         { lhs = Tuple [lhs],
           rhs = Tuple [rhs],
           op = ExtendsLeft,
@@ -210,7 +189,7 @@ data ObjectLiteralProperty = KeyValue
   { isReadonly :: Maybe Bool,
     isOptional :: Maybe Bool,
     key :: String,
-    value :: Expression
+    value :: Expr
   }
   deriving (Eq, Show)
 
@@ -229,9 +208,36 @@ instance Pretty ObjectLiteralProperty where
           Just False -> "-?"
           Nothing -> emptyDoc
 
-prettyOpList :: Expression -> Doc ann
+never :: Expr
+never = Identifier "never"
+
+prettyOpList :: Expr -> Doc ann
 prettyOpList a =
   group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a
 
-never :: Expression
-never = Identifier "never"
+simplify :: Expr -> Expr
+simplify (CaseStatement term [(rhs, ifBody), (Identifier "_", elseBody)]) =
+  ExtendsExpr
+    { lhs = simplify term,
+      op = ExtendsLeft,
+      negate = False,
+      elseBody = elseBody,
+      ..
+    }
+simplify (CaseStatement term [(rhs, ifBody)]) =
+  ExtendsExpr
+    { lhs = simplify term,
+      op = ExtendsLeft,
+      negate = False,
+      elseBody = never,
+      ..
+    }
+simplify (CaseStatement term ((rhs, ifBody) : tl)) =
+  ExtendsExpr
+    { lhs = simplify term,
+      op = ExtendsLeft,
+      negate = False,
+      elseBody = simplify (CaseStatement term tl),
+      ..
+    }
+simplify a = a

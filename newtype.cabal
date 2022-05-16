@@ -36,7 +36,9 @@ library
     , megaparsec
     , parser-combinators
     , prettyprinter
+    , syb
     , text
+    , uniplate
   default-language: Haskell2010
 
 executable newtype-exe
@@ -52,7 +54,9 @@ executable newtype-exe
     , newtype
     , parser-combinators
     , prettyprinter
+    , syb
     , text
+    , uniplate
   default-language: Haskell2010
 
 test-suite newtype-test
@@ -69,7 +73,9 @@ test-suite newtype-test
     , newtype
     , parser-combinators
     , prettyprinter
+    , syb
     , tasty
     , tasty-hunit
     , text
+    , uniplate
   default-language: Haskell2010

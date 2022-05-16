@@ -151,4 +151,25 @@ packages:
       sha256: 04134fa69cdd824b4e4bb7f77e7173e0705f27deabdbbf99549c549400191e1e
   original:
     hackage: call-stack-0.4.0@sha256:ac44d2c00931dc20b01750da8c92ec443eb63a7231e8550188cb2ac2385f7feb,1200
+- completed:
+    hackage: syb-0.7.2.1@sha256:bf42655a213402215299e435c52f799e76cbec0b984cd7153d6b9af8a1c0803f,3815
+    pantry-tree:
+      size: 3396
+      sha256: 3ee55cc33d69da2953e7093f99199fbc0bfa9d90dccd19cac101d09befa5bbb3
+  original:
+    hackage: syb-0.7.2.1@sha256:bf42655a213402215299e435c52f799e76cbec0b984cd7153d6b9af8a1c0803f,3815
+- completed:
+    hackage: uniplate-1.6.13@sha256:c8b715570d0b4baa72512e677552dd3f98372a64bf9de000e779bd4162fd7be7,3320
+    pantry-tree:
+      size: 1936
+      sha256: 7a3065d48fe43c2b7818500d4c571f5226760b5e96d0239b767bfeb573b3c349
+  original:
+    hackage: uniplate-1.6.13@sha256:c8b715570d0b4baa72512e677552dd3f98372a64bf9de000e779bd4162fd7be7,3320
+- completed:
+    hackage: unordered-containers-0.2.19.1@sha256:7d43e557b32a30eeac22e68b8430384bf829b0b2313761026a7f103395b047d5,3638
+    pantry-tree:
+      size: 1517
+      sha256: 1870de393820b94af9efb8fcdd31940543569cdcd3d13296bc224438b2b107d8
+  original:
+    hackage: unordered-containers-0.2.19.1@sha256:7d43e557b32a30eeac22e68b8430384bf829b0b2313761026a7f103395b047d5,3638
 snapshots: []

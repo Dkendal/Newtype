@@ -201,7 +201,7 @@ pTypeDefinition = do
   void $ keyword "type"
   name <- identifier
   void equals
-  body <- pExpression
+  body <- pExpr
   return TypeDefinition {..}
   where
     params = Nothing
@@ -218,14 +218,14 @@ pInterfaceDefintion = do
     extends = []
 
 -- Same as expression, but with recursive terms removed
-pTerm :: Parser Expression
+pTerm :: Parser Expr
 pTerm =
   choice
     [ try pTypeApplication,
       try (parens pTypeApplication),
       try pTuple,
       parens pSetOperator,
-      pExtendsExpression,
+      pExtendsExpr,
       pNumberIntegerLiteral,
       pNumberDoubleLiteral,
       pCaseStatement,
@@ -238,64 +238,66 @@ pTerm =
       pObjectLiteral
     ]
 
-pCaseStatement :: Parser Expression
+pCaseStatement :: Parser Expr
 pCaseStatement =
   do
     void $ keyword "case"
-    value <- pExpression
+    value <- pExpr
     void $ keyword "of"
     cases <-
-      some $ do
-        lhs <- pExpression
-        void $ keyword "->"
-        rhs <- pExpression
-        return (lhs, rhs)
+      pCase `sepBy` newline
 
     return (CaseStatement value cases)
+  where
+    pCase = do
+      lhs <- pExpr <?> "left hand side of case"
+      void $ keyword "->"
+      rhs <- dbg "rhs" pExpr <?> "right hand side of case"
+      return (lhs, rhs)
 
-pExpression :: Parser Expression
-pExpression =
+pExpr :: Parser Expr
+pExpr =
   choice
     [ pSetOperator,
       pTerm
     ]
 
-pSetOperator :: Parser Expression
+pSetOperator :: Parser Expr
 pSetOperator = makeExprParser pTerm operatorTable
 
-operatorTable :: [[Operator Parser Expression]]
+operatorTable :: [[Operator Parser Expr]]
 operatorTable =
   [ [InfixL $ Intersection <$ amp],
     [InfixL $ Union <$ pipe]
   ]
 
-pInferIdentifier :: Parser Expression
+pInferIdentifier :: Parser Expr
 pInferIdentifier = inferSym >> InferIdentifier <$> identifier <?> "identifier"
 
-pNumberIntegerLiteral :: Parser Expression
+pNumberIntegerLiteral :: Parser Expr
 pNumberIntegerLiteral = NumberIntegerLiteral <$> integer
 
-pNumberDoubleLiteral :: Parser Expression
+pNumberDoubleLiteral :: Parser Expr
 pNumberDoubleLiteral = NumberDoubleLiteral <$> float
 
-pBooleanLiteral :: Parser Expression
+pBooleanLiteral :: Parser Expr
 pBooleanLiteral = BooleanLiteral <$> bool
 
-pStringLiteral :: Parser Expression
+pStringLiteral :: Parser Expr
 pStringLiteral = StringLiteral <$> stringLiteral
 
-pTuple :: Parser Expression
-pTuple = Tuple <$> brackets (pExpression `sepBy` comma)
+pTuple :: Parser Expr
+pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
 
-pIdentifier :: Parser Expression
+pIdentifier :: Parser Expr
 pIdentifier = Identifier <$> identifier <?> "identifier"
 
-pExtendsExpression :: Parser Expression
-pExtendsExpression = do
+pExtendsExpr :: Parser Expr
+pExtendsExpr = do
   void $ keyword "if"
   negate <-
     fmap isJust (optional (keyword "not"))
-  lhs <- pExpression
+  lhs <- pExpr
   op <-
     choice
       [ ExtendsLeft <$ keyword "<:",
@@ -303,12 +305,12 @@ pExtendsExpression = do
         NotEquals <$ keyword "!=",
         Equals <$ keyword "=="
       ]
-  rhs <- pExpression
+  rhs <- pExpr
   void $ keyword "then"
-  ifBody <- pExpression
-  elseBody <- do optional (keyword "else" >> pExpression)
+  ifBody <- pExpr
+  elseBody <- do optional (keyword "else" >> pExpr)
   return
-    ( ExtendsExpression
+    ( ExtendsExpr
         { elseBody = fromMaybe never elseBody,
           ..
         }
@@ -316,17 +318,17 @@ pExtendsExpression = do
   where
     never = Identifier "never"
 
-pObjectLiteral :: Parser Expression
+pObjectLiteral :: Parser Expr
 pObjectLiteral =
   ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
 
-pTypeApplication :: Parser Expression
+pTypeApplication :: Parser Expr
 pTypeApplication = do
   typeName <- identifier <?> "type function"
   -- Give Identifier a higher precedence when it's nested in an existing
   -- expression
   params <-
-    (some . choice $ [pIdentifier, pExpression]) <?> "type parameter"
+    (some . choice $ [pIdentifier, pExpr]) <?> "type parameter"
   return (TypeApplication typeName params)
 
 pObjectLiteralProperty :: Parser ObjectLiteralProperty
@@ -344,5 +346,5 @@ pObjectLiteralProperty = do
         False <$ keyword "-?"
       ]
   void colon
-  value <- pExpression
+  value <- pExpr
   return (KeyValue {..})
