@@ -32,10 +32,10 @@ scn :: Parser ()
 scn = L.space space1 lineComment blockComment
 
 lexeme :: Parser a -> Parser a
-lexeme = L.lexeme scn
+lexeme = L.lexeme sc
 
 symbol :: Text -> Parser Text
-symbol = L.symbol scn
+symbol = L.symbol sc
 
 stringLiteral :: Parser String
 stringLiteral = char '\"' *> manyTill L.charLiteral (char '\"')
@@ -84,6 +84,9 @@ brackets = between lbracket rbracket
 
 semicolon :: Parser Text
 semicolon = symbol ";"
+
+arrow :: Parser Text
+arrow = symbol "->"
 
 pipe :: Parser Text
 pipe = symbol "|"
@@ -198,6 +201,7 @@ pStatement =
 
 pTypeDefinition :: Parser Statement
 pTypeDefinition = do
+  void $ L.indentGuard scn EQ pos1
   void $ keyword "type"
   name <- identifier
   void equals
@@ -208,10 +212,13 @@ pTypeDefinition = do
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do
+  void $ L.indentGuard scn EQ pos1
   void $ keyword "interface"
   name <- identifier
   void $ keyword "where"
-  props <- many $ pObjectLiteralProperty <* space -- temporary fix, need to support indentation
+  void newline
+  void $ L.indentGuard scn GT pos1
+  props <-  many $ pObjectLiteralProperty <* space
   return InterfaceDefinition {..}
   where
     params = Nothing
@@ -244,8 +251,9 @@ pCaseStatement =
     void $ keyword "case"
     value <- pExpr
     void $ keyword "of"
+    void scn
     cases <-
-      pCase `sepBy` newline
+      pCase `sepBy` scn
 
     return (CaseStatement value cases)
   where
@@ -253,14 +261,10 @@ pCaseStatement =
       lhs <- pExpr <?> "left hand side of case"
       void $ keyword "->"
       rhs <- dbg "rhs" pExpr <?> "right hand side of case"
-      return (lhs, rhs)
+      return (Case lhs rhs)
 
 pExpr :: Parser Expr
-pExpr =
-  choice
-    [ pSetOperator,
-      pTerm
-    ]
+pExpr = choice [pSetOperator, pTerm]
 
 pSetOperator :: Parser Expr
 pSetOperator = makeExprParser pTerm operatorTable

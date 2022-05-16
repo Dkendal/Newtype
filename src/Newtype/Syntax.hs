@@ -101,7 +101,12 @@ data Expr
       }
   | Union Expr Expr
   | Intersection Expr Expr
-  | CaseStatement Expr [(Expr, Expr)]
+  | CaseStatement Expr [Case]
+  deriving (Eq, Show)
+
+data Case
+  = Case Expr Expr
+  | ElseCase Expr
   deriving (Eq, Show)
 
 instance Pretty Expr where
@@ -216,7 +221,7 @@ prettyOpList a =
   group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a
 
 simplify :: Expr -> Expr
-simplify (CaseStatement term [(rhs, ifBody), (ID "_", elseBody)]) =
+simplify (CaseStatement term [Case rhs ifBody, Case (ID "_") elseBody]) =
   ExtendsExpr
     { lhs = simplify term,
       op = ExtendsLeft,
@@ -224,7 +229,7 @@ simplify (CaseStatement term [(rhs, ifBody), (ID "_", elseBody)]) =
       elseBody = elseBody,
       ..
     }
-simplify (CaseStatement term [(rhs, ifBody)]) =
+simplify (CaseStatement term [Case rhs ifBody]) =
   ExtendsExpr
     { lhs = simplify term,
       op = ExtendsLeft,
@@ -232,7 +237,7 @@ simplify (CaseStatement term [(rhs, ifBody)]) =
       elseBody = never,
       ..
     }
-simplify (CaseStatement term ((rhs, ifBody) : tl)) =
+simplify (CaseStatement term (Case rhs ifBody : tl)) =
   ExtendsExpr
     { lhs = simplify term,
       op = ExtendsLeft,

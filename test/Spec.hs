@@ -59,7 +59,7 @@ tests =
         assertPretty
           (pExtendsExpr <* eof)
           "if A B (C D) <: 0 then 1"
-          "A<B, C<D>> extends 0 ? 1 : never"
+          "A<B, C<D>> extends 0 ? 1 : never",
       -- testCase "case statement with fall through" $
       --   assertPretty
       --     (pExpr <* eof)
@@ -68,13 +68,13 @@ tests =
       --     \  C -> 2\n\
       --     \  _ -> 3"
       --     "A extends B ? 1 : A extends C ? 2 : 3",
-      -- testCase "case statement type on rhs" $
-      --   assertPretty
-      --     (pExpr <* eof)
-      --     "case A of\n\
-      --     \  B -> B\n\
-      --     \  C -> C"
-      --     "A extends B ? B : A extends C ? C : never"
+      testCase "case statement type on rhs" $
+        assertPretty
+          (pExpr <* eof)
+          "case A of\n\
+          \B -> B\n\
+          \C -> C"
+          "A extends B ? B : A extends C ? C : never"
     ]
 
 assertPretty ::
