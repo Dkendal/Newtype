@@ -32,7 +32,7 @@ library:
   source-dirs: src
 
 executables:
-  newtype-exe:
+  nt:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

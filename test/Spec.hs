@@ -2,11 +2,14 @@
 
 module Main where
 
+import Data.Foldable
+import Data.Text
 import Newtype.Parser hiding (main)
 import Prettyprinter
 import Test.Tasty
 import Test.Tasty.HUnit
 import Text.Megaparsec
+import Prelude hiding (unlines)
 
 main :: IO ()
 main = defaultMain tests
@@ -15,11 +18,49 @@ tests :: TestTree
 tests =
   testGroup
     "Pretty printing"
-    [ testCase "Program" $
+    [ testCase "empty program" $
+        assertPretty
+          pProgram
+          "\n\n\n"
+          "",
+      testCase "Program" $
         assertPretty
           pProgram
           "type A = 1"
           "type A = 1",
+      testCase "Program with new lines" $
+        assertPretty
+          pProgram
+          (unlines ["type A = 1", "", "type B = 2", "", ""])
+          (here ["type A = 1", "type B = 2"]),
+      -- TODO refute
+      -- testCase "type definition with no indent" $
+      --   assertPretty
+      --     pProgram
+      --     "type A =\n\
+      --     \1"
+      --     "",
+      testCase
+        "type definition with indent after equals"
+        $ assertPretty
+          pProgram
+          "type A =\n\
+          \  1"
+          "type A = 1",
+      testCase "type definition with indent before equals" $
+        assertPretty
+          pProgram
+          "type A\n\
+          \  = 1"
+          "type A = 1",
+      -- TODO refute
+      -- testCase "interface must be indent" $
+      --   assertPretty
+      --     (pStatement <* eof)
+      --     "interface A where\n\
+      --     \foo: 0\n\
+      --     \bar: 1"
+      --     "",
       testCase "interface definition" $
         assertPretty
           (pStatement <* eof)
@@ -89,3 +130,19 @@ assertPretty parser input output =
       assertFailure (errorBundlePretty a)
     Right a ->
       show (pretty a) @?= output
+
+assertParserError ::
+  (VisualStream s, TraversableStream s, ShowErrorComponent e, Pretty a) =>
+  Parsec e s a ->
+  s ->
+  String ->
+  IO ()
+assertParserError parser input _ =
+  case parse parser "" input of
+    Left (ParseErrorBundle s _) ->
+      [parseErrorTextPretty e | e <- toList s] @?= [""]
+    Right _ ->
+      assertFailure "expected parser error"
+
+here :: [Text] -> String
+here = unpack . stripEnd . unlines

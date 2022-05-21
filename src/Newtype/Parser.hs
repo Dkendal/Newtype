@@ -18,9 +18,6 @@ import Text.Megaparsec.Debug
 
 type Parser = Parsec Void Text
 
-main :: IO ()
-main = putStrLn "main"
-
 lineComment = L.skipLineComment "//"
 
 blockComment = L.skipBlockComment "{-" "-}"
@@ -30,6 +27,10 @@ sc = L.space (void $ char ' ' <|> char '\t') lineComment blockComment
 
 scn :: Parser ()
 scn = L.space space1 lineComment blockComment
+
+indent :: Ordering -> Pos -> Parser ()
+indent ord pos =
+  void $ L.indentGuard scn ord pos
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
@@ -167,8 +168,12 @@ bool = choice [True <$ keyword "true", False <$ keyword "false"]
 pProgram :: Parser Program
 pProgram =
   do
-    statements <- many pStatement <* eof
+    void scn
+    statements <- pStatementList
+    void eof
     return (Program statements)
+  where
+    pStatementList = sepEndBy pStatement scn
 
 pImportClause :: Parser ImportClause
 pImportClause =
@@ -185,12 +190,15 @@ pImportClause =
 
 pStatement :: Parser Statement
 pStatement =
-  choice
-    [ pExport,
-      pImport,
-      pTypeDefinition,
-      pInterfaceDefintion
-    ]
+  L.nonIndented
+    scn
+    ( choice
+        [ pExport,
+          pImport,
+          pTypeDefinition,
+          pInterfaceDefintion
+        ]
+    )
   where
     pExport = ExportStatement <$ string "export"
     pImport = do
@@ -201,10 +209,12 @@ pStatement =
 
 pTypeDefinition :: Parser Statement
 pTypeDefinition = do
-  void $ L.indentGuard scn EQ pos1
+  void $ indent EQ pos1
   void $ keyword "type"
   name <- identifier
+  void $ indent GT pos1
   void equals
+  void $ indent GT pos1
   body <- pExpr
   return TypeDefinition {..}
   where
@@ -218,7 +228,7 @@ pInterfaceDefintion = do
   void $ keyword "where"
   void newline
   void $ L.indentGuard scn GT pos1
-  props <-  many $ pObjectLiteralProperty <* space
+  props <- many $ pObjectLiteralProperty <* space
   return InterfaceDefinition {..}
   where
     params = Nothing
@@ -245,7 +255,7 @@ pTerm =
       pObjectLiteral
     ]
 
-pCaseStatement :: Parser Expr
+-- pCaseStatement :: Parser Expr
 pCaseStatement =
   do
     void $ keyword "case"
@@ -260,7 +270,7 @@ pCaseStatement =
     pCase = do
       lhs <- pExpr <?> "left hand side of case"
       void $ keyword "->"
-      rhs <- dbg "rhs" pExpr <?> "right hand side of case"
+      rhs <- pExpr <?> "right hand side of case"
       return (Case lhs rhs)
 
 pExpr :: Parser Expr
