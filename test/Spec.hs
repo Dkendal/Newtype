@@ -6,6 +6,7 @@ import Data.Foldable
 import Data.Text
 import Newtype.Parser
 import Prettyprinter
+import Prettyprinter.Render.Text (renderStrict)
 import Test.Tasty
 import Test.Tasty.HUnit
 import Text.Megaparsec
@@ -78,6 +79,31 @@ tests =
       --     \foo: 0\n\
       --     \bar: 1"
       --     "",
+      testCase "expression" $
+        assertPretty
+          (pExpr <* eof)
+          "A"
+          "A",
+      testCase "expression" $
+        assertPretty
+          (pExpr <* eof)
+          "A 1"
+          "A<1>",
+      testCase "expression" $
+        assertPretty
+          (pExpr <* eof)
+          "A 1 true {}"
+          "A<1, true, {}>",
+      testCase "expression" $
+        assertPretty
+          (pExpr <* eof)
+          "A (B true) {}"
+          "A<B<true>, {}>",
+      testCase "expression" $
+        assertPretty
+          (pExpr <* eof)
+          ((stripEnd . unlines) ["A", "  1", "  2"])
+          "A<1, 2>",
       testCase "interface definition" $
         assertPretty
           (pStatement <* eof)
@@ -129,11 +155,23 @@ tests =
           (pExpr <* eof)
           ( unlines
               [ "case A of",
-                " B -> B",
-                " C -> C"
+                " B -> B a a a",
+                " C -> C a a a"
               ]
           )
-          "A extends B ? B : A extends C ? C : never",
+          "A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never",
+      testCase "case statement" $
+        assertPretty
+          (pExpr <* eof)
+          ( unlines
+              [ "case A of",
+                " B ->",
+                "   B a a a",
+                " C ->",
+                "   C a a a"
+              ]
+          )
+          "A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never",
       testCase "case statement with fall through" $
         assertPretty
           (pExpr <* eof)
@@ -157,7 +195,7 @@ assertPretty parser input output =
     Left a ->
       assertFailure (errorBundlePretty a)
     Right a ->
-      show (pretty a) @?= output
+      unpack (renderStrict (layoutPretty (LayoutOptions Unbounded) (pretty a))) @?= output
 
 assertParserError ::
   (VisualStream s, TraversableStream s, ShowErrorComponent e, Pretty a) =>

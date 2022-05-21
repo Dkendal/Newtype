@@ -28,9 +28,12 @@ sc = L.space (void $ char ' ' <|> char '\t') lineComment blockComment
 scn :: Parser ()
 scn = L.space space1 lineComment blockComment
 
-indent :: Ordering -> Pos -> Parser ()
-indent ord pos =
+indentGuard :: Ordering -> Pos -> Parser ()
+indentGuard ord pos =
   void $ L.indentGuard scn ord pos
+
+indentBlock :: Parser (L.IndentOpt Parser a b) -> Parser a
+indentBlock = L.indentBlock scn
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
@@ -209,12 +212,12 @@ pStatement =
 
 pTypeDefinition :: Parser Statement
 pTypeDefinition = do
-  void $ indent EQ pos1
+  void $ indentGuard EQ pos1
   void $ keyword "type"
   name <- identifier
-  void $ indent GT pos1
+  void $ indentGuard GT pos1
   void equals
-  void $ indent GT pos1
+  void $ indentGuard GT pos1
   body <- pExpr
   return TypeDefinition {..}
   where
@@ -222,12 +225,12 @@ pTypeDefinition = do
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do
-  void $ L.indentGuard scn EQ pos1
+  void $ indentGuard EQ pos1
   void $ keyword "interface"
   name <- identifier
   void $ keyword "where"
   void newline
-  void $ L.indentGuard scn GT pos1
+  void $ indentGuard GT pos1
   props <- many $ pObjectLiteralProperty <* space
   return InterfaceDefinition {..}
   where
@@ -238,14 +241,14 @@ pInterfaceDefintion = do
 pTerm :: Parser Expr
 pTerm =
   choice
-    [ try pTypeApplication,
-      try (parens pTypeApplication),
-      try pTuple,
+    [ try pTypeApplication <?> "type application",
+      try (parens pTypeApplication) <?> "quoted type application",
+      try pTuple <?> "tuple",
       parens pSetOperator,
       pExtendsExpr,
       pNumberIntegerLiteral,
       pNumberDoubleLiteral,
-      pCaseStatement,
+      pCaseStatement <?> "case statement",
       pBooleanLiteral,
       pStringLiteral,
       pID,
@@ -257,7 +260,7 @@ pTerm =
 
 pCaseStatement :: Parser Expr
 pCaseStatement =
-  L.indentBlock scn p
+  indentBlock p
   where
     p = do
       keyword "case"
@@ -267,8 +270,10 @@ pCaseStatement =
 
     pCase :: Parser Case
     pCase = do
+      ref <- L.indentLevel
       lhs <- pExpr <?> "left hand side of case"
       keyword "->"
+      indentGuard GT ref
       rhs <- pExpr <?> "right hand side of case"
       return (Case lhs rhs)
 
@@ -336,13 +341,11 @@ pObjectLiteral =
   ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
 
 pTypeApplication :: Parser Expr
-pTypeApplication = do
-  typeName <- identifier <?> "type function"
-  -- Give ID a higher precedence when it's nested in an existing
-  -- expression
-  params <-
-    (some . choice $ [pID, pExpr]) <?> "type parameter"
-  return (TypeApplication typeName params)
+pTypeApplication =
+  do
+    name <- identifier
+    params <- some . choice $ [pID, try pTerm]
+    return (TypeApplication name params)
 
 pObjectLiteralProperty :: Parser ObjectLiteralProperty
 pObjectLiteralProperty = do
