@@ -19,6 +19,28 @@ tests :: TestTree
 tests =
   testGroup
     "Pretty printing"
+    [ testProgram,
+      -- TODO refute
+      -- testCase "interface must be indent" $
+      --   assertPretty
+      --     (pStatement <* eof)
+      --     "interface A where\n\
+      --     \foo: 0\n\
+      --     \bar: 1"
+      --     "",
+      testCase "comparision with complex term" $
+        assertPretty
+          (pExtendsExpr <* eof)
+          "if A B (C D) <: 0 then 1"
+          "A<B, C<D>> extends 0 ? 1 : never",
+      testExpr,
+      testInterface
+    ]
+
+testProgram :: TestTree
+testProgram =
+  testGroup
+    "program"
     [ testCase "empty program" $
         assertPretty
           pProgram
@@ -70,41 +92,14 @@ tests =
         assertParserError
           pProgram
           (unlines ["type A =", "1"])
-          ["incorrect indentation (got 1, should be greater than 1)\n"],
-      -- TODO refute
-      -- testCase "interface must be indent" $
-      --   assertPretty
-      --     (pStatement <* eof)
-      --     "interface A where\n\
-      --     \foo: 0\n\
-      --     \bar: 1"
-      --     "",
-      testCase "expression" $
-        assertPretty
-          (pExpr <* eof)
-          "A"
-          "A",
-      testCase "expression" $
-        assertPretty
-          (pExpr <* eof)
-          "A 1"
-          "A<1>",
-      testCase "expression" $
-        assertPretty
-          (pExpr <* eof)
-          "A 1 true {}"
-          "A<1, true, {}>",
-      testCase "expression" $
-        assertPretty
-          (pExpr <* eof)
-          "A (B true) {}"
-          "A<B<true>, {}>",
-      testCase "expression" $
-        assertPretty
-          (pExpr <* eof)
-          ((stripEnd . unlines) ["A", "  1", "  2"])
-          "A<1, 2>",
-      testCase "interface definition" $
+          ["incorrect indentation (got 1, should be greater than 1)\n"]
+    ]
+
+testInterface :: TestTree
+testInterface =
+  testGroup
+    "Interface"
+    [ testCase "interface definition" $
         assertPretty
           (pStatement <* eof)
           ( unlines
@@ -119,8 +114,85 @@ tests =
                 "  bar: 1;",
                 "}"
               ]
-          ),
-      testCase "if extends else then expression" $
+          )
+    ]
+
+testExpr :: TestTree
+testExpr =
+  testGroup
+    "Expression"
+    [ testCase "id" $
+        assertPretty
+          (pExpr <* eof)
+          "A"
+          "A",
+      testCase "generic type" $
+        assertPretty
+          (pExpr <* eof)
+          "A 1"
+          "A<1>",
+      testCase "multi parameter generic type" $
+        assertPretty
+          (pExpr <* eof)
+          "A 1 true {}"
+          "A<1, true, {}>",
+      testCase "nested generic type" $
+        assertPretty
+          (pExpr <* eof)
+          "A (B true) {}"
+          "A<B<true>, {}>",
+      -- testCase "multi line generic type" $
+      --   assertPretty
+      --     (pExpr <* eof)
+      --     ((stripEnd . unlines) ["A", "  1", "  2"])
+      --     "A<1, 2>",
+      testIfElseExpr,
+      testCaseExpr
+    ]
+
+testCaseExpr :: TestTree
+testCaseExpr =
+  testGroup
+    "case expression"
+    [ testCase "case statement" $
+        assertPretty
+          (pExpr <* eof)
+          ( unlines
+              [ "case A of",
+                " B ->",
+                "   B a a a",
+                " C ->",
+                "   C a a a"
+              ]
+          )
+          "A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never",
+      testCase "case statement with fall through" $
+        assertPretty
+          (pExpr <* eof)
+          ( unlines
+              [ "case A of",
+                " 0 -> 1",
+                " _ -> 2"
+              ]
+          )
+          "A extends 0 ? 1 : 2",
+      testCase "case statement" $
+        assertPretty
+          (pExpr <* eof)
+          ( unlines
+              [ "case A of",
+                " B -> B a a a",
+                " C -> C a a a"
+              ]
+          )
+          "A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never"
+    ]
+
+testIfElseExpr :: TestTree
+testIfElseExpr =
+  testGroup
+    "if-else-then-end expression"
+    [ testCase "if extends else then expression" $
         assertPretty
           (pExpr <* eof)
           "if LHS <: RHS then Then else Else"
@@ -144,44 +216,7 @@ tests =
         assertPretty
           (pExpr <* eof)
           "if Left <: Right ?Infer then Then"
-          "Left extends Right<infer Infer> ? Then : never",
-      testCase "comparision with complex term" $
-        assertPretty
-          (pExtendsExpr <* eof)
-          "if A B (C D) <: 0 then 1"
-          "A<B, C<D>> extends 0 ? 1 : never",
-      testCase "case statement" $
-        assertPretty
-          (pExpr <* eof)
-          ( unlines
-              [ "case A of",
-                " B -> B a a a",
-                " C -> C a a a"
-              ]
-          )
-          "A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never",
-      testCase "case statement" $
-        assertPretty
-          (pExpr <* eof)
-          ( unlines
-              [ "case A of",
-                " B ->",
-                "   B a a a",
-                " C ->",
-                "   C a a a"
-              ]
-          )
-          "A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never",
-      testCase "case statement with fall through" $
-        assertPretty
-          (pExpr <* eof)
-          ( unlines
-              [ "case A of",
-                " 0 -> 1",
-                " _ -> 2"
-              ]
-          )
-          "A extends 0 ? 1 : 2"
+          "Left extends Right<infer Infer> ? Then : never"
     ]
 
 assertPretty ::
