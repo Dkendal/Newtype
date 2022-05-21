@@ -4,7 +4,7 @@ module Main where
 
 import Data.Foldable
 import Data.Text
-import Newtype.Parser hiding (main)
+import Newtype.Parser
 import Prettyprinter
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -26,12 +26,22 @@ tests =
       testCase "Program" $
         assertPretty
           pProgram
-          "type A = 1"
-          "type A = 1",
-      testCase "Program with new lines" $
+          (unlines ["type A = 1", "type B = 2"])
+          (here ["type A = 1", "type B = 2"]),
+      testCase "Program with extra newlines at the start" $
         assertPretty
           pProgram
-          (unlines ["type A = 1", "", "type B = 2", "", ""])
+          (unlines [" ", "type A = 1", "type B = 2"])
+          (here ["type A = 1", "type B = 2"]),
+      testCase "Program with extra newlines at the end" $
+        assertPretty
+          pProgram
+          (unlines ["type A = 1", "type B = 2", ""])
+          (here ["type A = 1", "type B = 2"]),
+      testCase "Program with extra newlines between" $
+        assertPretty
+          pProgram
+          (unlines ["type A = 1", " ", "type B = 2"])
           (here ["type A = 1", "type B = 2"]),
       -- TODO refute
       -- testCase "type definition with no indent" $
@@ -40,19 +50,26 @@ tests =
       --     "type A =\n\
       --     \1"
       --     "",
-      testCase
-        "type definition with indent after equals"
-        $ assertPretty
+      testCase "type definition with indent after equals" $
+        assertPretty
           pProgram
-          "type A =\n\
-          \  1"
+          (unlines ["type A =", "  1"])
           "type A = 1",
       testCase "type definition with indent before equals" $
         assertPretty
           pProgram
-          "type A\n\
-          \  = 1"
+          (unlines ["type A", "  = 1"])
           "type A = 1",
+      testCase "type definition must be indented" $
+        assertParserError
+          pProgram
+          (unlines ["type A", "= 1"])
+          ["incorrect indentation (got 1, should be greater than 1)\n"],
+      testCase "type definition must be indented" $
+        assertParserError
+          pProgram
+          (unlines ["type A =", "1"])
+          ["incorrect indentation (got 1, should be greater than 1)\n"],
       -- TODO refute
       -- testCase "interface must be indent" $
       --   assertPretty
@@ -64,13 +81,19 @@ tests =
       testCase "interface definition" $
         assertPretty
           (pStatement <* eof)
-          "interface A where\n\
-          \  foo: 0\n\
-          \  bar: 1"
-          "interface A {\n\
-          \  foo: 0;\n\
-          \  bar: 1;\n\
-          \}",
+          ( unlines
+              [ "interface A where",
+                "  foo : 0",
+                "  bar : 1"
+              ]
+          )
+          ( here
+              [ "interface A {",
+                "  foo: 0;",
+                "  bar: 1;",
+                "}"
+              ]
+          ),
       testCase "if extends else then expression" $
         assertPretty
           (pExpr <* eof)
@@ -101,21 +124,26 @@ tests =
           (pExtendsExpr <* eof)
           "if A B (C D) <: 0 then 1"
           "A<B, C<D>> extends 0 ? 1 : never",
-      -- testCase "case statement with fall through" $
-      --   assertPretty
-      --     (pExpr <* eof)
-      --     "case A of\n\
-      --     \  B -> 1\n\
-      --     \  C -> 2\n\
-      --     \  _ -> 3"
-      --     "A extends B ? 1 : A extends C ? 2 : 3",
-      testCase "case statement type on rhs" $
+      testCase "case statement" $
         assertPretty
           (pExpr <* eof)
-          "case A of\n\
-          \B -> B\n\
-          \C -> C"
-          "A extends B ? B : A extends C ? C : never"
+          ( unlines
+              [ "case A of",
+                " B -> B",
+                " C -> C"
+              ]
+          )
+          "A extends B ? B : A extends C ? C : never",
+      testCase "case statement with fall through" $
+        assertPretty
+          (pExpr <* eof)
+          ( unlines
+              [ "case A of",
+                " 0 -> 1",
+                " _ -> 2"
+              ]
+          )
+          "A extends 0 ? 1 : 2"
     ]
 
 assertPretty ::
@@ -135,12 +163,12 @@ assertParserError ::
   (VisualStream s, TraversableStream s, ShowErrorComponent e, Pretty a) =>
   Parsec e s a ->
   s ->
-  String ->
+  [String] ->
   IO ()
-assertParserError parser input _ =
+assertParserError parser input expected =
   case parse parser "" input of
     Left (ParseErrorBundle s _) ->
-      [parseErrorTextPretty e | e <- toList s] @?= [""]
+      [parseErrorTextPretty e | e <- toList s] @?= expected
     Right _ ->
       assertFailure "expected parser error"
 

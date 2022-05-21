@@ -255,21 +255,20 @@ pTerm =
       pObjectLiteral
     ]
 
--- pCaseStatement :: Parser Expr
+pCaseStatement :: Parser Expr
 pCaseStatement =
-  do
-    void $ keyword "case"
-    value <- pExpr
-    void $ keyword "of"
-    void scn
-    cases <-
-      pCase `sepBy` scn
-
-    return (CaseStatement value cases)
+  L.indentBlock scn p
   where
+    p = do
+      keyword "case"
+      value <- pExpr
+      keyword "of"
+      return (L.IndentSome Nothing (return . CaseStatement value) pCase)
+
+    pCase :: Parser Case
     pCase = do
       lhs <- pExpr <?> "left hand side of case"
-      void $ keyword "->"
+      keyword "->"
       rhs <- pExpr <?> "right hand side of case"
       return (Case lhs rhs)
 
