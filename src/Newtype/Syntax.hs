@@ -1,11 +1,24 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Newtype.Syntax where
+module Newtype.Syntax
+  ( Program (..),
+    Statement (..),
+    Expr (..),
+    ImportClause (..),
+    TypeParam (..),
+    Case (..),
+    ObjectLiteralProperty (..),
+    ComparisionOperator (..),
+    ImportSpecifier (..),
+  )
+where
 
 import Control.Monad
 import Data.Generics.Uniplate
+import Data.Maybe
 import Prettyprinter
 
 newtype Program = Program {statements :: [Statement]}
@@ -123,11 +136,17 @@ data Expr
   deriving (Eq, Show)
 
 instance Pretty Expr where
+  pretty MappedType {asExpr = Just asExpr, propertyKey, ..}
+    | asExpr == propertyKey =
+      pretty MappedType {asExpr = Nothing, ..}
   pretty MappedType {..} =
     braces (lhs <+> pretty value)
     where
-      index = pretty propertyKey <+> "in" <+> pretty propertyKeySource
-      lhs = brackets index <> colon
+      as = case asExpr of
+        Nothing -> emptyDoc
+        (Just expr) -> space <> "as" <+> pretty expr
+      index = pretty propertyKey <+> "in" <+> pretty propertyKeySource <> as
+      lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
   pretty (Builtin a b) = group (pretty a <+> pretty b)
   pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"
   pretty (DotAccess a b) = pretty a <> "." <> pretty b

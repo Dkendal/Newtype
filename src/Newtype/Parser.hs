@@ -3,7 +3,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Newtype.Parser where
+module Newtype.Parser
+  ( pExpr,
+    pMappedType,
+    pStatement,
+    pProgram,
+    pExtendsExpr,
+    pImport,
+  )
+where
 
 import Control.Applicative hiding (many, some)
 import Control.Monad
@@ -278,19 +286,27 @@ pTerm =
 
 pMappedType :: Parser Expr
 pMappedType =
-    braces p
-    where
-    p =
-      do
-        value <- pId
-        pipe
-        propertyKey <- pId
-        leftArrow
-        propertyKeySource <- pId
-        let asExpr = Nothing
-        let isReadonly = Nothing
-        let isOptional = Nothing
-        return (MappedType {..})
+  do
+    value <- pId
+    keyword "for"
+    propertyKey <- pId
+    keyword "in"
+    propertyKeySource <- pId
+    withAs <- optional $ do
+      keyword "as"
+      isReadonly <- pReadonly
+      asExpr <- Just <$> pId
+      isOptional <- pOptional
+      return (MappedType {..})
+    return $
+      fromMaybe
+        MappedType
+          { asExpr = Nothing,
+            isReadonly = Nothing,
+            isOptional = Nothing,
+            ..
+          }
+        withAs
 
 pCaseStatement :: Parser Expr
 pCaseStatement =
@@ -367,7 +383,7 @@ pExtendsExpr = do
   rhs <- pExpr
   void $ keyword "then"
   ifBody <- pExpr
-  elseBody <- do optional (keyword "else" >> pExpr)
+  elseBody <- optional (keyword "else" >> pExpr)
   return
     ( ExtendsExpr
         { elseBody = fromMaybe never elseBody,
@@ -390,18 +406,21 @@ pTypeApplication =
 
 pObjectLiteralProperty :: Parser ObjectLiteralProperty
 pObjectLiteralProperty = do
-  isReadonly <-
-    optional . choice $
-      [ True <$ keyword "readonly",
-        False <$ keyword "-readonly"
-      ]
-
+  isReadonly <- pReadonly
   key <- identifier
-  isOptional <-
-    optional . choice $
-      [ True <$ qmark,
-        False <$ keyword "-?"
-      ]
+  isOptional <- pOptional
   void colon
   value <- pExpr
   return (KeyValue {..})
+
+pReadonly =
+  optional . choice $
+    [ True <$ keyword "readonly",
+      False <$ keyword "-readonly"
+    ]
+
+pOptional =
+  optional . choice $
+    [ True <$ qmark,
+      False <$ keyword "-?"
+    ]

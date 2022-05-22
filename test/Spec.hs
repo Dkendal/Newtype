@@ -176,11 +176,31 @@ testMappedType :: TestTree
 testMappedType =
   testGroup
     "Mapped Type"
-    [ testCase "pMappedType" $
+    [ testCase "implicit as expr" $
         assertPretty
           (pMappedType <* eof)
-          "{ v | k <- K }"
-          "{[k in K]: v}"
+          "v for k in K"
+          "{[k in K]: v}",
+      testCase "explict as expr" $
+        assertPretty
+          (pMappedType <* eof)
+          "v for k in K as foo"
+          "{[k in K as foo]: v}",
+      testCase "as expr is optimized" $
+        assertPretty
+          (pMappedType <* eof)
+          "v for k in K as k"
+          "{[k in K]: v}",
+      testCase "readonly" $
+        assertPretty
+          (pMappedType <* eof)
+          "v for k in K as readonly k"
+          "{readonly [k in K]: v}",
+      testCase "optional" $
+        assertPretty
+          (pMappedType <* eof)
+          "v for k in K as k?"
+          "{[k in K]?: v}"
     ]
 
 testAccess :: TestTree
