@@ -130,6 +130,7 @@ instance Pretty Expr where
   pretty (StringLiteral value) = dquotes . pretty $ value
   pretty (TypeApplication typeName []) = pretty typeName
   pretty (TypeApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
+  pretty (ObjectLiteral []) = "{}"
   pretty (ObjectLiteral props) =
     group
       ( encloseSep
@@ -180,14 +181,15 @@ instance Pretty Expr where
           elseBody = ifBody,
           ..
         }
+  pretty (Tuple []) = "[]"
   pretty (Tuple exprs) = prettyList exprs
   pretty (Intersection left right) =
-    fmt left <> line <> "&" <+> fmt right
+    fmt left <+> "&" <+> fmt right
     where
       fmt (Union a b) = prettyOpList (Union a b)
       fmt a = pretty a
   pretty (Union left right) =
-    fmt left <> line <> "|" <+> fmt right
+    fmt left <+> "|" <+> fmt right
     where
       fmt (Intersection a b) = prettyOpList (Intersection a b)
       fmt a = pretty a

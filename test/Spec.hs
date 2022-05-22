@@ -42,7 +42,6 @@ tests =
       testAccess,
       testType,
       testBuiltin
-
     ]
 
 testProgram :: TestTree
