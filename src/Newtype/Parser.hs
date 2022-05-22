@@ -93,6 +93,12 @@ semicolon = symbol ";"
 arrow :: Parser Text
 arrow = symbol "->"
 
+leftArrow :: Parser Text
+leftArrow = symbol "<-"
+
+rightArrow :: Parser Text
+rightArrow = symbol "->"
+
 pipe :: Parser Text
 pipe = symbol "|"
 
@@ -263,12 +269,28 @@ pTerm =
       pCaseStatement <?> "case statement",
       pBooleanLiteral,
       pStringLiteral,
-      pID,
+      pId,
       -- Not actually valid outside of the extends expression
       -- but make my life a lot easier
       pInferID,
       pObjectLiteral
     ]
+
+pMappedType :: Parser Expr
+pMappedType =
+    braces p
+    where
+    p =
+      do
+        value <- pId
+        pipe
+        propertyKey <- pId
+        leftArrow
+        propertyKeySource <- pId
+        let asExpr = Nothing
+        let isReadonly = Nothing
+        let isOptional = Nothing
+        return (MappedType {..})
 
 pCaseStatement :: Parser Expr
 pCaseStatement =
@@ -326,8 +348,8 @@ pStringLiteral = StringLiteral <$> stringLiteral
 pTuple :: Parser Expr
 pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
 
-pID :: Parser Expr
-pID = ID <$> identifier <?> "identifier"
+pId :: Parser Expr
+pId = ID <$> identifier <?> "identifier"
 
 pExtendsExpr :: Parser Expr
 pExtendsExpr = do
@@ -363,7 +385,7 @@ pTypeApplication :: Parser Expr
 pTypeApplication =
   do
     name <- identifier
-    params <- some . choice $ [pID, try pTerm]
+    params <- some . choice $ [pId, try pTerm]
     return (TypeApplication name params)
 
 pObjectLiteralProperty :: Parser ObjectLiteralProperty

@@ -41,7 +41,8 @@ tests =
       testImport,
       testAccess,
       testType,
-      testBuiltin
+      testBuiltin,
+      testMappedType
     ]
 
 testProgram :: TestTree
@@ -169,6 +170,17 @@ testInterface =
                 "}"
               ]
           )
+    ]
+
+testMappedType :: TestTree
+testMappedType =
+  testGroup
+    "Mapped Type"
+    [ testCase "pMappedType" $
+        assertPretty
+          (pMappedType <* eof)
+          "{ v | k <- K }"
+          "{[k in K]: v}"
     ]
 
 testAccess :: TestTree

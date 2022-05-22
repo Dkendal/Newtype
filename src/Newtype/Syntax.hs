@@ -109,17 +109,25 @@ data Expr
         ifBody :: Expr,
         elseBody :: Expr
       }
+  | MappedType
+      { value :: Expr,
+        propertyKey :: Expr,
+        propertyKeySource :: Expr,
+        asExpr :: Maybe Expr,
+        isReadonly :: Maybe Bool,
+        isOptional :: Maybe Bool
+      }
   | Union Expr Expr
   | Intersection Expr Expr
   | CaseStatement Expr [Case]
   deriving (Eq, Show)
 
-data Case
-  = Case Expr Expr
-  | ElseCase Expr
-  deriving (Eq, Show)
-
 instance Pretty Expr where
+  pretty MappedType {..} =
+    braces (lhs <+> pretty value)
+    where
+      index = pretty propertyKey <+> "in" <+> pretty propertyKeySource
+      lhs = brackets index <> colon
   pretty (Builtin a b) = group (pretty a <+> pretty b)
   pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"
   pretty (DotAccess a b) = pretty a <> "." <> pretty b
@@ -196,6 +204,11 @@ instance Pretty Expr where
   pretty (CaseStatement a b) =
     pretty (simplify (CaseStatement a b))
 
+data Case
+  = Case Expr Expr
+  | ElseCase Expr
+  deriving (Eq, Show)
+
 data BinaryOp
 
 data ComparisionOperator
@@ -215,18 +228,21 @@ data ObjectLiteralProperty = KeyValue
 
 instance Pretty ObjectLiteralProperty where
   pretty KeyValue {..} =
-    (group readonly <> pretty key <> optional <> ":") <+> pretty value
+    lhs <+> pretty value
     where
-      readonly =
-        case isReadonly of
-          Just True -> "readonly" <> space
-          Just False -> "-readonly" <> space
-          Nothing -> emptyDoc
-      optional =
-        case isOptional of
-          Just True -> "?"
-          Just False -> "-?"
-          Nothing -> emptyDoc
+      readonly = prettyReadonly isReadonly
+      optional = prettyOptional isOptional
+      lhs = group readonly <> pretty key <> optional <> ":"
+
+prettyReadonly :: Maybe Bool -> Doc ann
+prettyReadonly Nothing = emptyDoc
+prettyReadonly (Just False) = "-readonly" <> space
+prettyReadonly (Just True) = "readonly" <> space
+
+prettyOptional :: Maybe Bool -> Doc ann
+prettyOptional Nothing = emptyDoc
+prettyOptional (Just False) = "-?"
+prettyOptional (Just True) = "?"
 
 never :: Expr
 never = ID "never"
