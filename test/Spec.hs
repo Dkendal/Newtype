@@ -33,8 +33,16 @@ tests =
           (pExtendsExpr <* eof)
           "if A B (C D) <: 0 then 1"
           "A<B, C<D>> extends 0 ? 1 : never",
+      testProgram,
       testExpr,
-      testInterface
+      testIfElseExpr,
+      testCaseExpr,
+      testInterface,
+      testImport,
+      testAccess,
+      testType,
+      testBuiltin
+
     ]
 
 testProgram :: TestTree
@@ -45,27 +53,33 @@ testProgram =
         assertPretty
           pProgram
           "\n\n\n"
-          "",
-      testCase "Program" $
+          ""
+    ]
+
+testType :: TestTree
+testType =
+  testGroup
+    "type"
+    [ testCase "Program" $
         assertPretty
           pProgram
           (unlines ["type A = 1", "type B = 2"])
-          (here ["type A = 1", "type B = 2"]),
+          (here ["type A = 1", "", "type B = 2"]),
       testCase "Program with extra newlines at the start" $
         assertPretty
           pProgram
           (unlines [" ", "type A = 1", "type B = 2"])
-          (here ["type A = 1", "type B = 2"]),
+          (here ["type A = 1", "", "type B = 2"]),
       testCase "Program with extra newlines at the end" $
         assertPretty
           pProgram
           (unlines ["type A = 1", "type B = 2", ""])
-          (here ["type A = 1", "type B = 2"]),
+          (here ["type A = 1", "", "type B = 2"]),
       testCase "Program with extra newlines between" $
         assertPretty
           pProgram
           (unlines ["type A = 1", " ", "type B = 2"])
-          (here ["type A = 1", "type B = 2"]),
+          (here ["type A = 1", "", "type B = 2"]),
       -- TODO refute
       -- testCase "type definition with no indent" $
       --   assertPretty
@@ -92,7 +106,48 @@ testProgram =
         assertParserError
           pProgram
           (unlines ["type A =", "1"])
-          ["incorrect indentation (got 1, should be greater than 1)\n"]
+          ["incorrect indentation (got 1, should be greater than 1)\n"],
+      testCase "type with parameters" $
+        assertPretty
+          pProgram
+          "type A T = T"
+          "type A<T> = T"
+    ]
+
+testImport :: TestTree
+testImport =
+  testGroup
+    "Import"
+    [ testCase "import" $
+        assertPretty
+          (pImport <* eof)
+          "import \"mod\" (x)"
+          "import {x} from \"mod\"",
+      testCase "import" $
+        assertPretty
+          (pImport <* eof)
+          "import \"mod\" (x, y)"
+          "import {x, y} from \"mod\""
+          -- testCase "multi line import" $
+          --   assertPretty
+          --     (pImport <* eof)
+          --     ( (stripEnd . unlines)
+          --         [ "import \"mod\"",
+          --           "  (x, y)"
+          --         ]
+          --     )
+          --     "import {x, y} from \"mod\""
+          -- testCase "multi line import" $
+          --   assertPretty
+          --     (pImport <* eof)
+          --     ( (stripEnd . unlines)
+          --         [ "import \"mod\"",
+          --           "  ( x,",
+          --           "    y",
+          --           "  )"
+          --         ]
+          --     )
+          --     "import {x, y} from \"mod\""
     ]
 
 testInterface :: TestTree
@@ -115,6 +170,33 @@ testInterface =
                 "}"
               ]
           )
+    ]
+
+testAccess :: TestTree
+testAccess =
+  testGroup
+    "Access"
+    [ testCase "dot access" $
+        assertPretty
+          (pExpr <* eof)
+          "A.B"
+          "A.B",
+      testCase "access" $
+        assertPretty
+          (pExpr <* eof)
+          "A ! B"
+          "A[B]"
+    ]
+
+testBuiltin :: TestTree
+testBuiltin =
+  testGroup
+    "BuiltIn"
+    [ testCase "keyof" $
+        assertPretty
+          (pExpr <* eof)
+          "keyof A"
+          "keyof A"
     ]
 
 testExpr :: TestTree
@@ -140,14 +222,12 @@ testExpr =
         assertPretty
           (pExpr <* eof)
           "A (B true) {}"
-          "A<B<true>, {}>",
-      -- testCase "multi line generic type" $
-      --   assertPretty
-      --     (pExpr <* eof)
-      --     ((stripEnd . unlines) ["A", "  1", "  2"])
-      --     "A<1, 2>",
-      testIfElseExpr,
-      testCaseExpr
+          "A<B<true>, {}>"
+          -- testCase "multi line generic type" $
+          --   assertPretty
+          --     (pExpr <* eof)
+          --     ((stripEnd . unlines) ["A", "  1", "  2"])
+          --     "A<1, 2>",
     ]
 
 testCaseExpr :: TestTree

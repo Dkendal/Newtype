@@ -22,12 +22,12 @@ data Statement
   | ExportStatement
   | TypeDefinition
       { name :: String,
-        params :: Maybe TypeParams,
+        params :: [TypeParam],
         body :: Expr
       }
   | InterfaceDefinition
       { name :: String,
-        params :: Maybe TypeParams,
+        params :: [TypeParam],
         extends :: [Expr],
         props :: [ObjectLiteralProperty]
       }
@@ -37,14 +37,14 @@ instance Pretty Statement where
   pretty ImportDeclaration {..} =
     "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
   pretty TypeDefinition {..} =
-    group ("type" <+> pretty name) <> group (nest 2 (line <> "=" <+> pretty body))
+    group ("type" <+> pretty name <> prettyList params) <> group (nest 2 (line <> "=" <+> pretty body))
   pretty ExportStatement = emptyDoc
   pretty InterfaceDefinition {..} =
     (group "interface" <+> pretty name) <+> vsep [lbrace, body, rbrace]
     where
       body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
 
-  prettyList statements = vsep (map pretty statements)
+  prettyList statements = vsep (punctuate line (map pretty statements))
 
 data ImportClause
   = ImportClauseDefault String
@@ -78,8 +78,15 @@ instance Pretty ImportSpecifier where
   prettyList lst =
     braces . hsep . punctuate comma . map pretty $ lst
 
-data TypeParams = TypeParams
+data TypeParam = TypeParam
+  { name :: String
+  }
   deriving (Eq, Show)
+
+instance Pretty TypeParam where
+  pretty (TypeParam s) = pretty s
+  prettyList [] = emptyDoc
+  prettyList l = angles . hsep . punctuate comma . map pretty $ l
 
 data Expr
   = StringLiteral String
@@ -88,6 +95,9 @@ data Expr
   | BooleanLiteral Bool
   | ObjectLiteral [ObjectLiteralProperty]
   | TypeApplication String [Expr]
+  | Access Expr Expr
+  | DotAccess Expr Expr
+  | Builtin String Expr
   | ID String
   | InferID String
   | Tuple [Expr]
@@ -110,6 +120,9 @@ data Case
   deriving (Eq, Show)
 
 instance Pretty Expr where
+  pretty (Builtin a b) = group (pretty a <+> pretty b)
+  pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"
+  pretty (DotAccess a b) = pretty a <> "." <> pretty b
   pretty (NumberIntegerLiteral value) = pretty value
   pretty (NumberDoubleLiteral value) = pretty value
   pretty (BooleanLiteral True) = "true"

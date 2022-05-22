@@ -1,4 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -8,7 +9,7 @@ import Control.Applicative hiding (many, some)
 import Control.Monad
 import Control.Monad.Combinators.Expr
 import Data.Maybe (fromMaybe, isJust)
-import Data.Text (Text)
+import Data.Text (Text, pack, unpack)
 import Data.Void
 import Newtype.Syntax
 import Text.Megaparsec hiding (State)
@@ -98,6 +99,9 @@ pipe = symbol "|"
 amp :: Parser Text
 amp = symbol "&"
 
+bang :: Parser Text
+bang = symbol "!"
+
 comma :: Parser Text
 comma = symbol ","
 
@@ -125,25 +129,30 @@ inferSym = qmark
 -- list of reserved words
 reservedWords :: [String]
 reservedWords =
-  [ "from",
-    "if",
-    "else",
-    "then",
-    "while",
-    "for",
-    "goto",
-    "require",
-    "import",
-    "case",
-    "of",
-    "from",
-    "as",
-    "do",
-    "yield",
-    "await",
+  [ "as",
     "async",
-    "readonly"
+    "await",
+    "case",
+    "do",
+    "else",
+    "for",
+    "from",
+    "from",
+    "goto",
+    "if",
+    "import",
+    "keyof",
+    "of",
+    "readonly",
+    "require",
+    "then",
+    "typeof",
+    "while",
+    "yield"
   ]
+
+builtins :: [Text]
+builtins = ["keyof", "typeof"]
 
 keyword :: Text -> Parser Text
 keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
@@ -202,26 +211,29 @@ pStatement =
           pInterfaceDefintion
         ]
     )
-  where
-    pExport = ExportStatement <$ string "export"
-    pImport = do
-      void $ keyword "import"
-      fromClause <- lexeme stringLiteral <?> "from clause"
-      importClause <- pImportClause
-      return ImportDeclaration {..}
+
+pExport :: Parser Statement
+pExport = ExportStatement <$ string "export"
+
+pImport :: Parser Statement
+pImport = do
+  void $ keyword "import"
+  fromClause <- lexeme stringLiteral <?> "package name"
+  importClause <- pImportClause
+  return ImportDeclaration {..}
 
 pTypeDefinition :: Parser Statement
 pTypeDefinition = do
   void $ indentGuard EQ pos1
   void $ keyword "type"
   name <- identifier
+  paramNames <- many identifier
   void $ indentGuard GT pos1
   void equals
   void $ indentGuard GT pos1
   body <- pExpr
+  let params = [TypeParam {name} | name <- paramNames]
   return TypeDefinition {..}
-  where
-    params = Nothing
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do
@@ -234,8 +246,8 @@ pInterfaceDefintion = do
   props <- many $ pObjectLiteralProperty <* space
   return InterfaceDefinition {..}
   where
-    params = Nothing
     extends = []
+    params = []
 
 -- Same as expression, but with recursive terms removed
 pTerm :: Parser Expr
@@ -285,7 +297,14 @@ pSetOperator = makeExprParser pTerm operatorTable
 
 operatorTable :: [[Operator Parser Expr]]
 operatorTable =
-  [ [InfixL $ Intersection <$ amp],
+  [ [ Prefix $ do
+        kw <- choice (map keyword builtins)
+        let name = unpack kw
+        return (Builtin name)
+    ],
+    [InfixL $ DotAccess <$ dot],
+    [InfixL $ Access <$ bang],
+    [InfixL $ Intersection <$ amp],
     [InfixL $ Union <$ pipe]
   ]
 
