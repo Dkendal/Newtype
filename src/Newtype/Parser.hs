@@ -27,7 +27,7 @@ import Text.Megaparsec.Debug
 
 type Parser = Parsec Void Text
 
-lineComment = L.skipLineComment "//"
+lineComment = L.skipLineComment "--"
 
 blockComment = L.skipBlockComment "{-" "-}"
 
@@ -45,10 +45,10 @@ indentBlock :: Parser (L.IndentOpt Parser a b) -> Parser a
 indentBlock = L.indentBlock scn
 
 lexeme :: Parser a -> Parser a
-lexeme = L.lexeme sc
+lexeme = L.lexeme scn
 
 symbol :: Text -> Parser Text
-symbol = L.symbol sc
+symbol = L.symbol scn
 
 stringLiteral :: Parser String
 stringLiteral = char '\"' *> manyTill L.charLiteral (char '\"')
@@ -194,7 +194,6 @@ bool = choice [True <$ keyword "true", False <$ keyword "false"]
 pProgram :: Parser Program
 pProgram =
   do
-    void scn
     statements <- pStatementList
     void eof
     return (Program statements)
@@ -216,15 +215,12 @@ pImportClause =
 
 pStatement :: Parser Statement
 pStatement =
-  L.nonIndented
-    scn
-    ( choice
-        [ pExport,
-          pImport,
-          pTypeDefinition,
-          pInterfaceDefintion
-        ]
-    )
+  choice
+      [ pExport,
+        pImport,
+        pTypeDefinition,
+        pInterfaceDefintion
+      ]
 
 pExport :: Parser Statement
 pExport = ExportStatement <$ string "export"
@@ -238,25 +234,20 @@ pImport = do
 
 pTypeDefinition :: Parser Statement
 pTypeDefinition = do
-  void $ indentGuard EQ pos1
   void $ keyword "type"
   name <- identifier
   paramNames <- many identifier
-  void $ indentGuard GT pos1
   void equals
-  void $ indentGuard GT pos1
   body <- pExpr
   let params = [TypeParam {name} | name <- paramNames]
   return TypeDefinition {..}
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do
-  void $ indentGuard EQ pos1
   void $ keyword "interface"
   name <- identifier
   void $ keyword "where"
   void newline
-  void $ indentGuard GT pos1
   props <- many $ pObjectLiteralProperty <* space
   return InterfaceDefinition {..}
   where
@@ -270,6 +261,7 @@ pTerm =
     [ try pTypeApplication <?> "type application",
       try (parens pTypeApplication) <?> "quoted type application",
       try pTuple <?> "tuple",
+      try pMappedType,
       parens pSetOperator,
       pExtendsExpr,
       pNumberIntegerLiteral,
@@ -287,7 +279,8 @@ pTerm =
 pMappedType :: Parser Expr
 pMappedType =
   do
-    value <- pId
+    -- TODO: I don't know if there's a way to disambiguate this statement without parens
+    value <- pId <|> parens pExpr
     keyword "for"
     propertyKey <- pId
     keyword "in"
@@ -310,20 +303,17 @@ pMappedType =
 
 pCaseStatement :: Parser Expr
 pCaseStatement =
-  indentBlock p
+  do
+    keyword "case"
+    value <- pExpr
+    keyword "of"
+    cases <- some pCase
+    return (CaseStatement value cases)
   where
-    p = do
-      keyword "case"
-      value <- pExpr
-      keyword "of"
-      return (L.IndentSome Nothing (return . CaseStatement value) pCase)
-
     pCase :: Parser Case
     pCase = do
-      ref <- L.indentLevel
       lhs <- pExpr <?> "left hand side of case"
       keyword "->"
-      indentGuard GT ref
       rhs <- pExpr <?> "right hand side of case"
       return (Case lhs rhs)
 

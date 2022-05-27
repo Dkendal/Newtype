@@ -2,359 +2,394 @@
 
 module Main where
 
+import Control.Exception (evaluate)
 import Data.Foldable
 import Data.Text
 import Newtype.Parser
 import Prettyprinter
 import Prettyprinter.Render.Text (renderStrict)
-import Test.Tasty
-import Test.Tasty.HUnit
+import Test.Hspec
+import Test.QuickCheck
 import Text.Megaparsec
 import Prelude hiding (unlines)
 
 main :: IO ()
-main = defaultMain tests
+main = hspec $ do
+  describe "Newtype" $ do
+    specProgram
+    specExpression
 
-tests :: TestTree
-tests =
-  testGroup
-    "Pretty printing"
-    [ testProgram,
-      -- TODO refute
-      -- testCase "interface must be indent" $
-      --   assertPretty
-      --     (pStatement <* eof)
-      --     "interface A where\n\
-      --     \foo: 0\n\
-      --     \bar: 1"
-      --     "",
-      testCase "comparision with complex term" $
-        assertPretty
-          (pExtendsExpr <* eof)
-          "if A B (C D) <: 0 then 1"
-          "A<B, C<D>> extends 0 ? 1 : never",
-      testProgram,
-      testExpr,
-      testIfElseExpr,
-      testCaseExpr,
-      testInterface,
-      testImport,
-      testAccess,
-      testType,
-      testBuiltin,
-      testMappedType
-    ]
+specProgram :: SpecWith ()
+specProgram =
+  describe "a program" $ do
+    it "can have successive type definitions" $ do
+      let actual =
+            [ "type A = 1",
+              "type B = 2"
+            ]
+          expected =
+            [ "type A = 1",
+              "",
+              "type B = 2"
+            ]
+       in pp pProgram (unlines actual) `shouldBe` here expected
 
-testProgram :: TestTree
-testProgram =
-  testGroup
-    "program"
-    [ testCase "empty program" $
-        assertPretty
-          pProgram
-          "\n\n\n"
-          ""
-    ]
-
-testType :: TestTree
-testType =
-  testGroup
-    "type"
-    [ testCase "Program" $
-        assertPretty
-          pProgram
-          (unlines ["type A = 1", "type B = 2"])
-          (here ["type A = 1", "", "type B = 2"]),
-      testCase "Program with extra newlines at the start" $
-        assertPretty
-          pProgram
-          (unlines [" ", "type A = 1", "type B = 2"])
-          (here ["type A = 1", "", "type B = 2"]),
-      testCase "Program with extra newlines at the end" $
-        assertPretty
-          pProgram
-          (unlines ["type A = 1", "type B = 2", ""])
-          (here ["type A = 1", "", "type B = 2"]),
-      testCase "Program with extra newlines between" $
-        assertPretty
-          pProgram
-          (unlines ["type A = 1", " ", "type B = 2"])
-          (here ["type A = 1", "", "type B = 2"]),
-      -- TODO refute
-      -- testCase "type definition with no indent" $
-      --   assertPretty
-      --     pProgram
-      --     "type A =\n\
-      --     \1"
-      --     "",
-      testCase "type definition with indent after equals" $
-        assertPretty
-          pProgram
-          (unlines ["type A =", "  1"])
-          "type A = 1",
-      testCase "type definition with indent before equals" $
-        assertPretty
-          pProgram
-          (unlines ["type A", "  = 1"])
-          "type A = 1",
-      testCase "type definition must be indented" $
-        assertParserError
-          pProgram
-          (unlines ["type A", "= 1"])
-          ["incorrect indentation (got 1, should be greater than 1)\n"],
-      testCase "type definition must be indented" $
-        assertParserError
-          pProgram
-          (unlines ["type A =", "1"])
-          ["incorrect indentation (got 1, should be greater than 1)\n"],
-      testCase "type with parameters" $
-        assertPretty
-          pProgram
-          "type A T = T"
-          "type A<T> = T"
-    ]
-
-testImport :: TestTree
-testImport =
-  testGroup
-    "Import"
-    [ testCase "import" $
-        assertPretty
-          (pImport <* eof)
-          "import \"mod\" (x)"
-          "import {x} from \"mod\"",
-      testCase "import" $
-        assertPretty
-          (pImport <* eof)
-          "import \"mod\" (x, y)"
-          "import {x, y} from \"mod\""
-          -- testCase "multi line import" $
-          --   assertPretty
-          --     (pImport <* eof)
-          --     ( (stripEnd . unlines)
-          --         [ "import \"mod\"",
-          --           "  (x, y)"
-          --         ]
-          --     )
-          --     "import {x, y} from \"mod\""
-          -- testCase "multi line import" $
-          --   assertPretty
-          --     (pImport <* eof)
-          --     ( (stripEnd . unlines)
-          --         [ "import \"mod\"",
-          --           "  ( x,",
-          --           "    y",
-          --           "  )"
-          --         ]
-          --     )
-          --     "import {x, y} from \"mod\""
-    ]
-
-testInterface :: TestTree
-testInterface =
-  testGroup
-    "Interface"
-    [ testCase "interface definition" $
-        assertPretty
-          (pStatement <* eof)
-          ( unlines
-              [ "interface A where",
-                "  foo : 0",
-                "  bar : 1"
+specExpression :: SpecWith ()
+specExpression =
+  describe "an expression" $ do
+    describe "as a primitive type" $ do
+      it "[]" $ do
+        let src =
+              ["[]"]
+         in pp (pExpr <* eof) (unlines src) `shouldBe` here src
+      it "unknown" $ do
+        let src =
+              ["unknown"]
+         in pp (pExpr <* eof) (unlines src) `shouldBe` here src
+      it "any" $ do
+        let src =
+              ["any"]
+         in pp (pExpr <* eof) (unlines src) `shouldBe` here src
+      it "never" $ do
+        let src =
+              ["never"]
+         in pp (pExpr <* eof) (unlines src) `shouldBe` here src
+      it "{}" $ do
+        let src =
+              ["{}"]
+         in pp (pExpr <* eof) (unlines src) `shouldBe` here src
+      it "number" $ do
+        let src =
+              ["number"]
+         in pp (pExpr <* eof) (unlines src) `shouldBe` here src
+      it "false" $ do
+        let src =
+              ["false"]
+         in pp (pExpr <* eof) (unlines src) `shouldBe` here src
+      it "true" $ do
+        let src =
+              ["true"]
+         in pp (pExpr <* eof) (unlines src) `shouldBe` here src
+    specIfThenElse
+    describe "can be a generic type" $ do
+      it "can have one parameter" $ do
+        let nt =
+              ["A 1"]
+            ts =
+              ["A<1>"]
+         in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+      it "can have multiple parameters" $ do
+        let nt =
+              ["A 1 true {} 4"]
+            ts =
+              ["A<1, true, {}, 4>"]
+         in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+      it "can be nested" $ do
+        let nt =
+              ["Node (Node 1) 2"]
+            ts =
+              ["Node<Node<1>, 2>"]
+         in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+      it "can span multiple lines" $ do
+        let nt =
+              [ "Node",
+                "  (Node 1)",
+                "  2"
               ]
-          )
-          ( here
-              [ "interface A {",
-                "  foo: 0;",
-                "  bar: 1;",
-                "}"
-              ]
-          )
-    ]
+            ts =
+              ["Node<Node<1>, 2>"]
+         in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-testMappedType :: TestTree
-testMappedType =
-  testGroup
-    "Mapped Type"
-    [ testCase "implicit as expr" $
-        assertPretty
-          (pMappedType <* eof)
-          "v for k in K"
-          "{[k in K]: v}",
-      testCase "explict as expr" $
-        assertPretty
-          (pMappedType <* eof)
-          "v for k in K as foo"
-          "{[k in K as foo]: v}",
-      testCase "as expr is optimized" $
-        assertPretty
-          (pMappedType <* eof)
-          "v for k in K as k"
-          "{[k in K]: v}",
-      testCase "readonly" $
-        assertPretty
-          (pMappedType <* eof)
-          "v for k in K as readonly k"
-          "{readonly [k in K]: v}",
-      testCase "optional" $
-        assertPretty
-          (pMappedType <* eof)
-          "v for k in K as k?"
-          "{[k in K]?: v}"
-    ]
+specIfThenElse :: SpecWith ()
+specIfThenElse =
+  describe "if ... then ... else" $ do
+    it "can have an extends condition" $ do
+      let nt =
+            ["if LHS <: RHS then Then else Else"]
+          ts =
+            ["LHS extends RHS ? Then : Else"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-testAccess :: TestTree
-testAccess =
-  testGroup
-    "Access"
-    [ testCase "dot access" $
-        assertPretty
-          (pExpr <* eof)
-          "A.B"
-          "A.B",
-      testCase "access" $
-        assertPretty
-          (pExpr <* eof)
-          "A ! B"
-          "A[B]"
-    ]
+    it "if extends else then expression" $ do
+      let nt = ["if LHS <: RHS then Then"]
+          ts = ["LHS extends RHS ? Then : never"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-testBuiltin :: TestTree
-testBuiltin =
-  testGroup
-    "BuiltIn"
-    [ testCase "keyof" $
-        assertPretty
-          (pExpr <* eof)
-          "keyof A"
-          "keyof A"
-    ]
+    it "if right-extends then expression" $ do
+      let nt = ["if LHS :> RHS then Then"]
+          ts = ["RHS extends LHS ? Then : never"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-testExpr :: TestTree
-testExpr =
-  testGroup
-    "Expression"
-    [ testCase "id" $
-        assertPretty
-          (pExpr <* eof)
-          "A"
-          "A",
-      testCase "generic type" $
-        assertPretty
-          (pExpr <* eof)
-          "A 1"
-          "A<1>",
-      testCase "multi parameter generic type" $
-        assertPretty
-          (pExpr <* eof)
-          "A 1 true {}"
-          "A<1, true, {}>",
-      testCase "nested generic type" $
-        assertPretty
-          (pExpr <* eof)
-          "A (B true) {}"
-          "A<B<true>, {}>"
-          -- testCase "multi line generic type" $
-          --   assertPretty
-          --     (pExpr <* eof)
-          --     ((stripEnd . unlines) ["A", "  1", "  2"])
-          --     "A<1, 2>",
-    ]
+    it "if expressions may be negated" $ do
+      let nt = ["if not LHS <: RHS then Then"]
+          ts = ["LHS extends RHS ? never : Then"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-testCaseExpr :: TestTree
-testCaseExpr =
-  testGroup
-    "case expression"
-    [ testCase "case statement" $
-        assertPretty
-          (pExpr <* eof)
-          ( unlines
-              [ "case A of",
-                " B ->",
-                "   B a a a",
-                " C ->",
-                "   C a a a"
-              ]
-          )
-          "A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never",
-      testCase "case statement with fall through" $
-        assertPretty
-          (pExpr <* eof)
-          ( unlines
-              [ "case A of",
-                " 0 -> 1",
-                " _ -> 2"
-              ]
-          )
-          "A extends 0 ? 1 : 2",
-      testCase "case statement" $
-        assertPretty
-          (pExpr <* eof)
-          ( unlines
-              [ "case A of",
-                " B -> B a a a",
-                " C -> C a a a"
-              ]
-          )
-          "A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never"
-    ]
+    it "if with infer operator" $ do
+      let nt = ["if Left <: Right ?Infer then Then"]
+          ts = ["Left extends Right<infer Infer> ? Then : never"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-testIfElseExpr :: TestTree
-testIfElseExpr =
-  testGroup
-    "if-else-then-end expression"
-    [ testCase "if extends else then expression" $
-        assertPretty
-          (pExpr <* eof)
-          "if LHS <: RHS then Then else Else"
-          "LHS extends RHS ? Then : Else",
-      testCase "if extends else then expression" $
-        assertPretty
-          (pExpr <* eof)
-          "if LHS <: RHS then Then"
-          "LHS extends RHS ? Then : never",
-      testCase "if right-extends then expression" $
-        assertPretty
-          (pExpr <* eof)
-          "if LHS :> RHS then Then"
-          "RHS extends LHS ? Then : never",
-      testCase "if expressions may be negated" $
-        assertPretty
-          (pExpr <* eof)
-          "if not LHS <: RHS then Then"
-          "LHS extends RHS ? never : Then",
-      testCase "if with infer operator" $
-        assertPretty
-          (pExpr <* eof)
-          "if Left <: Right ?Infer then Then"
-          "Left extends Right<infer Infer> ? Then : never"
-    ]
+-- testWhitespaceSensitivity :: TestTree
+-- testWhitespaceSensitivity =
+--   describe
+--     "white space sensitivity"
+--     [ it "empty program" $
+--         assertPretty
+--           pProgram
+--           "\n\n\n"
+--           "",
+--       it "Program with extra newlines at the start" $
+--         assertPretty
+--           pProgram
+--           (unlines [" ", "type A = 1", "type B = 2"])
+--           (here ["type A = 1", "", "type B = 2"]),
+--       it "Program with extra newlines at the end" $
+--         assertPretty
+--           pProgram
+--           (unlines ["type A = 1", "type B = 2", ""])
+--           (here ["type A = 1", "", "type B = 2"]),
+--       it "Program with extra newlines between" $
+--         assertPretty
+--           pProgram
+--           (unlines ["type A = 1", " ", "type B = 2"])
+--           (here ["type A = 1", "", "type B = 2"]),
+--       it "type definition with no indent" $
+--         assertPretty
+--           pProgram
+--           "type A =\n\
+--           \1"
+--           "",
+--       it "type definition with indent after equals" $
+--         assertPretty
+--           pProgram
+--           (unlines ["type A =", "  1"])
+--           "type A = 1",
+--       it "type definition with indent before equals" $
+--         assertPretty
+--           pProgram
+--           (unlines ["type A", "  = 1"])
+--           "type A = 1",
+--       it "type definition must be indented" $
+--         assertParserError
+--           pProgram
+--           (unlines ["type A", "= 1"])
+--           ["incorrect indentation (got 1, should be greater than 1)\n"],
+--       it "type definition must be indented" $
+--         assertParserError
+--           pProgram
+--           (unlines ["type A =", "1"])
+--           ["incorrect indentation (got 1, should be greater than 1)\n"]
+--     ]
+specType :: SpecWith ()
+specType =
+  describe "type" $ do
+    it "Program" $
+      let nt =
+            [ "type A = 1",
+              "type B = 2"
+            ]
+          ts =
+            [ "type A = 1",
+              "",
+              "type B = 2"
+            ]
+       in pp pProgram (unlines nt) `shouldBe` here ts
 
-assertPretty ::
-  (VisualStream s, TraversableStream s, ShowErrorComponent e, Pretty a) =>
-  Parsec e s a ->
-  s ->
-  String ->
-  IO ()
-assertPretty parser input output =
+    it "type with parameters" $
+      let nt = ["type A T = T"]
+          ts = ["type A<T> = T"]
+       in pp pProgram (unlines nt) `shouldBe` here ts
+
+    it "type alias" $
+      let nt = ["type A = B"]
+          ts = ["type A = B"]
+       in pp pProgram (unlines nt) `shouldBe` here ts
+
+    it "type alias dot access" $
+      let nt = ["type A = B.C"]
+          ts = ["type A = B.C"]
+       in pp pProgram (unlines nt) `shouldBe` here ts
+
+specImport :: SpecWith ()
+specImport =
+  describe "Import" $ do
+    it "import" $
+      let nt = ["import \"mod\" (x)"]
+          ts = ["import {x} from \"mod\""]
+       in pp (pImport <* eof) (unlines nt) `shouldBe` here ts
+
+    it "import" $
+      let nt = ["import \"mod\" (x, y)"]
+          ts = ["import {x, y} from \"mod\""]
+       in pp (pImport <* eof) (unlines nt) `shouldBe` here ts
+
+specInterface :: SpecWith ()
+specInterface =
+  describe "Interface" $ do
+    it "interface definition" $
+      let nt =
+            [ "interface A where",
+              "  foo : 0",
+              "  bar : 1"
+            ]
+          ts =
+            [ "interface A {",
+              "  foo: 0;",
+              "  bar: 1;",
+              "}"
+            ]
+       in pp (pStatement <* eof) (unlines nt) `shouldBe` here ts
+
+-- TODO refute
+-- it "interface must be indent" $
+--   assertPretty
+--     (pStatement <* eof)
+--     "interface A where\n\
+--     \foo: 0\n\
+--     \bar: 1"
+--     "",
+specMappedType :: SpecWith ()
+specMappedType =
+  describe "Mapped Type" $ do
+    it "parsed as an expression" $
+      let nt = ["v for k in K"]
+          ts = ["{[k in K]: v}"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+    it "implicit as expr" $
+      let nt = ["v for k in K"]
+          ts = ["{[k in K]: v}"]
+       in pp (pMappedType <* eof) (unlines nt) `shouldBe` here ts
+
+    it "explict as expr" $
+      let nt = ["v for k in K as foo"]
+          ts = ["{[k in K as foo]: v}"]
+       in pp (pMappedType <* eof) (unlines nt) `shouldBe` here ts
+
+    it "as expr is optimized" $
+      let nt = ["v for k in K as k"]
+          ts = ["{[k in K]: v}"]
+       in pp (pMappedType <* eof) (unlines nt) `shouldBe` here ts
+
+    it "readonly" $
+      let nt = ["v for k in K as readonly k"]
+          ts = ["{readonly [k in K]: v}"]
+       in pp (pMappedType <* eof) (unlines nt) `shouldBe` here ts
+
+    it "optional" $
+      let nt = ["v for k in K as k?"]
+          ts = ["{[k in K]?: v}"]
+       in pp (pMappedType <* eof) (unlines nt) `shouldBe` here ts
+
+    it "optional" $
+      let nt = ["(1 | 2) for k in K"]
+          ts = ["{[k in K]: 1 | 2}"]
+       in pp (pMappedType <* eof) (unlines nt) `shouldBe` here ts
+
+specAccess :: SpecWith ()
+specAccess =
+  describe "Access" $ do
+    it "dot access" $
+      let nt = ["A.B"]
+          ts = ["A.B"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+    it "access" $
+      let nt = ["A ! B"]
+          ts = ["A[B]"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+specBuiltin :: SpecWith ()
+specBuiltin =
+  describe "BuiltIn" $ do
+    it "keyof" $
+      let nt = ["keyof A"]
+          ts = ["keyof A"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+specExpr :: SpecWith ()
+specExpr =
+  describe "Expression" $ do
+    it "id" $
+      let nt = ["A"]
+          ts = ["A"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+    it "generic type" $
+      let nt = ["A 1"]
+          ts = ["A<1>"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+    it "multi parameter generic type" $
+      let nt = ["A 1 true {}"]
+          ts = ["A<1, true, {}>"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+    it "nested generic type" $
+      let nt = ["A (B true) {}"]
+          ts = ["A<B<true>, {}>"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+-- it "multi line generic type" $
+--   assertPretty
+--     (pExpr <* eof)
+--     ((stripEnd . unlines) ["A", "  1", "  2"])
+--     "A<1, 2>",
+
+specCase :: SpecWith ()
+specCase =
+  describe "case expression" $ do
+    it "case statement" $
+      let nt =
+            [ "case A of",
+              " B ->",
+              "   B a a a",
+              " C ->",
+              "   C a a a"
+            ]
+          ts = ["A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+    it "case statement with fall through" $
+      let nt =
+            [ "case A of",
+              " 0 -> 1",
+              " _ -> 2"
+            ]
+          ts = ["A extends 0 ? 1 : 2"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+    it "case statement" $
+      let nt =
+            [ "case A of",
+              " B -> B a a a",
+              " C -> C a a a"
+            ]
+          ts = ["A extends B ? B<a, a, a> : A extends C ? C<a, a, a> : never"]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+-- assertParserError ::
+--   (VisualStream s, TraversableStream s, ShowErrorComponent e, Pretty a) =>
+--   Parsec e s a ->
+--   s ->
+--   [String] ->
+--   IO ()
+
+-- assertParserError parser input expected =
+--   case parse parser "" input of
+--     Left (ParseErrorBundle s _) ->
+--       [parseErrorTextPretty e | e <- toList s] @?= expected
+--     Right _ ->
+--       assertFailure "expected parser error"
+
+pp :: (VisualStream s, TraversableStream s, ShowErrorComponent e, Pretty a) => Parsec e s a -> s -> [Char]
+pp parser input =
   case parse parser "" input of
     Left a ->
-      assertFailure (errorBundlePretty a)
+      fail (errorBundlePretty a)
     Right a ->
-      unpack (renderStrict (layoutPretty (LayoutOptions Unbounded) (pretty a))) @?= output
-
-assertParserError ::
-  (VisualStream s, TraversableStream s, ShowErrorComponent e, Pretty a) =>
-  Parsec e s a ->
-  s ->
-  [String] ->
-  IO ()
-assertParserError parser input expected =
-  case parse parser "" input of
-    Left (ParseErrorBundle s _) ->
-      [parseErrorTextPretty e | e <- toList s] @?= expected
-    Right _ ->
-      assertFailure "expected parser error"
+      unpack (renderStrict (layoutPretty (LayoutOptions Unbounded) (pretty a)))
 
 here :: [Text] -> String
 here = unpack . stripEnd . unlines
