@@ -22,7 +22,7 @@ main = hspec $ do
 specProgram :: SpecWith ()
 specProgram =
   describe "a program" $ do
-    it "can have successive type definitions" $ do
+    it "can have successive type definitions with simple definitions" $ do
       let actual =
             [ "type A = 1",
               "type B = 2"
@@ -31,6 +31,17 @@ specProgram =
             [ "type A = 1",
               "",
               "type B = 2"
+            ]
+       in pp pProgram (unlines actual) `shouldBe` here expected
+    it "can have successive type definitions with complex terms" $ do
+      let actual =
+            [ "type T1 = (A.B)",
+              "type T2 = (B.C)"
+            ]
+          expected =
+            [ "type T1 = A.B",
+              "",
+              "type T2 = B.C"
             ]
        in pp pProgram (unlines actual) `shouldBe` here expected
 
@@ -110,24 +121,31 @@ specIfThenElse =
             ["LHS extends RHS ? Then : Else"]
        in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-    it "if extends else then expression" $ do
+    it "supports boolean expressions" $ do
+      let nt =
+            ["if A <: C and B <: C and A <: C then 1"]
+          ts =
+            [""]
+       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
+
+    it "doesn't need an else expr" $ do
       let nt = ["if LHS <: RHS then Then"]
           ts = ["LHS extends RHS ? Then : never"]
        in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-    it "if right-extends then expression" $ do
+    it "can use the extends-right operator" $ do
       let nt = ["if LHS :> RHS then Then"]
           ts = ["RHS extends LHS ? Then : never"]
        in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-    it "if expressions may be negated" $ do
+    it "can negate conditions" $ do
       let nt = ["if not LHS <: RHS then Then"]
           ts = ["LHS extends RHS ? never : Then"]
        in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
-    it "if with infer operator" $ do
-      let nt = ["if Left <: Right ?Infer then Then"]
-          ts = ["Left extends Right<infer Infer> ? Then : never"]
+    it "can use the infer operator (?)" $ do
+      let nt = ["if Left <: Right ?T then Then"]
+          ts = ["Left extends Right<infer T> ? Then : never"]
        in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
 -- testWhitespaceSensitivity :: TestTree
@@ -387,7 +405,7 @@ pp :: (VisualStream s, TraversableStream s, ShowErrorComponent e, Pretty a) => P
 pp parser input =
   case parse parser "" input of
     Left a ->
-      fail (errorBundlePretty a)
+      error (errorBundlePretty a)
     Right a ->
       unpack (renderStrict (layoutPretty (LayoutOptions Unbounded) (pretty a)))
 
