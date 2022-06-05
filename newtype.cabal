@@ -63,6 +63,9 @@ test-suite newtype-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Newtype.ConformanceSpec
+      Newtype.ParserSpec
+      Newtype.SyntaxSpec
       Paths_newtype
   hs-source-dirs:
       test

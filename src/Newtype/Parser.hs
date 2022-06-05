@@ -8,8 +8,9 @@ module Newtype.Parser
     pMappedType,
     pStatement,
     pProgram,
-    pExtendsExpr,
     pImport,
+    pConditionalType,
+    pBoolExpr,
   )
 where
 
@@ -37,9 +38,11 @@ sc = L.space (void $ char ' ' <|> char '\t') lineComment blockComment
 scn :: Parser ()
 scn = L.space space1 lineComment blockComment
 
-indentGuard :: Ordering -> Pos -> Parser ()
-indentGuard ord pos =
-  void $ L.indentGuard scn ord pos
+nonIndented :: Parser a -> Parser a
+nonIndented = L.nonIndented scn
+
+indentGuard :: Ordering -> Pos -> Parser Pos
+indentGuard = L.indentGuard scn
 
 indentBlock :: Parser (L.IndentOpt Parser a b) -> Parser a
 indentBlock = L.indentBlock scn
@@ -49,6 +52,15 @@ lexeme = L.lexeme scn
 
 symbol :: Text -> Parser Text
 symbol = L.symbol scn
+
+keyword :: Text -> Parser Text
+keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
+
+binary name f = InfixL (f <$ symbol name)
+
+prefix name f = Prefix (f <$ symbol name)
+
+postfix name f = Postfix (f <$ symbol name)
 
 stringLiteral :: Parser String
 stringLiteral = char '\"' *> manyTill L.charLiteral (char '\"')
@@ -143,7 +155,8 @@ inferSym = qmark
 -- list of reserved words
 reservedWords :: [String]
 reservedWords =
-  [ "as",
+  [ "and",
+    "as",
     "async",
     "await",
     "case",
@@ -151,12 +164,13 @@ reservedWords =
     "else",
     "for",
     "from",
-    "from",
     "goto",
     "if",
     "import",
     "keyof",
+    "not",
     "of",
+    "or",
     "readonly",
     "require",
     "then",
@@ -167,9 +181,6 @@ reservedWords =
 
 builtins :: [Text]
 builtins = ["keyof", "typeof"]
-
-keyword :: Text -> Parser Text
-keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
 
 identifier :: Parser String
 identifier = (lexeme . try) (p >>= check)
@@ -216,11 +227,11 @@ pImportClause =
 pStatement :: Parser Statement
 pStatement =
   choice
-      [ pExport,
-        pImport,
-        pTypeDefinition,
-        pInterfaceDefintion
-      ]
+    [ pExport,
+      pImport,
+      pTypeDefinition,
+      pInterfaceDefintion
+    ]
 
 pExport :: Parser Statement
 pExport = ExportStatement <$ string "export"
@@ -262,8 +273,8 @@ pTerm =
       try (parens pTypeApplication) <?> "quoted type application",
       try pTuple <?> "tuple",
       try pMappedType,
-      parens pSetOperator,
-      pExtendsExpr,
+      parens pTypeOp,
+      -- pConditionalType,
       pNumberIntegerLiteral,
       pNumberDoubleLiteral,
       pCaseStatement <?> "case statement",
@@ -275,6 +286,121 @@ pTerm =
       pInferID,
       pObjectLiteral
     ]
+
+pConditionalType :: Parser Expr
+pConditionalType = do
+  ConditionalType . expandConditional <$> pConditionalExpr
+
+pConditionalExpr :: Parser ConditionalExpr
+pConditionalExpr = do
+  keyword "if"
+  condition <- pBoolExpr
+  keyword "then"
+  thenExpr <- pExpr
+  keyword "else"
+  elseExpr <- pExpr
+  return (ConditionalExpr {..})
+
+{- Parse boolean logic expresions for conditional types
+ -
+ - Example of valid boolean expressions:
+ -
+ -     A <: B
+ -     > ExtendsLeft A B
+ -
+ -     A :> B
+ -     > ExtendsRight A B
+ -
+ -     A == B
+ -     > Equals A B
+ -
+ -     A != B
+ -     > NotEquals A B
+ -
+ -     A <: B and B <: C
+ -     > (And (ExtendsLeft A B) (ExtendsLeft B C))
+ -
+ -     A <: B or B <: C
+ -     > (Or (ExtendsLeft A B) (ExtendsLeft B C))
+ -
+ -     not A <: B
+ -     > (Not (ExtendsLeft A B))
+ -
+ -     not (A <: B and (B <: C or C <: D))
+ -     > (Not (And (ExtendsLeft A B) (Or (ExtendsLeft B C) (ExtendsLeft C D))))
+ -}
+pBoolExpr :: Parser BoolExpr
+pBoolExpr =
+  expr
+  where
+    not = do
+      void $ keyword "not"
+      Not <$> expr
+
+    expr =
+      choice
+        [ do
+            left <- term
+            expr' left,
+          not
+        ]
+
+    -- Remove the left recursion to expr
+    expr' :: BoolExpr -> Parser BoolExpr
+    expr' left =
+      choice
+        [ do
+            void $ keyword "and"
+            And left <$> expr,
+          do
+            void $ keyword "or"
+            Or left <$> expr,
+          return left
+        ]
+    term =
+      choice
+        [ try extendsLeft,
+          try extendsRight,
+          try equals,
+          try notEquals,
+          parens expr
+        ]
+    -- Parses the expression "A <: B"
+    extendsLeft = do
+      a <- pTerm
+      void $ keyword "<:"
+      ExtendsLeft a <$> pTerm
+
+    extendsRight = do
+      a <- pTerm
+      void $ keyword ":>"
+      ExtendsRight a <$> pTerm
+    -- Parses expressions like "A == B"
+    equals = do
+      left <- pTerm
+      void $ keyword "=="
+      Equals left <$> pTerm
+
+    notEquals = do
+      left <- pTerm
+      void $ keyword "!="
+      NotEquals left <$> pTerm
+
+-- -- Parses the expression "A <: B and C <: D"
+-- pAnd = do
+--   left <- pExport
+--   void $ keyword "and"
+--   And left <$> pExtendsLeft
+
+-- pAnd' = do
+--   left <- pBoolExpr
+--   void $ keyword "and"
+--   And left <$> pExtendsLeft
+
+-- pOr = do
+--   left <- pBoolExpr
+--   void $ keyword "or"
+--   Or left <$> pBoolExpr
 
 pMappedType :: Parser Expr
 pMappedType =
@@ -318,13 +444,13 @@ pCaseStatement =
       return (Case lhs rhs)
 
 pExpr :: Parser Expr
-pExpr = choice [pSetOperator, pTerm]
+pExpr = choice [pTypeOp, pTerm]
 
-pSetOperator :: Parser Expr
-pSetOperator = makeExprParser pTerm operatorTable
+pTypeOp :: Parser Expr
+pTypeOp = makeExprParser pTerm typeOpTable
 
-operatorTable :: [[Operator Parser Expr]]
-operatorTable =
+typeOpTable :: [[Operator Parser Expr]]
+typeOpTable =
   [ [ Prefix $ do
         kw <- choice (map keyword builtins)
         let name = unpack kw
@@ -356,32 +482,6 @@ pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
 
 pId :: Parser Expr
 pId = ID <$> identifier <?> "identifier"
-
-pExtendsExpr :: Parser Expr
-pExtendsExpr = do
-  void $ keyword "if"
-  negate <-
-    fmap isJust (optional (keyword "not"))
-  lhs <- pExpr
-  op <-
-    choice
-      [ ExtendsLeft <$ keyword "<:",
-        ExtendsRight <$ keyword ":>",
-        NotEquals <$ keyword "!=",
-        Equals <$ keyword "=="
-      ]
-  rhs <- pExpr
-  void $ keyword "then"
-  ifBody <- pExpr
-  elseBody <- optional (keyword "else" >> pExpr)
-  return
-    ( ExtendsExpr
-        { elseBody = fromMaybe never elseBody,
-          ..
-        }
-    )
-  where
-    never = ID "never"
 
 pObjectLiteral :: Parser Expr
 pObjectLiteral =

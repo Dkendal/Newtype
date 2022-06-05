@@ -11,8 +11,11 @@ module Newtype.Syntax
     TypeParam (..),
     Case (..),
     ObjectLiteralProperty (..),
-    ComparisionOperator (..),
+    ConditionalExpr (..),
+    BoolExpr (..),
+    ExtendsExpr (..),
     ImportSpecifier (..),
+    expandConditional,
   )
 where
 
@@ -91,9 +94,7 @@ instance Pretty ImportSpecifier where
   prettyList lst =
     braces . hsep . punctuate comma . map pretty $ lst
 
-data TypeParam = TypeParam
-  { name :: String
-  }
+data TypeParam = TypeParam {name :: String}
   deriving (Eq, Show)
 
 instance Pretty TypeParam where
@@ -114,14 +115,7 @@ data Expr
   | ID String
   | InferID String
   | Tuple [Expr]
-  | ExtendsExpr
-      { lhs :: Expr,
-        negate :: Bool,
-        op :: ComparisionOperator,
-        rhs :: Expr,
-        ifBody :: Expr,
-        elseBody :: Expr
-      }
+  | ConditionalType ExtendsExpr
   | MappedType
       { value :: Expr,
         propertyKey :: Expr,
@@ -134,6 +128,46 @@ data Expr
   | Intersection Expr Expr
   | CaseStatement Expr [Case]
   deriving (Eq, Show)
+
+data ExtendsExpr = ExtendsExpr
+  { lhs :: Expr,
+    rhs :: Expr,
+    thenExpr :: Expr,
+    elseExpr :: Expr
+  }
+  deriving (Show, Eq)
+
+instance Pretty ExtendsExpr where
+  pretty (ExtendsExpr a b then' else') =
+    group (pretty a <+> "extends" <+> pretty b)
+      <> nest
+        2
+        ( softline <> (group "?" <+> pretty then')
+            <> softline
+            <> (group ":" <+> pretty else')
+        )
+
+data ConditionalExpr = ConditionalExpr
+  { condition :: BoolExpr,
+    thenExpr :: Expr,
+    elseExpr :: Expr
+  }
+  deriving (Show, Eq)
+
+instance Pretty ConditionalExpr where
+  pretty cexp = (pretty . expandConditional) cexp
+
+-- pretty a <+> "extends" <+> pretty b <+> "?" <+> pretty then' <+> ":" <+> pretty else'
+
+data BoolExpr
+  = And BoolExpr BoolExpr
+  | Or BoolExpr BoolExpr
+  | Not BoolExpr
+  | ExtendsLeft Expr Expr
+  | ExtendsRight Expr Expr
+  | Equals Expr Expr
+  | NotEquals Expr Expr
+  deriving (Show, Eq)
 
 instance Pretty Expr where
   pretty MappedType {asExpr = Just asExpr, propertyKey, ..}
@@ -168,48 +202,8 @@ instance Pretty Expr where
       )
   pretty (ID name) = pretty name
   pretty (InferID name) = group "infer" <+> pretty name
-  pretty ExtendsExpr {negate = True, ..} =
-    pretty
-      ExtendsExpr
-        { negate = False,
-          ifBody = elseBody,
-          elseBody = ifBody,
-          ..
-        }
-  pretty ExtendsExpr {op = ExtendsLeft, ..} =
-    pretty lhs <+> "extends" <+> pretty rhs
-      <+> "?"
-      <+> pretty ifBody
-      <+> ":"
-      <+> pretty elseBody
-  pretty ExtendsExpr {op = ExtendsRight, ..} =
-    pretty
-      ExtendsExpr
-        { lhs = rhs,
-          rhs = lhs,
-          op = ExtendsLeft,
-          ..
-        }
-  pretty ExtendsExpr {op = Equals, ..} =
-    pretty
-      ExtendsExpr
-        { lhs = Tuple [lhs],
-          rhs = Tuple [rhs],
-          op = ExtendsLeft,
-          ..
-        }
-  pretty ExtendsExpr {op = NotEquals, ..} =
-    pretty
-      ExtendsExpr
-        { lhs = Tuple [lhs],
-          rhs = Tuple [rhs],
-          op = ExtendsLeft,
-          ifBody = elseBody,
-          elseBody = ifBody,
-          ..
-        }
   pretty (Tuple []) = "[]"
-  pretty (Tuple exprs) = prettyList exprs
+  pretty (Tuple exprs) = (brackets . hsep) (punctuate comma (map pretty exprs))
   pretty (Intersection left right) =
     fmt left <+> "&" <+> fmt right
     where
@@ -222,6 +216,9 @@ instance Pretty Expr where
       fmt a = pretty a
   pretty (CaseStatement a b) =
     pretty (simplify (CaseStatement a b))
+  pretty (ConditionalType a) = pretty a
+
+-- pretty a = unsafeViaShow a
 
 data Case
   = Case Expr Expr
@@ -229,13 +226,6 @@ data Case
   deriving (Eq, Show)
 
 data BinaryOp
-
-data ComparisionOperator
-  = ExtendsLeft
-  | ExtendsRight
-  | Equals
-  | NotEquals
-  deriving (Eq, Show)
 
 data ObjectLiteralProperty = KeyValue
   { isReadonly :: Maybe Bool,
@@ -270,29 +260,61 @@ prettyOpList :: Expr -> Doc ann
 prettyOpList a =
   group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a
 
-simplify :: Expr -> Expr
-simplify (CaseStatement term [Case rhs ifBody, Case (ID "_") elseBody]) =
-  ExtendsExpr
-    { lhs = simplify term,
-      op = ExtendsLeft,
-      negate = False,
-      elseBody = elseBody,
-      ..
-    }
-simplify (CaseStatement term [Case rhs ifBody]) =
-  ExtendsExpr
-    { lhs = simplify term,
-      op = ExtendsLeft,
-      negate = False,
-      elseBody = never,
-      ..
-    }
-simplify (CaseStatement term (Case rhs ifBody : tl)) =
-  ExtendsExpr
-    { lhs = simplify term,
-      op = ExtendsLeft,
-      negate = False,
-      elseBody = simplify (CaseStatement term tl),
-      ..
-    }
+-- simplify :: Expr -> Expr
+-- simplify (CaseStatement term [Case rhs ifBody, Case (ID "_") elseBody]) =
+--   ExtendsExpr
+--     { lhs = simplify term,
+--       op = ExtendsLeft,
+--       negate = False,
+--       elseBody = elseBody,
+--       ..
+--     }
+-- simplify (CaseStatement term [Case rhs ifBody]) =
+--   ExtendsExpr
+--     { lhs = simplify term,
+--       op = ExtendsLeft,
+--       negate = False,
+--       elseBody = never,
+--       ..
+--     }
+-- simplify (CaseStatement term (Case rhs ifBody : tl)) =
+--   ExtendsExpr
+--     { lhs = simplify term,
+--       op = ExtendsLeft,
+--       negate = False,
+--       elseBody = simplify (CaseStatement term tl),
+--       ..
+--     }
 simplify a = a
+
+cx :: BoolExpr -> Expr -> Expr -> ConditionalExpr
+cx = ConditionalExpr
+
+ct :: ExtendsExpr -> Expr
+ct = ConditionalType
+
+extends' :: Expr -> Expr -> Expr -> Expr -> ExtendsExpr
+extends' = ExtendsExpr
+
+expandConditional' :: ConditionalExpr -> Expr
+expandConditional' = ct . expandConditional
+
+expandConditional :: ConditionalExpr -> ExtendsExpr
+expandConditional (ConditionalExpr (ExtendsLeft a b) then' else') =
+  extends' a b then' else'
+expandConditional (ConditionalExpr (ExtendsRight b a) then' else') =
+  extends' a b then' else'
+expandConditional (ConditionalExpr (Not con) then' else') =
+  expandConditional (cx con else' then')
+expandConditional (ConditionalExpr (Equals a b) then' else') =
+  extends' (Tuple [a]) (Tuple [b]) then' else'
+expandConditional (ConditionalExpr (NotEquals a b) then' else') =
+  expandConditional (cx (Not (Equals a b)) then' else')
+expandConditional (ConditionalExpr (And a b) then' else') =
+  let outer then'' = cx a then'' else'
+      inner = cx b then' else'
+   in expandConditional (outer (expandConditional' inner))
+expandConditional (ConditionalExpr (Or a b) then' else') =
+  let outer else'' = cx a then' else''
+      inner = cx b then' else'
+   in expandConditional (outer (expandConditional' inner))

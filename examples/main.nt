@@ -1,0 +1,13 @@
+import "ts-toolbelt" ( A, B, I, M, Union )
+import "." ( __ )
+import "./const" ( __capture__, __kind__, any_, bigint_, boolean_, function_, number_, object_, rest_, string_, symbol_)
+
+type True = 1
+
+-- type Primitive = (M.Primitive)
+
+type BuiltIn = (M.BuiltIn)
+
+type ExtractSubcapture T =
+  if not T <: (M.Primitive | M.BuiltIn)
+  then if T <: object then T ! Exclude (keyof T) (keyof [])  (keyof {})

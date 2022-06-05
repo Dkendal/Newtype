@@ -1,0 +1,55 @@
+[describe]
+match = ':[i~ +]describe ":[msg]" [:[cases]]'
+
+rewrite = """
+:[i]describe ":[msg]" $ do
+:[i]:[cases]
+"""
+
+[it]
+match = ':[i~ +]it :[msg] $ assertPretty :[1] :[2] :[3],'
+
+rewrite = """
+:[i]it :[msg] $ do
+:[i]  assertPretty
+:[i]    :[1]
+:[i]    :[2]
+:[i]    :[3]
+"""
+
+[assertPretty-unlines]
+
+match = ':[i~ +]assertPretty :[parser] ( unlines :[1] ) :[2]'
+
+rewrite = """
+:[i]let nt = :[1]
+:[i]    ts = :[2]
+:[i] in pp :[parser] (unlines nt) `shouldBe` here ts
+"""
+
+[assertPretty]
+
+match = ':[i~ +]assertPretty :[parser] :[1] :[2]'
+
+rewrite = """
+:[i]let nt = :[1]
+:[i]    ts = :[2]
+:[i] in pp :[parser] (unlines nt) `shouldBe` here ts
+"""
+
+
+
+[let-nt-array]
+
+match = 'nt = ":[v]"'
+rewrite = 'nt = [":[v]"]'
+
+[let-ts-array]
+
+match = 'ts = ":[v]"'
+rewrite = 'ts = [":[v]"]'
+
+[renameTest]
+
+match = ':[v~^test]:[rest\n]'
+rewrite = 'spec:[rest]'
