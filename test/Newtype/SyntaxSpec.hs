@@ -37,11 +37,11 @@ ct' a b c d =  ExprConditionalType (ConditionalType a b c d)
 
 spec :: Spec
 spec = do
-  let a = ID "A"
-  let b = ID "B"
-  let c = ID "C"
-  let then' = ID "Then"
-  let else' = ID "Else"
+  let a = Ident "A"
+  let b = Ident "B"
+  let c = Ident "C"
+  let then' = Ident "Then"
+  let else' = Ident "Else"
   let fmt = unpack . stripEnd . unlines
   let prettyShort ast = renderString (layoutPretty (LayoutOptions (AvailablePerLine 1 1)) (pretty ast))
   describe "pretty" $ do

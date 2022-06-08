@@ -283,7 +283,7 @@ pTerm =
       pId,
       -- Not actually valid outside of the extends expression
       -- but make my life a lot easier
-      pInferID,
+      pInferIdent,
       pObjectLiteral
     ]
 
@@ -387,8 +387,8 @@ typeOpTable =
     [InfixL $ Union <$ pipe]
   ]
 
-pInferID :: Parser Expr
-pInferID = inferSym >> InferID <$> identifier <?> "identifier"
+pInferIdent :: Parser Expr
+pInferIdent = inferSym >> InferIdent <$> identifier <?> "identifier"
 
 pNumberIntegerLiteral :: Parser Expr
 pNumberIntegerLiteral = NumberIntegerLiteral <$> integer
@@ -406,7 +406,7 @@ pTuple :: Parser Expr
 pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
 
 pId :: Parser Expr
-pId = ID <$> identifier <?> "identifier"
+pId = Ident <$> identifier <?> "identifier"
 
 pObjectLiteral :: Parser Expr
 pObjectLiteral =

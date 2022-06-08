@@ -10,11 +10,11 @@ import Text.Megaparsec
 
 spec :: Spec
 spec = do
-  let a = ID "A"
-  let b = ID "B"
-  let c = ID "C"
-  let d = ID "D"
-  let e = ID "E"
+  let a = Ident "A"
+  let b = Ident "B"
+  let c = Ident "C"
+  let d = Ident "D"
+  let e = Ident "E"
   describe "NewtypeParser" $ do
     let parse' parser source =
           let result = parse (parser <* eof) "" source

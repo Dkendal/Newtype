@@ -112,8 +112,8 @@ data Expr
   | Access Expr Expr
   | DotAccess Expr Expr
   | Builtin String Expr
-  | ID String
-  | InferID String
+  | Ident String
+  | InferIdent String
   | Tuple [Expr]
   | ExprConditionalType ConditionalType
   | MappedType
@@ -198,8 +198,8 @@ instance Pretty Expr where
           ", "
           (map pretty props)
       )
-  pretty (ID name) = pretty name
-  pretty (InferID name) = group "infer" <+> pretty name
+  pretty (Ident name) = pretty name
+  pretty (InferIdent name) = group "infer" <+> pretty name
   pretty (Tuple []) = "[]"
   pretty (Tuple exprs) = (brackets . hsep) (punctuate comma (map pretty exprs))
   pretty (Intersection left right) =
@@ -252,7 +252,7 @@ prettyOptional (Just False) = "-?"
 prettyOptional (Just True) = "?"
 
 never :: Expr
-never = ID "never"
+never = Ident "never"
 
 prettyOpList :: Expr -> Doc ann
 prettyOpList a =
