@@ -22,8 +22,30 @@ spec = do
                 Left err -> error $ errorBundlePretty err
                 Right x -> x
 
+    describe "programs" $ do
+      it "parses a program with multiple type defintions that use dot access" $ do
+        pendingWith "TODO"
+
+    describe "statements" $ do
+      let subject = parse' pStatement
+
+      describe "type definition" $ do
+        it "parses a type definition" $ do
+          subject "type A = B" `shouldBe` TypeDefinition "A" [] b
+
+        it "parses a type definition with type parameters" $ do
+          subject "type A b = B" `shouldBe` TypeDefinition "A" [TypeParam "b"] b
+
+        it "parses a type definition with a definition that uses dot access" $ do
+          (parse' pProgram) "type BuiltIn = M.BuiltIn" `shouldBe` Program [TypeDefinition "BuiltIn" [] (DotAccess (mkIdent "M") (mkIdent "BuiltIn"))]
+
+
     describe "expressions" $ do
       let subject = parse' pExpr
+
+      describe "dot access" $ do
+        it "parses a dot access" $ do
+          subject "a.b.c" `shouldBe` (mkIdent "a" `DotAccess` mkIdent "b" `DotAccess` mkIdent "c")
 
       describe "literal values" $
         it "parses numbers" $ do

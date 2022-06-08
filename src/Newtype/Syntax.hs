@@ -186,27 +186,29 @@ instance Pretty Expr where
   pretty (ExprConditionalType a) = pretty a
 
 data PrimitiveType
-  = TNever
-  | TAny
-  | TUnknown
-  | TNumber
-  | TString
-  | TBoolean
-  | TNull
-  | TUndefined
-  | TVoid
+  = PrimitiveNever
+  | PrimitiveAny
+  | PrimitiveUnknown
+  | PrimitiveNumber
+  | PrimitiveBigInt
+  | PrimitiveString
+  | PrimitiveBoolean
+  | PrimitiveNull
+  | PrimitiveUndefined
+  | PrimitiveVoid
   deriving (Eq, Show)
 
 instance Pretty PrimitiveType where
-  pretty TNever = "never"
-  pretty TAny = "any"
-  pretty TUnknown = "unknown"
-  pretty TNumber = "number"
-  pretty TString = "string"
-  pretty TBoolean = "boolean"
-  pretty TNull = "null"
-  pretty TUndefined = "undefined"
-  pretty TVoid = "void"
+  pretty PrimitiveNever = "never"
+  pretty PrimitiveAny = "any"
+  pretty PrimitiveUnknown = "unknown"
+  pretty PrimitiveNumber = "number"
+  pretty PrimitiveString = "string"
+  pretty PrimitiveBoolean = "boolean"
+  pretty PrimitiveNull = "null"
+  pretty PrimitiveUndefined = "undefined"
+  pretty PrimitiveVoid = "void"
+  pretty PrimitiveBigInt = "bigint"
 
 newtype Ident = Ident String
   deriving (Eq, Show)
@@ -355,5 +357,5 @@ ctExpr :: Expr -> Expr -> Expr -> Expr -> Expr
 ctExpr lhs rhs then' else' = ExprConditionalType (ConditionalType lhs rhs then' else')
 
 never :: Expr
-never = PrimitiveType TNever
+never = PrimitiveType PrimitiveNever
 
