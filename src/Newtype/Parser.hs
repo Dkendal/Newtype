@@ -301,106 +301,31 @@ pConditionalExpr = do
   elseExpr <- pExpr
   return (ConditionalExpr {..})
 
-{- Parse boolean logic expresions for conditional types
- -
- - Example of valid boolean expressions:
- -
- -     A <: B
- -     > ExtendsLeft A B
- -
- -     A :> B
- -     > ExtendsRight A B
- -
- -     A == B
- -     > Equals A B
- -
- -     A != B
- -     > NotEquals A B
- -
- -     A <: B and B <: C
- -     > (And (ExtendsLeft A B) (ExtendsLeft B C))
- -
- -     A <: B or B <: C
- -     > (Or (ExtendsLeft A B) (ExtendsLeft B C))
- -
- -     not A <: B
- -     > (Not (ExtendsLeft A B))
- -
- -     not (A <: B and (B <: C or C <: D))
- -     > (Not (And (ExtendsLeft A B) (Or (ExtendsLeft B C) (ExtendsLeft C D))))
- -}
 pBoolExpr :: Parser BoolExpr
 pBoolExpr =
   expr
   where
-    not = do
-      void $ keyword "not"
-      Not <$> expr
-
     expr =
-      choice
-        [ do
-            left <- term
-            expr' left,
-          not
+      makeExprParser
+        term
+        [ [prefix "not" Not],
+          [ binary "and" And,
+            binary "or" Or
+          ]
         ]
+        <|> term
 
-    -- Remove the left recursion to expr
-    expr' :: BoolExpr -> Parser BoolExpr
-    expr' left =
-      choice
-        [ do
-            void $ keyword "and"
-            And left <$> expr,
-          do
-            void $ keyword "or"
-            Or left <$> expr,
-          return left
-        ]
-    term =
-      choice
-        [ try extendsLeft,
-          try extendsRight,
-          try equals,
-          try notEquals,
-          parens expr
-        ]
-    -- Parses the expression "A <: B"
-    extendsLeft = do
-      a <- pTerm
-      void $ keyword "<:"
-      ExtendsLeft a <$> pTerm
+    term = try comparison <|> parens expr
 
-    extendsRight = do
-      a <- pTerm
-      void $ keyword ":>"
-      ExtendsRight a <$> pTerm
-    -- Parses expressions like "A == B"
-    equals = do
-      left <- pTerm
-      void $ keyword "=="
-      Equals left <$> pTerm
-
-    notEquals = do
-      left <- pTerm
-      void $ keyword "!="
-      NotEquals left <$> pTerm
-
--- -- Parses the expression "A <: B and C <: D"
--- pAnd = do
---   left <- pExport
---   void $ keyword "and"
---   And left <$> pExtendsLeft
-
--- pAnd' = do
---   left <- pBoolExpr
---   void $ keyword "and"
---   And left <$> pExtendsLeft
-
--- pOr = do
---   left <- pBoolExpr
---   void $ keyword "or"
---   Or left <$> pBoolExpr
+    comparison =
+      do
+        lhs <- pTerm
+        choice
+          [ ExtendsLeft lhs <$ keyword "<:" <*> pTerm,
+            ExtendsRight lhs <$ keyword ":>" <*> pTerm,
+            Equals lhs <$ keyword "==" <*> pTerm,
+            NotEquals lhs <$ keyword "!=" <*> pTerm
+          ]
 
 pMappedType :: Parser Expr
 pMappedType =

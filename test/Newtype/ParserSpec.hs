@@ -43,7 +43,7 @@ spec = do
           let source = "((A B C))"
           subject source `shouldBe` TypeApplication "A" [b, c]
 
-    fdescribe "conditional expr" $ do
+    describe "conditional expr" $ do
       let subject = parse' pBoolExpr
 
       it "parses extends left" $ do
