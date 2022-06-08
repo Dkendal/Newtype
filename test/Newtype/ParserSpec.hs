@@ -3,10 +3,12 @@
 
 module Newtype.ParserSpec (spec) where
 
+import Data.Text
 import Newtype.Parser
 import Newtype.Syntax
 import Test.Hspec
 import Text.Megaparsec
+import Prelude hiding (unlines)
 
 spec :: Spec
 spec = do
@@ -23,8 +25,19 @@ spec = do
                 Right x -> x
 
     describe "programs" $ do
+      let subject = parse' pProgram
+
       it "parses a program with multiple type defintions that use dot access" $ do
-        pendingWith "TODO"
+        subject
+          ( unlines
+              [ "type A = a.b",
+                "type B = b.c"
+              ]
+          )
+          `shouldBe` Program
+            [ TypeDefinition "A" [] (DotAccess (mkIdent "a") (mkIdent "b")),
+              TypeDefinition "B" [] (DotAccess (mkIdent "b") (mkIdent "c"))
+            ]
 
     describe "statements" $ do
       let subject = parse' pStatement
@@ -37,8 +50,9 @@ spec = do
           subject "type A b = B" `shouldBe` TypeDefinition "A" [TypeParam "b"] b
 
         it "parses a type definition with a definition that uses dot access" $ do
-          (parse' pProgram) "type BuiltIn = M.BuiltIn" `shouldBe` Program [TypeDefinition "BuiltIn" [] (DotAccess (mkIdent "M") (mkIdent "BuiltIn"))]
-
+          parse' pProgram "type BuiltIn = M.BuiltIn"
+            `shouldBe` Program
+              [TypeDefinition "BuiltIn" [] (DotAccess (mkIdent "M") (mkIdent "BuiltIn"))]
 
     describe "expressions" $ do
       let subject = parse' pExpr
@@ -46,6 +60,13 @@ spec = do
       describe "dot access" $ do
         it "parses a dot access" $ do
           subject "a.b.c" `shouldBe` (mkIdent "a" `DotAccess` mkIdent "b" `DotAccess` mkIdent "c")
+
+      describe "access" $ do
+        it "parses access with the bang operator" $ do
+          subject "a ! b" `shouldBe` (mkIdent "a" `Access` mkIdent "b")
+
+        it "parses access with the bang operator and no whitespace" $ do
+          subject "a!b" `shouldBe` (mkIdent "a" `Access` mkIdent "b")
 
       describe "literal values" $
         it "parses numbers" $ do

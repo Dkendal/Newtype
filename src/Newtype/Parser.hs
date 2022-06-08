@@ -152,6 +152,8 @@ equals = symbol "="
 inferSym :: Parser Text
 inferSym = qmark
 
+op n = (lexeme . try) (string n <* notFollowedBy punctuationChar)
+
 -- list of reserved words
 reservedWords :: [String]
 reservedWords =
@@ -176,7 +178,18 @@ reservedWords =
     "then",
     "typeof",
     "while",
-    "yield"
+    "yield",
+    "type",
+    "interface",
+    "class",
+    "enum",
+    "extends",
+    "implements",
+    "let",
+    "const",
+    "var",
+    "function",
+    "return"
   ]
 
 builtins :: [Text]
@@ -198,9 +211,6 @@ underscore = char '_'
 dollar :: Parser (Token Text)
 dollar = char '$'
 {-# INLINE dollar #-}
-
-bool :: Parser Bool
-bool = choice [True <$ keyword "true", False <$ keyword "false"]
 
 pProgram :: Parser Program
 pProgram =
@@ -269,22 +279,21 @@ pInterfaceDefintion = do
 pTerm :: Parser Expr
 pTerm =
   choice
-    [ try pGenericApplication <?> "type application",
-      try (parens pGenericApplication) <?> "quoted type application",
+    [ try pGenericApplication <?> "generic type application",
       try pTuple <?> "tuple",
-      try pMappedType,
-      parens pTypeOp,
-      pExprConditionalType,
-      pNumberIntegerLiteral,
-      pNumberDoubleLiteral,
+      try pMappedType <?> "mapped type",
+      pExprConditionalType <?> "conditional type",
+      pNumberIntegerLiteral <?> "number",
+      pNumberDoubleLiteral <?> "number",
       pCaseStatement <?> "case statement",
-      pBooleanLiteral,
-      pStringLiteral,
-      pIdent',
+      pBooleanLiteral <?> "boolean literal",
+      pStringLiteral <?> "string literal",
+      pIdent' <?> "identifier",
       -- Not actually valid outside of the extends expression
       -- but make my life a lot easier
-      pInferIdent,
-      pObjectLiteral
+      hidden pInferIdent,
+      pObjectLiteral <?> "object literal",
+      hidden . parens $ pExpr
     ]
 
 pExprConditionalType :: Parser Expr
@@ -305,25 +314,27 @@ pBoolExpr =
   expr
   where
     expr =
-      makeExprParser
-        term
-        [ [prefix "not" Not],
-          [ binary "and" And,
-            binary "or" Or
+      ( makeExprParser
+          term
+          [ [prefix "not" Not],
+            [ binary "and" And,
+              binary "or" Or
+            ]
           ]
-        ]
+          <?> "boolean expression"
+      )
         <|> term
 
-    term = try comparison <|> parens expr
+    term = (try comparison <?> "type comparison") <|> parens expr
 
     comparison =
       do
-        lhs <- pTerm
+        lhs <- pExpr
         choice
-          [ ExtendsLeft lhs <$ keyword "<:" <*> pTerm,
-            ExtendsRight lhs <$ keyword ":>" <*> pTerm,
-            Equals lhs <$ keyword "==" <*> pTerm,
-            NotEquals lhs <$ keyword "!=" <*> pTerm
+          [ ExtendsLeft lhs <$ keyword "<:" <*> pExpr,
+            ExtendsRight lhs <$ keyword ":>" <*> pExpr,
+            Equals lhs <$ keyword "==" <*> pExpr,
+            NotEquals lhs <$ keyword "!=" <*> pExpr
           ]
 
 pMappedType :: Parser Expr
@@ -371,20 +382,19 @@ pExpr :: Parser Expr
 pExpr = choice [pTypeOp, pTerm]
 
 pTypeOp :: Parser Expr
-pTypeOp = makeExprParser pTerm typeOpTable
-
-typeOpTable :: [[Operator Parser Expr]]
-typeOpTable =
-  [ [ Prefix $ do
-        kw <- choice (map keyword builtins)
-        let name = unpack kw
-        return (Builtin name)
-    ],
-    [InfixL $ DotAccess <$ dot],
-    [InfixL $ Access <$ bang],
-    [InfixL $ Intersection <$ amp],
-    [InfixL $ Union <$ pipe]
-  ]
+pTypeOp =
+  makeExprParser
+    pTerm
+    [ [ Prefix $ do
+          kw <- choice (map keyword builtins) <?> "builtin type function"
+          let name = unpack kw
+          return (Builtin name)
+      ],
+      [InfixL $ DotAccess <$ (dot <?> "dot access")],
+      [InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy "=")],
+      [InfixL $ Intersection <$ (amp <?> "type intersection")],
+      [InfixL $ Union <$ (pipe <?> "type union")]
+    ]
 
 pInferIdent :: Parser Expr
 pInferIdent = inferSym >> ExprInferIdent <$> pIdent <?> "infered identifier"
@@ -396,7 +406,7 @@ pNumberDoubleLiteral :: Parser Expr
 pNumberDoubleLiteral = NumberDoubleLiteral <$> float
 
 pBooleanLiteral :: Parser Expr
-pBooleanLiteral = BooleanLiteral <$> bool
+pBooleanLiteral = BooleanLiteral <$> choice [True <$ keyword "true", False <$ keyword "false"]
 
 pStringLiteral :: Parser Expr
 pStringLiteral = StringLiteral <$> stringLiteral
