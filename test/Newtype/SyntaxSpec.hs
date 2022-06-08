@@ -9,6 +9,7 @@ import Prettyprinter (LayoutOptions (..), PageWidth (..), layoutPretty, pretty)
 import Prettyprinter.Render.String (renderString)
 import Test.Hspec
 import Prelude hiding (unlines, (&&), (||))
+import Data.Function ((&))
 
 (<:) :: Expr -> Expr -> BoolExpr
 a <: b = ExtendsLeft a b
@@ -28,8 +29,11 @@ a && b = And a b
 (||) :: BoolExpr -> BoolExpr -> BoolExpr
 a || b = Or a b
 
-ct :: ExtendsExpr -> Expr
-ct = ConditionalType
+ct :: Expr -> Expr -> Expr -> Expr -> ConditionalType
+ct =  ConditionalType
+
+ct' :: Expr -> Expr -> Expr -> Expr -> Expr
+ct' a b c d =  ExprConditionalType (ConditionalType a b c d)
 
 spec :: Spec
 spec = do
@@ -52,7 +56,7 @@ spec = do
 
     context "when ExtendsExpr" $ do
       it "outputs equivalent typescript code" $ do
-        let ast = ExtendsExpr a b then' else'
+        let ast = ConditionalType a b then' else'
         show (pretty ast) `shouldBe` "A extends B ? Then : Else"
     context "when ConditionalExpr" $ do
       it "outputs equivalent typescript code" $ do
@@ -75,46 +79,44 @@ spec = do
             ]
 
   describe "expandConditional" $ do
-    let cond = ConditionalExpr
-    let ext = ExtendsExpr
     describe "extends left" $
       it "left as is" $ do
-        let expr = cond (a <: b) then' else'
-        let expected = ext a b then' else'
+        let expr = ConditionalExpr (a <: b) then' else'
+        let expected = ct a b then' else'
         expandConditional expr `shouldBe` expected
 
     describe "negation" $
       it "flips `then` with `else`" $ do
-        let expr = cond (Not (a <: b)) then' else'
-        let expected = ext a b else' then'
+        let expr = ConditionalExpr (Not (a <: b)) then' else'
+        let expected = ct a b else' then'
         expandConditional expr `shouldBe` expected
 
     describe "extends right" $ do
       it "flips the conditional" $ do
-        let expr = cond (a >: b) then' else'
-        let expected = ext b a then' else'
+        let expr = ConditionalExpr (a >: b) then' else'
+        let expected = ct b a then' else'
         expandConditional expr `shouldBe` expected
 
     describe "equals" $ do
       it "wraps args in a tuple" $ do
-        let expr = cond (a === b) then' else'
-        let expected = ext (Tuple [a]) (Tuple [b]) then' else'
+        let expr = ConditionalExpr (a === b) then' else'
+        let expected = ct (Tuple [a]) (Tuple [b]) then' else'
         expandConditional expr `shouldBe` expected
 
     describe "not equals" $ do
       it "wraps args in a tuple, flips branches" $ do
-        let expr = cond (a !== b) then' else'
-        let expected = ext (Tuple [a]) (Tuple [b]) else' then'
+        let expr = ConditionalExpr (a !== b) then' else'
+        let expected = ct (Tuple [a]) (Tuple [b]) else' then'
         expandConditional expr `shouldBe` expected
 
     describe "logical AND" $ do
       it "produces a nested if statement where `then'` is used for the success cases" $ do
-        let expr = cond ((a <: b) && (b <: c)) then' else'
-        let expected = ext a b (ct (ext b c then' else')) else'
+        let expr = ConditionalExpr ((a <: b) && (b <: c)) then' else'
+        let expected = ct a b (ct' b c then' else') else'
         expandConditional expr `shouldBe` expected
 
     describe "logical OR" $ do
       it "produces a nested if statement, chainining the then' case through the first else" $ do
-        let expr = cond ((a <: b) || (b <: c)) then' else'
-        let expected = ext a b then' (ct (ext b c then' else'))
+        let expr = ConditionalExpr ((a <: b) || (b <: c)) then' else'
+        let expected = ct a b then' (ct' b c then' else')
         expandConditional expr `shouldBe` expected

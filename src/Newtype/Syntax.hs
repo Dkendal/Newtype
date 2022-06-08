@@ -13,7 +13,7 @@ module Newtype.Syntax
     ObjectLiteralProperty (..),
     ConditionalExpr (..),
     BoolExpr (..),
-    ExtendsExpr (..),
+    ConditionalType (..),
     ImportSpecifier (..),
     expandConditional,
   )
@@ -108,14 +108,14 @@ data Expr
   | NumberDoubleLiteral Double
   | BooleanLiteral Bool
   | ObjectLiteral [ObjectLiteralProperty]
-  | TypeApplication String [Expr]
+  | GenericApplication String [Expr]
   | Access Expr Expr
   | DotAccess Expr Expr
   | Builtin String Expr
   | ID String
   | InferID String
   | Tuple [Expr]
-  | ConditionalType ExtendsExpr
+  | ExprConditionalType ConditionalType
   | MappedType
       { value :: Expr,
         propertyKey :: Expr,
@@ -129,16 +129,16 @@ data Expr
   | CaseStatement Expr [Case]
   deriving (Eq, Show)
 
-data ExtendsExpr = ExtendsExpr
-  { lhs :: Expr,
-    rhs :: Expr,
-    thenExpr :: Expr,
-    elseExpr :: Expr
-  }
+data ConditionalType = ConditionalType
+      { lhs :: Expr,
+        rhs :: Expr,
+        thenExpr :: Expr,
+        elseExpr :: Expr
+      }
   deriving (Show, Eq)
 
-instance Pretty ExtendsExpr where
-  pretty (ExtendsExpr a b then' else') =
+instance Pretty ConditionalType where
+  pretty (ConditionalType a b then' else') =
     group (pretty a <+> "extends" <+> pretty b)
       <> nest
         2
@@ -156,8 +156,6 @@ data ConditionalExpr = ConditionalExpr
 
 instance Pretty ConditionalExpr where
   pretty cexp = (pretty . expandConditional) cexp
-
--- pretty a <+> "extends" <+> pretty b <+> "?" <+> pretty then' <+> ":" <+> pretty else'
 
 data BoolExpr
   = And BoolExpr BoolExpr
@@ -189,8 +187,8 @@ instance Pretty Expr where
   pretty (BooleanLiteral True) = "true"
   pretty (BooleanLiteral False) = "false"
   pretty (StringLiteral value) = dquotes . pretty $ value
-  pretty (TypeApplication typeName []) = pretty typeName
-  pretty (TypeApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
+  pretty (GenericApplication typeName []) = pretty typeName
+  pretty (GenericApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
   pretty (ObjectLiteral []) = "{}"
   pretty (ObjectLiteral props) =
     group
@@ -216,7 +214,7 @@ instance Pretty Expr where
       fmt a = pretty a
   pretty (CaseStatement a b) =
     pretty (simplify (CaseStatement a b))
-  pretty (ConditionalType a) = pretty a
+  pretty (ExprConditionalType a) = pretty a
 
 -- pretty a = unsafeViaShow a
 
@@ -290,16 +288,16 @@ simplify a = a
 cx :: BoolExpr -> Expr -> Expr -> ConditionalExpr
 cx = ConditionalExpr
 
-ct :: ExtendsExpr -> Expr
-ct = ConditionalType
+ct :: ConditionalType -> Expr
+ct = ExprConditionalType
 
-extends' :: Expr -> Expr -> Expr -> Expr -> ExtendsExpr
-extends' = ExtendsExpr
+extends' :: Expr -> Expr -> Expr -> Expr -> ConditionalType
+extends' = ConditionalType
 
 expandConditional' :: ConditionalExpr -> Expr
 expandConditional' = ct . expandConditional
 
-expandConditional :: ConditionalExpr -> ExtendsExpr
+expandConditional :: ConditionalExpr -> ConditionalType
 expandConditional (ConditionalExpr (ExtendsLeft a b) then' else') =
   extends' a b then' else'
 expandConditional (ConditionalExpr (ExtendsRight b a) then' else') =

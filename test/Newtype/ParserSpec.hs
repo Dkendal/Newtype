@@ -33,15 +33,15 @@ spec = do
       describe "type application" $ do
         it "parses" $ do
           let source = "A B C"
-          subject source `shouldBe` TypeApplication "A" [b, c]
+          subject source `shouldBe` GenericApplication "A" [b, c]
 
         it "parses parenthesized expressions" $ do
           let source = "(A B C)"
-          subject source `shouldBe` TypeApplication "A" [b, c]
+          subject source `shouldBe` GenericApplication "A" [b, c]
 
         it "doesn't matter how man parens there are" $ do
           let source = "((A B C))"
-          subject source `shouldBe` TypeApplication "A" [b, c]
+          subject source `shouldBe` GenericApplication "A" [b, c]
 
     describe "conditional expr" $ do
       let subject = parse' pBoolExpr
@@ -77,3 +77,14 @@ spec = do
       it "parses parenthesized expressions" $ do
         let source = "(A <: B and B <: C) or D <: E"
         subject source `shouldBe` Or (And (ExtendsLeft a b) (ExtendsLeft b c)) (ExtendsLeft d e)
+
+    describe "conditional types" $ do
+      it "should parse" $ do
+        let source = "if A <: B then C else D"
+        parse' pExpr source `shouldBe` ExprConditionalType (ConditionalType a b c d)
+
+    fdescribe "generic application" $ do
+      it "should parse single argument application" $ do
+        let source = "A B"
+        parse' pExpr source `shouldBe` GenericApplication "A" [b]
+

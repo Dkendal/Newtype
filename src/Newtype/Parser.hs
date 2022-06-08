@@ -269,12 +269,12 @@ pInterfaceDefintion = do
 pTerm :: Parser Expr
 pTerm =
   choice
-    [ try pTypeApplication <?> "type application",
-      try (parens pTypeApplication) <?> "quoted type application",
+    [ try pGenericApplication <?> "type application",
+      try (parens pGenericApplication) <?> "quoted type application",
       try pTuple <?> "tuple",
       try pMappedType,
       parens pTypeOp,
-      -- pConditionalType,
+      pConditionalType,
       pNumberIntegerLiteral,
       pNumberDoubleLiteral,
       pCaseStatement <?> "case statement",
@@ -289,7 +289,7 @@ pTerm =
 
 pConditionalType :: Parser Expr
 pConditionalType = do
-  ConditionalType . expandConditional <$> pConditionalExpr
+  ExprConditionalType . expandConditional <$> pConditionalExpr
 
 pConditionalExpr :: Parser ConditionalExpr
 pConditionalExpr = do
@@ -412,12 +412,12 @@ pObjectLiteral :: Parser Expr
 pObjectLiteral =
   ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
 
-pTypeApplication :: Parser Expr
-pTypeApplication =
+pGenericApplication :: Parser Expr
+pGenericApplication =
   do
     name <- identifier
     params <- some . choice $ [pId, try pTerm]
-    return (TypeApplication name params)
+    return (GenericApplication name params)
 
 pObjectLiteralProperty :: Parser ObjectLiteralProperty
 pObjectLiteralProperty = do

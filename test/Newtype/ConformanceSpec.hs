@@ -109,7 +109,7 @@ specExpression = do
 
 specIfThenElse :: SpecWith ()
 specIfThenElse =
-  xdescribe "if ... then ... else" $ do
+  describe "if ... then ... else" $ do
     it "can have an extends condition" $ do
       let nt =
             ["if LHS <: RHS then Then else Else"]
