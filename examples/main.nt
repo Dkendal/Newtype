@@ -9,5 +9,6 @@ type True = 1
 type BuiltIn = (M.BuiltIn)
 
 type ExtractSubcapture T =
-  if not T <: (M.Primitive | M.BuiltIn)
-  then if T <: object then T ! Exclude (keyof T) (keyof [])  (keyof {})
+  if not T <: (M.Primitive | M.BuiltIn) then 1
+--  then if T <: object then T ! Exclude (keyof T) (keyof [])  (keyof {})
+

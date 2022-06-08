@@ -86,6 +86,10 @@ spec = do
         subject source `shouldBe` Or (And (ExtendsLeft a b) (ExtendsLeft b c)) (ExtendsLeft d e)
 
     describe "conditional types" $ do
-      it "should parse" $ do
+      it "should parse if ... then ... else" $ do
         let source = "if A <: B then C else D"
-        parse' pExpr source `shouldBe` ExprConditionalType (ConditionalType a b c d)
+        parse' pExpr source `shouldBe` ctExpr a b c d
+
+      it "should parse if ... then" $ do
+        let source = "if A <: B then C"
+        parse' pExpr source `shouldBe` ctExpr a b c never

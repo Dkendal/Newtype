@@ -9,7 +9,7 @@ module Newtype.Parser
     pStatement,
     pProgram,
     pImport,
-    pConditionalType,
+    pExprConditionalType,
     pBoolExpr,
   )
 where
@@ -274,7 +274,7 @@ pTerm =
       try pTuple <?> "tuple",
       try pMappedType,
       parens pTypeOp,
-      pConditionalType,
+      pExprConditionalType,
       pNumberIntegerLiteral,
       pNumberDoubleLiteral,
       pCaseStatement <?> "case statement",
@@ -287,8 +287,8 @@ pTerm =
       pObjectLiteral
     ]
 
-pConditionalType :: Parser Expr
-pConditionalType = do
+pExprConditionalType :: Parser Expr
+pExprConditionalType = do
   ExprConditionalType . expandConditional <$> pConditionalExpr
 
 pConditionalExpr :: Parser ConditionalExpr
@@ -297,8 +297,7 @@ pConditionalExpr = do
   condition <- pBoolExpr
   keyword "then"
   thenExpr <- pExpr
-  keyword "else"
-  elseExpr <- pExpr
+  elseExpr <- (keyword "else" >> pExpr) <|> return never
   return (ConditionalExpr {..})
 
 pBoolExpr :: Parser BoolExpr

@@ -16,8 +16,11 @@ module Newtype.Syntax
     ConditionalType (..),
     ImportSpecifier (..),
     Ident (..),
+    PrimitiveType (..),
     expandConditional,
-    mkIdent
+    mkIdent,
+    ctExpr,
+    never
   )
 where
 
@@ -347,6 +350,9 @@ expandConditional (ConditionalExpr (Or a b) then' else') =
 
 mkIdent :: String -> Expr
 mkIdent = ExprIdent . Ident
+
+ctExpr :: Expr -> Expr -> Expr -> Expr -> Expr
+ctExpr lhs rhs then' else' = ExprConditionalType (ConditionalType lhs rhs then' else')
 
 never :: Expr
 never = PrimitiveType TNever

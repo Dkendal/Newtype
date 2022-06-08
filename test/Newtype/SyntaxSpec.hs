@@ -9,7 +9,6 @@ import Prettyprinter (LayoutOptions (..), PageWidth (..), layoutPretty, pretty)
 import Prettyprinter.Render.String (renderString)
 import Test.Hspec
 import Prelude hiding (unlines, (&&), (||))
-import Data.Function ((&))
 
 (<:) :: Expr -> Expr -> BoolExpr
 a <: b = ExtendsLeft a b
