@@ -10,11 +10,11 @@ import Text.Megaparsec
 
 spec :: Spec
 spec = do
-  let a = Ident "A"
-  let b = Ident "B"
-  let c = Ident "C"
-  let d = Ident "D"
-  let e = Ident "E"
+  let a = mkIdent "A"
+  let b = mkIdent "B"
+  let c = mkIdent "C"
+  let d = mkIdent "D"
+  let e = mkIdent "E"
   describe "NewtypeParser" $ do
     let parse' parser source =
           let result = parse (parser <* eof) "" source
@@ -30,18 +30,25 @@ spec = do
           let source = "1"
           subject source `shouldBe` NumberIntegerLiteral 1
 
-      describe "type application" $ do
+      describe "generic application" $ do
         it "parses" $ do
           let source = "A B C"
-          subject source `shouldBe` GenericApplication "A" [b, c]
+          subject source `shouldBe` GenericApplication (Ident "A") [b, c]
 
         it "parses parenthesized expressions" $ do
           let source = "(A B C)"
-          subject source `shouldBe` GenericApplication "A" [b, c]
+          subject source `shouldBe` GenericApplication (Ident "A") [b, c]
 
         it "doesn't matter how man parens there are" $ do
           let source = "((A B C))"
-          subject source `shouldBe` GenericApplication "A" [b, c]
+          subject source `shouldBe` GenericApplication (Ident "A") [b, c]
+
+        it "should parse nested expressions in the arguments" $ do
+          let source = "A (B C)"
+          subject source
+            `shouldBe` GenericApplication
+              (Ident "A")
+              [GenericApplication (Ident "B") [c]]
 
     describe "conditional expr" $ do
       let subject = parse' pBoolExpr
@@ -82,9 +89,3 @@ spec = do
       it "should parse" $ do
         let source = "if A <: B then C else D"
         parse' pExpr source `shouldBe` ExprConditionalType (ConditionalType a b c d)
-
-    describe "generic application" $ do
-      it "should parse single argument application" $ do
-        let source = "A B"
-        parse' pExpr source `shouldBe` GenericApplication "A" [b]
-

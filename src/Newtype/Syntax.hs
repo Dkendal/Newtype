@@ -15,7 +15,9 @@ module Newtype.Syntax
     BoolExpr (..),
     ConditionalType (..),
     ImportSpecifier (..),
+    Ident (..),
     expandConditional,
+    mkIdent
   )
 where
 
@@ -94,7 +96,7 @@ instance Pretty ImportSpecifier where
   prettyList lst =
     braces . hsep . punctuate comma . map pretty $ lst
 
-data TypeParam = TypeParam {name :: String}
+newtype TypeParam = TypeParam {name :: String}
   deriving (Eq, Show)
 
 instance Pretty TypeParam where
@@ -108,12 +110,13 @@ data Expr
   | NumberDoubleLiteral Double
   | BooleanLiteral Bool
   | ObjectLiteral [ObjectLiteralProperty]
-  | GenericApplication String [Expr]
+  | GenericApplication Ident [Expr]
   | Access Expr Expr
   | DotAccess Expr Expr
+  | PrimitiveType PrimitiveType
   | Builtin String Expr
-  | Ident String
-  | InferIdent String
+  | ExprIdent Ident
+  | ExprInferIdent Ident
   | Tuple [Expr]
   | ExprConditionalType ConditionalType
   | MappedType
@@ -129,12 +132,91 @@ data Expr
   | CaseStatement Expr [Case]
   deriving (Eq, Show)
 
+instance Pretty Expr where
+  pretty (PrimitiveType t) = pretty t
+  pretty MappedType {asExpr = Just asExpr, propertyKey, ..}
+    | asExpr == propertyKey =
+      pretty MappedType {asExpr = Nothing, ..}
+  pretty MappedType {..} =
+    braces (lhs <+> pretty value)
+    where
+      as = case asExpr of
+        Nothing -> emptyDoc
+        (Just expr) -> space <> "as" <+> pretty expr
+      index = pretty propertyKey <+> "in" <+> pretty propertyKeySource <> as
+      lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
+  pretty (Builtin a b) = group (pretty a <+> pretty b)
+  pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"
+  pretty (DotAccess a b) = pretty a <> "." <> pretty b
+  pretty (NumberIntegerLiteral value) = pretty value
+  pretty (NumberDoubleLiteral value) = pretty value
+  pretty (BooleanLiteral True) = "true"
+  pretty (BooleanLiteral False) = "false"
+  pretty (StringLiteral value) = dquotes . pretty $ value
+  pretty (GenericApplication ident []) = pretty ident
+  pretty (GenericApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
+  pretty (ObjectLiteral []) = "{}"
+  pretty (ObjectLiteral props) =
+    group
+      ( encloseSep
+          (flatAlt "{ " "{")
+          (flatAlt " }" "}")
+          ", "
+          (map pretty props)
+      )
+  pretty (ExprIdent id) = pretty id
+  pretty (ExprInferIdent (Ident id)) = group "infer" <+> pretty id
+  pretty (Tuple []) = "[]"
+  pretty (Tuple exprs) = (brackets . hsep) (punctuate comma (map pretty exprs))
+  pretty (Intersection left right) =
+    fmt left <+> "&" <+> fmt right
+    where
+      fmt (Union a b) = prettyOpList (Union a b)
+      fmt a = pretty a
+  pretty (Union left right) =
+    fmt left <+> "|" <+> fmt right
+    where
+      fmt (Intersection a b) = prettyOpList (Intersection a b)
+      fmt a = pretty a
+  pretty (CaseStatement a b) =
+    pretty (simplify (CaseStatement a b))
+  pretty (ExprConditionalType a) = pretty a
+
+data PrimitiveType
+  = TNever
+  | TAny
+  | TUnknown
+  | TNumber
+  | TString
+  | TBoolean
+  | TNull
+  | TUndefined
+  | TVoid
+  deriving (Eq, Show)
+
+instance Pretty PrimitiveType where
+  pretty TNever = "never"
+  pretty TAny = "any"
+  pretty TUnknown = "unknown"
+  pretty TNumber = "number"
+  pretty TString = "string"
+  pretty TBoolean = "boolean"
+  pretty TNull = "null"
+  pretty TUndefined = "undefined"
+  pretty TVoid = "void"
+
+newtype Ident = Ident String
+  deriving (Eq, Show)
+
+instance Pretty Ident where
+  pretty (Ident s) = pretty s
+
 data ConditionalType = ConditionalType
-      { lhs :: Expr,
-        rhs :: Expr,
-        thenExpr :: Expr,
-        elseExpr :: Expr
-      }
+  { lhs :: Expr,
+    rhs :: Expr,
+    thenExpr :: Expr,
+    elseExpr :: Expr
+  }
   deriving (Show, Eq)
 
 instance Pretty ConditionalType where
@@ -166,57 +248,6 @@ data BoolExpr
   | Equals Expr Expr
   | NotEquals Expr Expr
   deriving (Show, Eq)
-
-instance Pretty Expr where
-  pretty MappedType {asExpr = Just asExpr, propertyKey, ..}
-    | asExpr == propertyKey =
-      pretty MappedType {asExpr = Nothing, ..}
-  pretty MappedType {..} =
-    braces (lhs <+> pretty value)
-    where
-      as = case asExpr of
-        Nothing -> emptyDoc
-        (Just expr) -> space <> "as" <+> pretty expr
-      index = pretty propertyKey <+> "in" <+> pretty propertyKeySource <> as
-      lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
-  pretty (Builtin a b) = group (pretty a <+> pretty b)
-  pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"
-  pretty (DotAccess a b) = pretty a <> "." <> pretty b
-  pretty (NumberIntegerLiteral value) = pretty value
-  pretty (NumberDoubleLiteral value) = pretty value
-  pretty (BooleanLiteral True) = "true"
-  pretty (BooleanLiteral False) = "false"
-  pretty (StringLiteral value) = dquotes . pretty $ value
-  pretty (GenericApplication typeName []) = pretty typeName
-  pretty (GenericApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
-  pretty (ObjectLiteral []) = "{}"
-  pretty (ObjectLiteral props) =
-    group
-      ( encloseSep
-          (flatAlt "{ " "{")
-          (flatAlt " }" "}")
-          ", "
-          (map pretty props)
-      )
-  pretty (Ident name) = pretty name
-  pretty (InferIdent name) = group "infer" <+> pretty name
-  pretty (Tuple []) = "[]"
-  pretty (Tuple exprs) = (brackets . hsep) (punctuate comma (map pretty exprs))
-  pretty (Intersection left right) =
-    fmt left <+> "&" <+> fmt right
-    where
-      fmt (Union a b) = prettyOpList (Union a b)
-      fmt a = pretty a
-  pretty (Union left right) =
-    fmt left <+> "|" <+> fmt right
-    where
-      fmt (Intersection a b) = prettyOpList (Intersection a b)
-      fmt a = pretty a
-  pretty (CaseStatement a b) =
-    pretty (simplify (CaseStatement a b))
-  pretty (ExprConditionalType a) = pretty a
-
--- pretty a = unsafeViaShow a
 
 data Case
   = Case Expr Expr
@@ -250,9 +281,6 @@ prettyOptional :: Maybe Bool -> Doc ann
 prettyOptional Nothing = emptyDoc
 prettyOptional (Just False) = "-?"
 prettyOptional (Just True) = "?"
-
-never :: Expr
-never = Ident "never"
 
 prettyOpList :: Expr -> Doc ann
 prettyOpList a =
@@ -316,3 +344,10 @@ expandConditional (ConditionalExpr (Or a b) then' else') =
   let outer else'' = cx a then' else''
       inner = cx b then' else'
    in expandConditional (outer (expandConditional' inner))
+
+mkIdent :: String -> Expr
+mkIdent = ExprIdent . Ident
+
+never :: Expr
+never = PrimitiveType TNever
+

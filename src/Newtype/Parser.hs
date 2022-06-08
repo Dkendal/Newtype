@@ -280,7 +280,7 @@ pTerm =
       pCaseStatement <?> "case statement",
       pBooleanLiteral,
       pStringLiteral,
-      pId,
+      pIdent',
       -- Not actually valid outside of the extends expression
       -- but make my life a lot easier
       pInferIdent,
@@ -331,15 +331,15 @@ pMappedType :: Parser Expr
 pMappedType =
   do
     -- TODO: I don't know if there's a way to disambiguate this statement without parens
-    value <- pId <|> parens pExpr
+    value <- pIdent' <|> parens pExpr
     keyword "for"
-    propertyKey <- pId
+    propertyKey <- pIdent'
     keyword "in"
-    propertyKeySource <- pId
+    propertyKeySource <- pIdent'
     withAs <- optional $ do
       keyword "as"
       isReadonly <- pReadonly
-      asExpr <- Just <$> pId
+      asExpr <- Just <$> pIdent'
       isOptional <- pOptional
       return (MappedType {..})
     return $
@@ -388,7 +388,7 @@ typeOpTable =
   ]
 
 pInferIdent :: Parser Expr
-pInferIdent = inferSym >> InferIdent <$> identifier <?> "identifier"
+pInferIdent = inferSym >> ExprInferIdent <$> pIdent <?> "infered identifier"
 
 pNumberIntegerLiteral :: Parser Expr
 pNumberIntegerLiteral = NumberIntegerLiteral <$> integer
@@ -405,8 +405,11 @@ pStringLiteral = StringLiteral <$> stringLiteral
 pTuple :: Parser Expr
 pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
 
-pId :: Parser Expr
-pId = Ident <$> identifier <?> "identifier"
+pIdent :: Parser Ident
+pIdent = Ident <$> identifier <?> "identifier"
+
+pIdent' :: Parser Expr
+pIdent' = ExprIdent <$> pIdent <?> "identifier"
 
 pObjectLiteral :: Parser Expr
 pObjectLiteral =
@@ -415,9 +418,9 @@ pObjectLiteral =
 pGenericApplication :: Parser Expr
 pGenericApplication =
   do
-    name <- identifier
-    params <- some . choice $ [pId, try pTerm]
-    return (GenericApplication name params)
+    id <- pIdent
+    params <- some . choice $ [pIdent', try pTerm]
+    return (GenericApplication id params)
 
 pObjectLiteralProperty :: Parser ObjectLiteralProperty
 pObjectLiteralProperty = do
