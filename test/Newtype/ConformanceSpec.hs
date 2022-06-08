@@ -77,7 +77,6 @@ specExpression = do
       let src =
             ["true"]
        in pp (pExpr <* eof) (unlines src) `shouldBe` here src
-  specIfThenElse
   describe "can be a generic type" $ do
     it "can have one parameter" $ do
       let nt =
@@ -105,43 +104,6 @@ specExpression = do
             ]
           ts =
             ["Node<Node<1>, 2>"]
-       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
-
-specIfThenElse :: SpecWith ()
-specIfThenElse =
-  describe "if ... then ... else" $ do
-    it "can have an extends condition" $ do
-      let nt =
-            ["if LHS <: RHS then Then else Else"]
-          ts =
-            ["LHS extends RHS ? Then : Else"]
-       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
-
-    it "supports boolean expressions" $ do
-      let nt =
-            ["if A <: C and B <: C and A <: C then 1"]
-          ts =
-            [""]
-       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
-
-    it "doesn't need an else expr" $ do
-      let nt = ["if LHS <: RHS then Then"]
-          ts = ["LHS extends RHS ? Then : never"]
-       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
-
-    it "can use the extends-right operator" $ do
-      let nt = ["if LHS :> RHS then Then"]
-          ts = ["RHS extends LHS ? Then : never"]
-       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
-
-    it "can negate conditions" $ do
-      let nt = ["if not LHS <: RHS then Then"]
-          ts = ["LHS extends RHS ? never : Then"]
-       in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
-
-    it "can use the infer operator (?)" $ do
-      let nt = ["if Left <: Right ?T then Then"]
-          ts = ["Left extends Right<infer T> ? Then : never"]
        in pp (pExpr <* eof) (unlines nt) `shouldBe` here ts
 
 -- testWhitespaceSensitivity :: TestTree

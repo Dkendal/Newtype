@@ -83,7 +83,7 @@ spec = do
         let source = "if A <: B then C else D"
         parse' pExpr source `shouldBe` ExprConditionalType (ConditionalType a b c d)
 
-    fdescribe "generic application" $ do
+    describe "generic application" $ do
       it "should parse single argument application" $ do
         let source = "A B"
         parse' pExpr source `shouldBe` GenericApplication "A" [b]
