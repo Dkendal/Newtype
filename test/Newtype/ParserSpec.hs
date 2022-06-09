@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module Newtype.ParserSpec (spec) where
 
@@ -73,6 +74,15 @@ spec = do
           let source = "1"
           subject source `shouldBe` NumberIntegerLiteral 1
 
+      describe "conditional types" $ do
+        it "should parse if ... then ... else" $ do
+          let source = "if A <: B then C else D"
+          parse' pExpr source `shouldBe` ctExpr a b c d
+
+        it "should parse if ... then" $ do
+          let source = "if A <: B then C"
+          parse' pExpr source `shouldBe` ctExpr a b c never
+
       describe "generic application" $ do
         it "parses" $ do
           let source = "A B C"
@@ -92,6 +102,36 @@ spec = do
             `shouldBe` GenericApplication
               (Ident "A")
               [GenericApplication (Ident "B") [c]]
+
+      describe "case expression" $ do
+        it "should parse multiple cases" $ do
+          let source =
+                unlines
+                  [ "case A of",
+                    " B -> B",
+                    " C -> C"
+                  ]
+          subject source
+            `shouldBe` CaseStatement
+              (ExprIdent (Ident "A"))
+              [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B")),
+                Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C"))
+              ]
+        it "should parse default case" $ do
+          let source =
+                unlines
+                  [ "case A of",
+                    " B -> B",
+                    " C -> C",
+                    " _ -> A"
+                  ]
+          subject source
+            `shouldBe` CaseStatement
+              (ExprIdent (Ident "A"))
+              [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B")),
+                Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C")),
+                Case Hole (ExprIdent (Ident "A"))
+              ]
 
     describe "conditional expr" $ do
       let subject = parse' pBoolExpr
@@ -127,12 +167,3 @@ spec = do
       it "parses parenthesized expressions" $ do
         let source = "(A <: B and B <: C) or D <: E"
         subject source `shouldBe` Or (And (ExtendsLeft a b) (ExtendsLeft b c)) (ExtendsLeft d e)
-
-    describe "conditional types" $ do
-      it "should parse if ... then ... else" $ do
-        let source = "if A <: B then C else D"
-        parse' pExpr source `shouldBe` ctExpr a b c d
-
-      it "should parse if ... then" $ do
-        let source = "if A <: B then C"
-        parse' pExpr source `shouldBe` ctExpr a b c never

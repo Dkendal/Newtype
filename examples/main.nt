@@ -29,6 +29,36 @@ type Primitive = M.Primitive
 type BuiltIn = M.BuiltIn
 
 type ExtractSubcapture T =
-  if not T <: (M.Primitive | M.BuiltIn) and T <: object
+  if not T <: M.Primitive | M.BuiltIn and T <: object
   then T ! Exclude (keyof T) (keyof []) (keyof {})
 
+type PartialAssignment K V =
+  if not V == never and K <: string
+  then V for k in K
+
+type EmptyToNever T = if not {} <: T then T
+
+type Kind
+  = typeof any_
+  | typeof rest_
+  | typeof string_
+  | typeof number_
+  | typeof boolean_
+  | typeof function_
+  | typeof symbol_
+  | typeof bigint_
+  | typeof object_
+
+-- Interface syntax, TBD
+--
+-- -- Default arguments?
+-- interface Hole Type \\ any Label \\ any where
+--   T: Type
+--   -- Index keyword
+--   readonly index __kind__ : Label
+-- 
+-- -- Default arguments?
+-- interface Hole (type = any) (label = any) where
+--   T: type
+--   -- TS style index
+--   readonly [__kind__] : label

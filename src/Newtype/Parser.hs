@@ -50,8 +50,14 @@ indentBlock = L.indentBlock scn
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme scn
 
+lexeme' :: Parser a -> Parser a
+lexeme' = L.lexeme sc
+
 symbol :: Text -> Parser Text
 symbol = L.symbol scn
+
+symbol' :: Text -> Parser Text
+symbol' = L.symbol sc
 
 keyword :: Text -> Parser Text
 keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
@@ -195,10 +201,16 @@ reservedWords =
 builtins :: [Text]
 builtins = ["keyof", "typeof"]
 
+identifierHead :: Parser Char
+identifierHead = letterChar <|> underscore <|> dollar
+
+identifierTail :: Parser Char
+identifierTail = alphaNumChar <|> underscore <|> dollar
+
 identifier :: Parser String
 identifier = (lexeme . try) (p >>= check)
   where
-    p = (:) <$> (letterChar <|> underscore <|> dollar) <*> many (alphaNumChar <|> underscore <|> dollar)
+    p = (:) <$> identifierHead <*> many identifierTail
     check x =
       if x `elem` reservedWords
         then fail $ "keyword " ++ show x ++ " cannot be an identifier"
@@ -296,6 +308,9 @@ pTerm =
       hidden . parens $ pExpr
     ]
 
+pHole :: Parser Expr
+pHole = Hole <$ symbol "_" <* notFollowedBy identifierTail
+
 pExprConditionalType :: Parser Expr
 pExprConditionalType = do
   ExprConditionalType . expandConditional <$> pConditionalExpr
@@ -365,18 +380,25 @@ pMappedType =
 pCaseStatement :: Parser Expr
 pCaseStatement =
   do
+    pos <- L.indentLevel
     keyword "case"
     value <- pExpr
     keyword "of"
-    cases <- some pCase
-    return (CaseStatement value cases)
-  where
-    pCase :: Parser Case
-    pCase = do
-      lhs <- pExpr <?> "left hand side of case"
+    branches <- some $ do
+      indentGuard GT pos <|> fail "case branch must be indented"
+      notFollowedBy pHole <|> fail "default branch must be last"
+      lhs <- pExpr
       keyword "->"
-      rhs <- pExpr <?> "right hand side of case"
-      return (Case lhs rhs)
+      Case lhs <$> pExpr
+    branches <-
+      do
+        indentGuard GT pos <|> fail "case branch must be indented"
+        lhs <- pHole
+        keyword "->"
+        case' <- Case lhs <$> pExpr
+        return (branches ++ [case'])
+        <|> return branches
+    return $ CaseStatement value branches
 
 pExpr :: Parser Expr
 pExpr = choice [pTypeOp, pTerm]
@@ -425,11 +447,15 @@ pObjectLiteral =
   ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
 
 pGenericApplication :: Parser Expr
-pGenericApplication =
-  do
-    id <- pIdent
-    params <- some . choice $ [pIdent', try pTerm]
-    return (GenericApplication id params)
+pGenericApplication = do
+  pos <- L.indentLevel
+  id <- pIdent
+  params <-
+    some . choice $
+      [ indentGuard GT pos *> pIdent',
+        indentGuard GT pos *> try pTerm
+      ]
+  return (GenericApplication id params)
 
 pObjectLiteralProperty :: Parser ObjectLiteralProperty
 pObjectLiteralProperty = do

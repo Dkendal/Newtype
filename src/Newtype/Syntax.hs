@@ -20,7 +20,7 @@ module Newtype.Syntax
     expandConditional,
     mkIdent,
     ctExpr,
-    never
+    never,
   )
 where
 
@@ -133,9 +133,11 @@ data Expr
   | Union Expr Expr
   | Intersection Expr Expr
   | CaseStatement Expr [Case]
+  | Hole
   deriving (Eq, Show)
 
 instance Pretty Expr where
+  pretty Hole = "_"
   pretty (PrimitiveType t) = pretty t
   pretty MappedType {asExpr = Just asExpr, propertyKey, ..}
     | asExpr == propertyKey =
@@ -358,4 +360,3 @@ ctExpr lhs rhs then' else' = ExprConditionalType (ConditionalType lhs rhs then' 
 
 never :: Expr
 never = PrimitiveType PrimitiveNever
-
