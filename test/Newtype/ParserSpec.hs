@@ -1,15 +1,14 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 module Newtype.ParserSpec (spec) where
 
-import Data.Text
-import Newtype.Parser
-import Newtype.Syntax
-import Test.Hspec
-import Text.Megaparsec
-import Prelude hiding (unlines)
+import           Data.Text
+import           Newtype.Parser
+import           Newtype.Syntax
+import           Prelude         hiding (unlines)
+import           Test.Hspec
+import           Text.Megaparsec
 
 spec :: Spec
 spec = do
@@ -23,7 +22,7 @@ spec = do
           let result = parse (parser <* eof) "" source
            in case result of
                 Left err -> error $ errorBundlePretty err
-                Right x -> x
+                Right x  -> x
 
     describe "programs" $ do
       let subject = parse' pProgram

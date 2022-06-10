@@ -1,14 +1,16 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 module Newtype.SyntaxSpec (spec) where
 
-import Data.Text
-import Newtype.Syntax
-import Prettyprinter (LayoutOptions (..), PageWidth (..), layoutPretty, pretty)
-import Prettyprinter.Render.String (renderString)
-import Test.Hspec
-import Prelude hiding (unlines, (&&), (||))
+import           Data.Text
+import           Newtype.Syntax
+import           Prelude                     hiding (unlines, (&&), (||))
+import           Prettyprinter               (LayoutOptions (..),
+                                              PageWidth (..), layoutPretty,
+                                              pretty)
+import           Prettyprinter.Render.String (renderString)
+import           Test.Hspec
 
 (<:) :: Expr -> Expr -> BoolExpr
 a <: b = ExtendsLeft a b

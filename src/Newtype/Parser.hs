@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 
 module Newtype.Parser
   ( pExpr,
@@ -14,17 +14,17 @@ module Newtype.Parser
   )
 where
 
-import Control.Applicative hiding (many, some)
-import Control.Monad
-import Control.Monad.Combinators.Expr
-import Data.Maybe (fromMaybe, isJust)
-import Data.Text (Text, pack, unpack)
-import Data.Void
-import Newtype.Syntax
-import Text.Megaparsec hiding (State)
-import Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer as L
-import Text.Megaparsec.Debug
+import           Control.Applicative            hiding (many, some)
+import           Control.Monad
+import           Control.Monad.Combinators.Expr
+import           Data.Maybe                     (fromMaybe, isJust)
+import           Data.Text                      (Text, pack, unpack)
+import           Data.Void
+import           Newtype.Syntax
+import           Text.Megaparsec                hiding (State)
+import           Text.Megaparsec.Char
+import qualified Text.Megaparsec.Char.Lexer     as L
+import           Text.Megaparsec.Debug
 
 type Parser = Parsec Void Text
 
@@ -244,7 +244,7 @@ pImportClause =
         identifier
       case alias of
         Just importedBinding -> return (ImportedAlias binding importedBinding)
-        Nothing -> return (ImportedBinding binding)
+        Nothing              -> return (ImportedBinding binding)
 
 pStatement :: Parser Statement
 pStatement =

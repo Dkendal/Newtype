@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 
 module Newtype.Syntax
   ( Program (..),
@@ -24,88 +24,54 @@ module Newtype.Syntax
   )
 where
 
-import Control.Monad
-import Data.Generics.Uniplate
-import Data.Maybe
-import Prettyprinter
+import           Control.Monad
+import           Data.Generics.Uniplate
+import           Data.Maybe
+import           Prettyprinter
 
 newtype Program = Program {statements :: [Statement]}
   deriving (Eq, Show)
 
-instance Pretty Program where
-  pretty (Program statements) = prettyList statements
-
 data Statement
   = ImportDeclaration
       { importClause :: ImportClause,
-        fromClause :: String
+        fromClause   :: String
       }
   | ExportStatement
   | TypeDefinition
-      { name :: String,
+      { name   :: String,
         params :: [TypeParam],
-        body :: Expr
+        body   :: Expr
       }
   | InterfaceDefinition
-      { name :: String,
-        params :: [TypeParam],
+      { name    :: String,
+        params  :: [TypeParam],
         extends :: [Expr],
-        props :: [ObjectLiteralProperty]
+        props   :: [ObjectLiteralProperty]
       }
   deriving (Eq, Show)
-
-instance Pretty Statement where
-  pretty ImportDeclaration {..} =
-    "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
-  pretty TypeDefinition {..} =
-    group ("type" <+> pretty name <> prettyList params) <> group (nest 2 (line <> "=" <+> pretty body))
-  pretty ExportStatement = emptyDoc
-  pretty InterfaceDefinition {..} =
-    (group "interface" <+> pretty name) <+> vsep [lbrace, body, rbrace]
-    where
-      body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
-
-  prettyList statements = vsep (punctuate line (map pretty statements))
 
 data ImportClause
   = ImportClauseDefault String
   | ImportClauseNS String
   | ImportClauseNamed [ImportSpecifier]
   | ImportClauseDefaultAndNS
-      { defaultBinding :: String,
+      { defaultBinding   :: String,
         namespaceBinding :: String
       }
   | ImportClauseDefaultAndNamed
       { defaultBinding :: String,
-        namedBindings :: [ImportSpecifier]
+        namedBindings  :: [ImportSpecifier]
       }
   deriving (Eq, Show)
-
-instance Pretty ImportClause where
-  pretty (ImportClauseDefault binding) = pretty binding
-  pretty (ImportClauseNS binding) = "* as " <> pretty binding
-  pretty (ImportClauseNamed namedBindings) = prettyList namedBindings
-  pretty ImportClauseDefaultAndNS {..} = pretty defaultBinding <+> pretty namespaceBinding
-  pretty ImportClauseDefaultAndNamed {..} = pretty defaultBinding <+> prettyList namedBindings
 
 data ImportSpecifier
   = ImportedBinding String
   | ImportedAlias {from :: String, to :: String}
   deriving (Eq, Show)
 
-instance Pretty ImportSpecifier where
-  pretty (ImportedBinding binding) = pretty binding
-  pretty ImportedAlias {..} = pretty from <+> "as" <+> pretty to
-  prettyList lst =
-    braces . hsep . punctuate comma . map pretty $ lst
-
 newtype TypeParam = TypeParam {name :: String}
   deriving (Eq, Show)
-
-instance Pretty TypeParam where
-  pretty (TypeParam s) = pretty s
-  prettyList [] = emptyDoc
-  prettyList l = angles . hsep . punctuate comma . map pretty $ l
 
 data Expr
   = StringLiteral String
@@ -123,18 +89,106 @@ data Expr
   | Tuple [Expr]
   | ExprConditionalType ConditionalType
   | MappedType
-      { value :: Expr,
-        propertyKey :: Expr,
+      { value             :: Expr,
+        propertyKey       :: Expr,
         propertyKeySource :: Expr,
-        asExpr :: Maybe Expr,
-        isReadonly :: Maybe Bool,
-        isOptional :: Maybe Bool
+        asExpr            :: Maybe Expr,
+        isReadonly        :: Maybe Bool,
+        isOptional        :: Maybe Bool
       }
   | Union Expr Expr
   | Intersection Expr Expr
   | CaseStatement Expr [Case]
   | Hole
   deriving (Eq, Show)
+
+data PrimitiveType
+  = PrimitiveNever
+  | PrimitiveAny
+  | PrimitiveUnknown
+  | PrimitiveNumber
+  | PrimitiveBigInt
+  | PrimitiveString
+  | PrimitiveBoolean
+  | PrimitiveNull
+  | PrimitiveUndefined
+  | PrimitiveVoid
+  deriving (Eq, Show)
+
+newtype Ident = Ident String
+  deriving (Eq, Show)
+
+data ConditionalType = ConditionalType
+  { lhs      :: Expr,
+    rhs      :: Expr,
+    thenExpr :: Expr,
+    elseExpr :: Expr
+  }
+  deriving (Show, Eq)
+
+data ConditionalExpr = ConditionalExpr
+  { condition :: BoolExpr,
+    thenExpr  :: Expr,
+    elseExpr  :: Expr
+  }
+  deriving (Show, Eq)
+
+data BoolExpr
+  = And BoolExpr BoolExpr
+  | Or BoolExpr BoolExpr
+  | Not BoolExpr
+  | ExtendsLeft Expr Expr
+  | ExtendsRight Expr Expr
+  | Equals Expr Expr
+  | NotEquals Expr Expr
+  deriving (Show, Eq)
+
+data Case
+  = Case Expr Expr
+  | ElseCase Expr
+  deriving (Eq, Show)
+
+data BinaryOp
+
+data ObjectLiteralProperty = KeyValue
+  { isReadonly :: Maybe Bool,
+    isOptional :: Maybe Bool,
+    key        :: String,
+    value      :: Expr
+  }
+  deriving (Eq, Show)
+
+-------------------------------------------------------------------------------
+-- Pretty instances                                                          --
+-------------------------------------------------------------------------------
+instance Pretty Program where
+  pretty (Program statements) = prettyList statements
+
+instance Pretty Statement where
+  pretty ImportDeclaration {..} =
+    "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
+  pretty TypeDefinition {..} =
+    group ("type" <+> pretty name <> prettyList params) <> group (nest 2 (line <> "=" <+> pretty body))
+  pretty ExportStatement = emptyDoc
+  pretty InterfaceDefinition {..} =
+    (group "interface" <+> pretty name) <+> vsep [lbrace, body, rbrace]
+    where
+      body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
+
+  prettyList statements = vsep (punctuate line (map pretty statements))
+
+instance Pretty ImportClause where
+  pretty (ImportClauseDefault binding) = pretty binding
+  pretty (ImportClauseNS binding) = "* as " <> pretty binding
+  pretty (ImportClauseNamed namedBindings) = prettyList namedBindings
+  pretty ImportClauseDefaultAndNS {..} = pretty defaultBinding <+> pretty namespaceBinding
+  pretty ImportClauseDefaultAndNamed {..} = pretty defaultBinding <+> prettyList namedBindings
+
+instance Pretty ImportSpecifier where
+  pretty (ImportedBinding binding) = pretty binding
+  pretty ImportedAlias {..}        = pretty from <+> "as" <+> pretty to
+  prettyList lst =
+    braces . hsep . punctuate comma . map pretty $ lst
 
 instance Pretty Expr where
   pretty Hole = "_"
@@ -146,7 +200,7 @@ instance Pretty Expr where
     braces (lhs <+> pretty value)
     where
       as = case asExpr of
-        Nothing -> emptyDoc
+        Nothing     -> emptyDoc
         (Just expr) -> space <> "as" <+> pretty expr
       index = pretty propertyKey <+> "in" <+> pretty propertyKeySource <> as
       lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
@@ -177,54 +231,43 @@ instance Pretty Expr where
     fmt left <+> "&" <+> fmt right
     where
       fmt (Union a b) = prettyOpList (Union a b)
-      fmt a = pretty a
+      fmt a           = pretty a
   pretty (Union left right) =
     fmt left <+> "|" <+> fmt right
     where
       fmt (Intersection a b) = prettyOpList (Intersection a b)
-      fmt a = pretty a
+      fmt a                  = pretty a
   pretty (CaseStatement a b) =
     pretty (simplify (CaseStatement a b))
   pretty (ExprConditionalType a) = pretty a
 
-data PrimitiveType
-  = PrimitiveNever
-  | PrimitiveAny
-  | PrimitiveUnknown
-  | PrimitiveNumber
-  | PrimitiveBigInt
-  | PrimitiveString
-  | PrimitiveBoolean
-  | PrimitiveNull
-  | PrimitiveUndefined
-  | PrimitiveVoid
-  deriving (Eq, Show)
-
-instance Pretty PrimitiveType where
-  pretty PrimitiveNever = "never"
-  pretty PrimitiveAny = "any"
-  pretty PrimitiveUnknown = "unknown"
-  pretty PrimitiveNumber = "number"
-  pretty PrimitiveString = "string"
-  pretty PrimitiveBoolean = "boolean"
-  pretty PrimitiveNull = "null"
-  pretty PrimitiveUndefined = "undefined"
-  pretty PrimitiveVoid = "void"
-  pretty PrimitiveBigInt = "bigint"
-
-newtype Ident = Ident String
-  deriving (Eq, Show)
-
 instance Pretty Ident where
   pretty (Ident s) = pretty s
 
-data ConditionalType = ConditionalType
-  { lhs :: Expr,
-    rhs :: Expr,
-    thenExpr :: Expr,
-    elseExpr :: Expr
-  }
-  deriving (Show, Eq)
+instance Pretty PrimitiveType where
+  pretty PrimitiveNever     = "never"
+  pretty PrimitiveAny       = "any"
+  pretty PrimitiveUnknown   = "unknown"
+  pretty PrimitiveNumber    = "number"
+  pretty PrimitiveString    = "string"
+  pretty PrimitiveBoolean   = "boolean"
+  pretty PrimitiveNull      = "null"
+  pretty PrimitiveUndefined = "undefined"
+  pretty PrimitiveVoid      = "void"
+  pretty PrimitiveBigInt    = "bigint"
+
+instance Pretty TypeParam where
+  pretty (TypeParam s) = pretty s
+  prettyList [] = emptyDoc
+  prettyList l  = angles . hsep . punctuate comma . map pretty $ l
+
+instance Pretty ObjectLiteralProperty where
+  pretty KeyValue {..} =
+    lhs <+> pretty value
+    where
+      readonly = prettyReadonly isReadonly
+      optional = prettyOptional isOptional
+      lhs = group readonly <> pretty key <> optional <> ":"
 
 instance Pretty ConditionalType where
   pretty (ConditionalType a b then' else') =
@@ -236,58 +279,22 @@ instance Pretty ConditionalType where
             <> (group ":" <+> pretty else')
         )
 
-data ConditionalExpr = ConditionalExpr
-  { condition :: BoolExpr,
-    thenExpr :: Expr,
-    elseExpr :: Expr
-  }
-  deriving (Show, Eq)
-
 instance Pretty ConditionalExpr where
   pretty cexp = (pretty . expandConditional) cexp
 
-data BoolExpr
-  = And BoolExpr BoolExpr
-  | Or BoolExpr BoolExpr
-  | Not BoolExpr
-  | ExtendsLeft Expr Expr
-  | ExtendsRight Expr Expr
-  | Equals Expr Expr
-  | NotEquals Expr Expr
-  deriving (Show, Eq)
-
-data Case
-  = Case Expr Expr
-  | ElseCase Expr
-  deriving (Eq, Show)
-
-data BinaryOp
-
-data ObjectLiteralProperty = KeyValue
-  { isReadonly :: Maybe Bool,
-    isOptional :: Maybe Bool,
-    key :: String,
-    value :: Expr
-  }
-  deriving (Eq, Show)
-
-instance Pretty ObjectLiteralProperty where
-  pretty KeyValue {..} =
-    lhs <+> pretty value
-    where
-      readonly = prettyReadonly isReadonly
-      optional = prettyOptional isOptional
-      lhs = group readonly <> pretty key <> optional <> ":"
+-------------------------------------------------------------------------------
+-- Helpers                                                                   --
+-------------------------------------------------------------------------------
 
 prettyReadonly :: Maybe Bool -> Doc ann
-prettyReadonly Nothing = emptyDoc
+prettyReadonly Nothing      = emptyDoc
 prettyReadonly (Just False) = "-readonly" <> space
-prettyReadonly (Just True) = "readonly" <> space
+prettyReadonly (Just True)  = "readonly" <> space
 
 prettyOptional :: Maybe Bool -> Doc ann
-prettyOptional Nothing = emptyDoc
+prettyOptional Nothing      = emptyDoc
 prettyOptional (Just False) = "-?"
-prettyOptional (Just True) = "?"
+prettyOptional (Just True)  = "?"
 
 prettyOpList :: Expr -> Doc ann
 prettyOpList a =
