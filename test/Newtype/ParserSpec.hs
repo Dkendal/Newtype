@@ -1,14 +1,15 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Newtype.ParserSpec (spec) where
 
-import           Data.Text
-import           Newtype.Parser
-import           Newtype.Syntax
-import           Prelude         hiding (unlines)
-import           Test.Hspec
-import           Text.Megaparsec
+import Data.Text
+import Newtype.Parser
+import Newtype.Syntax
+import Newtype.Syntax.Conditionals
+import Test.Hspec
+import Text.Megaparsec
+import Prelude hiding (unlines)
 
 spec :: Spec
 spec = do
@@ -22,7 +23,7 @@ spec = do
           let result = parse (parser <* eof) "" source
            in case result of
                 Left err -> error $ errorBundlePretty err
-                Right x  -> x
+                Right x -> x
 
     describe "programs" $ do
       let subject = parse' pProgram
@@ -102,36 +103,6 @@ spec = do
               (Ident "A")
               [GenericApplication (Ident "B") [c]]
 
-      describe "case expression" $ do
-        it "should parse multiple cases" $ do
-          let source =
-                unlines
-                  [ "case A of",
-                    " B -> B",
-                    " C -> C"
-                  ]
-          subject source
-            `shouldBe` CaseStatement
-              (ExprIdent (Ident "A"))
-              [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B")),
-                Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C"))
-              ]
-        it "should parse default case" $ do
-          let source =
-                unlines
-                  [ "case A of",
-                    " B -> B",
-                    " C -> C",
-                    " _ -> A"
-                  ]
-          subject source
-            `shouldBe` CaseStatement
-              (ExprIdent (Ident "A"))
-              [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B")),
-                Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C")),
-                Case Hole (ExprIdent (Ident "A"))
-              ]
-
     describe "conditional expr" $ do
       let subject = parse' pBoolExpr
 
@@ -166,3 +137,36 @@ spec = do
       it "parses parenthesized expressions" $ do
         let source = "(A <: B and B <: C) or D <: E"
         subject source `shouldBe` Or (And (ExtendsLeft a b) (ExtendsLeft b c)) (ExtendsLeft d e)
+
+    describe "case expression" $ do
+      let subject = parse' pCaseStatement
+
+      it "should parse multiple cases" $ do
+        let source =
+              unlines
+                [ "case A of",
+                  " B -> B",
+                  " C -> C"
+                ]
+        subject source
+          `shouldBe` CaseStatement
+            (ExprIdent (Ident "A"))
+            [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B")),
+              Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C"))
+            ]
+
+      it "should parse default case" $ do
+        let source =
+              unlines
+                [ "case A of",
+                  " B -> B",
+                  " C -> C",
+                  " _ -> A"
+                ]
+        subject source
+          `shouldBe` CaseStatement
+            (ExprIdent (Ident "A"))
+            [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B")),
+              Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C")),
+              Case Hole (ExprIdent (Ident "A"))
+            ]

@@ -1,33 +1,14 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
-module Newtype.Syntax
-  ( Program (..),
-    Statement (..),
-    Expr (..),
-    ImportClause (..),
-    TypeParam (..),
-    Case (..),
-    ObjectLiteralProperty (..),
-    ConditionalExpr (..),
-    BoolExpr (..),
-    ConditionalType (..),
-    ImportSpecifier (..),
-    Ident (..),
-    PrimitiveType (..),
-    expandConditional,
-    mkIdent,
-    ctExpr,
-    never,
-  )
-where
+module Newtype.Syntax where
 
-import           Control.Monad
-import           Data.Generics.Uniplate
-import           Data.Maybe
-import           Prettyprinter
+import Control.Monad
+import Data.Generics.Uniplate
+import Data.Maybe
+import Prettyprinter
 
 newtype Program = Program {statements :: [Statement]}
   deriving (Eq, Show)
@@ -35,19 +16,19 @@ newtype Program = Program {statements :: [Statement]}
 data Statement
   = ImportDeclaration
       { importClause :: ImportClause,
-        fromClause   :: String
+        fromClause :: String
       }
   | ExportStatement
   | TypeDefinition
-      { name   :: String,
+      { name :: String,
         params :: [TypeParam],
-        body   :: Expr
+        body :: Expr
       }
   | InterfaceDefinition
-      { name    :: String,
-        params  :: [TypeParam],
+      { name :: String,
+        params :: [TypeParam],
         extends :: [Expr],
-        props   :: [ObjectLiteralProperty]
+        props :: [ObjectLiteralProperty]
       }
   deriving (Eq, Show)
 
@@ -56,12 +37,12 @@ data ImportClause
   | ImportClauseNS String
   | ImportClauseNamed [ImportSpecifier]
   | ImportClauseDefaultAndNS
-      { defaultBinding   :: String,
+      { defaultBinding :: String,
         namespaceBinding :: String
       }
   | ImportClauseDefaultAndNamed
       { defaultBinding :: String,
-        namedBindings  :: [ImportSpecifier]
+        namedBindings :: [ImportSpecifier]
       }
   deriving (Eq, Show)
 
@@ -89,16 +70,15 @@ data Expr
   | Tuple [Expr]
   | ExprConditionalType ConditionalType
   | MappedType
-      { value             :: Expr,
-        propertyKey       :: Expr,
+      { value :: Expr,
+        propertyKey :: Expr,
         propertyKeySource :: Expr,
-        asExpr            :: Maybe Expr,
-        isReadonly        :: Maybe Bool,
-        isOptional        :: Maybe Bool
+        asExpr :: Maybe Expr,
+        isReadonly :: Maybe Bool,
+        isOptional :: Maybe Bool
       }
   | Union Expr Expr
   | Intersection Expr Expr
-  | CaseStatement Expr [Case]
   | Hole
   deriving (Eq, Show)
 
@@ -119,42 +99,18 @@ newtype Ident = Ident String
   deriving (Eq, Show)
 
 data ConditionalType = ConditionalType
-  { lhs      :: Expr,
-    rhs      :: Expr,
+  { lhs :: Expr,
+    rhs :: Expr,
     thenExpr :: Expr,
     elseExpr :: Expr
   }
   deriving (Show, Eq)
 
-data ConditionalExpr = ConditionalExpr
-  { condition :: BoolExpr,
-    thenExpr  :: Expr,
-    elseExpr  :: Expr
-  }
-  deriving (Show, Eq)
-
-data BoolExpr
-  = And BoolExpr BoolExpr
-  | Or BoolExpr BoolExpr
-  | Not BoolExpr
-  | ExtendsLeft Expr Expr
-  | ExtendsRight Expr Expr
-  | Equals Expr Expr
-  | NotEquals Expr Expr
-  deriving (Show, Eq)
-
-data Case
-  = Case Expr Expr
-  | ElseCase Expr
-  deriving (Eq, Show)
-
-data BinaryOp
-
 data ObjectLiteralProperty = KeyValue
   { isReadonly :: Maybe Bool,
     isOptional :: Maybe Bool,
-    key        :: String,
-    value      :: Expr
+    key :: String,
+    value :: Expr
   }
   deriving (Eq, Show)
 
@@ -186,7 +142,7 @@ instance Pretty ImportClause where
 
 instance Pretty ImportSpecifier where
   pretty (ImportedBinding binding) = pretty binding
-  pretty ImportedAlias {..}        = pretty from <+> "as" <+> pretty to
+  pretty ImportedAlias {..} = pretty from <+> "as" <+> pretty to
   prettyList lst =
     braces . hsep . punctuate comma . map pretty $ lst
 
@@ -200,7 +156,7 @@ instance Pretty Expr where
     braces (lhs <+> pretty value)
     where
       as = case asExpr of
-        Nothing     -> emptyDoc
+        Nothing -> emptyDoc
         (Just expr) -> space <> "as" <+> pretty expr
       index = pretty propertyKey <+> "in" <+> pretty propertyKeySource <> as
       lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
@@ -231,35 +187,33 @@ instance Pretty Expr where
     fmt left <+> "&" <+> fmt right
     where
       fmt (Union a b) = prettyOpList (Union a b)
-      fmt a           = pretty a
+      fmt a = pretty a
   pretty (Union left right) =
     fmt left <+> "|" <+> fmt right
     where
       fmt (Intersection a b) = prettyOpList (Intersection a b)
-      fmt a                  = pretty a
-  pretty (CaseStatement a b) =
-    pretty (simplify (CaseStatement a b))
+      fmt a = pretty a
   pretty (ExprConditionalType a) = pretty a
 
 instance Pretty Ident where
   pretty (Ident s) = pretty s
 
 instance Pretty PrimitiveType where
-  pretty PrimitiveNever     = "never"
-  pretty PrimitiveAny       = "any"
-  pretty PrimitiveUnknown   = "unknown"
-  pretty PrimitiveNumber    = "number"
-  pretty PrimitiveString    = "string"
-  pretty PrimitiveBoolean   = "boolean"
-  pretty PrimitiveNull      = "null"
+  pretty PrimitiveNever = "never"
+  pretty PrimitiveAny = "any"
+  pretty PrimitiveUnknown = "unknown"
+  pretty PrimitiveNumber = "number"
+  pretty PrimitiveString = "string"
+  pretty PrimitiveBoolean = "boolean"
+  pretty PrimitiveNull = "null"
   pretty PrimitiveUndefined = "undefined"
-  pretty PrimitiveVoid      = "void"
-  pretty PrimitiveBigInt    = "bigint"
+  pretty PrimitiveVoid = "void"
+  pretty PrimitiveBigInt = "bigint"
 
 instance Pretty TypeParam where
   pretty (TypeParam s) = pretty s
   prettyList [] = emptyDoc
-  prettyList l  = angles . hsep . punctuate comma . map pretty $ l
+  prettyList l = angles . hsep . punctuate comma . map pretty $ l
 
 instance Pretty ObjectLiteralProperty where
   pretty KeyValue {..} =
@@ -279,85 +233,23 @@ instance Pretty ConditionalType where
             <> (group ":" <+> pretty else')
         )
 
-instance Pretty ConditionalExpr where
-  pretty cexp = (pretty . expandConditional) cexp
-
 -------------------------------------------------------------------------------
 -- Helpers                                                                   --
 -------------------------------------------------------------------------------
 
 prettyReadonly :: Maybe Bool -> Doc ann
-prettyReadonly Nothing      = emptyDoc
+prettyReadonly Nothing = emptyDoc
 prettyReadonly (Just False) = "-readonly" <> space
-prettyReadonly (Just True)  = "readonly" <> space
+prettyReadonly (Just True) = "readonly" <> space
 
 prettyOptional :: Maybe Bool -> Doc ann
-prettyOptional Nothing      = emptyDoc
+prettyOptional Nothing = emptyDoc
 prettyOptional (Just False) = "-?"
-prettyOptional (Just True)  = "?"
+prettyOptional (Just True) = "?"
 
 prettyOpList :: Expr -> Doc ann
 prettyOpList a =
   group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a
-
--- simplify :: Expr -> Expr
--- simplify (CaseStatement term [Case rhs ifBody, Case (ID "_") elseBody]) =
---   ExtendsExpr
---     { lhs = simplify term,
---       op = ExtendsLeft,
---       negate = False,
---       elseBody = elseBody,
---       ..
---     }
--- simplify (CaseStatement term [Case rhs ifBody]) =
---   ExtendsExpr
---     { lhs = simplify term,
---       op = ExtendsLeft,
---       negate = False,
---       elseBody = never,
---       ..
---     }
--- simplify (CaseStatement term (Case rhs ifBody : tl)) =
---   ExtendsExpr
---     { lhs = simplify term,
---       op = ExtendsLeft,
---       negate = False,
---       elseBody = simplify (CaseStatement term tl),
---       ..
---     }
-simplify a = a
-
-cx :: BoolExpr -> Expr -> Expr -> ConditionalExpr
-cx = ConditionalExpr
-
-ct :: ConditionalType -> Expr
-ct = ExprConditionalType
-
-extends' :: Expr -> Expr -> Expr -> Expr -> ConditionalType
-extends' = ConditionalType
-
-expandConditional' :: ConditionalExpr -> Expr
-expandConditional' = ct . expandConditional
-
-expandConditional :: ConditionalExpr -> ConditionalType
-expandConditional (ConditionalExpr (ExtendsLeft a b) then' else') =
-  extends' a b then' else'
-expandConditional (ConditionalExpr (ExtendsRight b a) then' else') =
-  extends' a b then' else'
-expandConditional (ConditionalExpr (Not con) then' else') =
-  expandConditional (cx con else' then')
-expandConditional (ConditionalExpr (Equals a b) then' else') =
-  extends' (Tuple [a]) (Tuple [b]) then' else'
-expandConditional (ConditionalExpr (NotEquals a b) then' else') =
-  expandConditional (cx (Not (Equals a b)) then' else')
-expandConditional (ConditionalExpr (And a b) then' else') =
-  let outer then'' = cx a then'' else'
-      inner = cx b then' else'
-   in expandConditional (outer (expandConditional' inner))
-expandConditional (ConditionalExpr (Or a b) then' else') =
-  let outer else'' = cx a then' else''
-      inner = cx b then' else'
-   in expandConditional (outer (expandConditional' inner))
 
 mkIdent :: String -> Expr
 mkIdent = ExprIdent . Ident

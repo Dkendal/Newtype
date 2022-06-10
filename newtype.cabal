@@ -27,10 +27,15 @@ library
   exposed-modules:
       Newtype.Parser
       Newtype.Syntax
+      Newtype.Syntax.Conditionals
   other-modules:
       Paths_newtype
   hs-source-dirs:
       src
+  default-extensions:
+      DuplicateRecordFields
+      NamedFieldPuns
+      RecordWildCards
   build-depends:
       base >=4.7 && <5
     , megaparsec
@@ -47,6 +52,10 @@ executable nt
       Paths_newtype
   hs-source-dirs:
       app
+  default-extensions:
+      DuplicateRecordFields
+      NamedFieldPuns
+      RecordWildCards
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -65,10 +74,15 @@ test-suite newtype-test
   other-modules:
       Newtype.ConformanceSpec
       Newtype.ParserSpec
+      Newtype.Syntax.ConditionalsSpec
       Newtype.SyntaxSpec
       Paths_newtype
   hs-source-dirs:
       test
+  default-extensions:
+      DuplicateRecordFields
+      NamedFieldPuns
+      RecordWildCards
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

@@ -1,16 +1,20 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Newtype.SyntaxSpec (spec) where
 
-import           Data.Text
-import           Newtype.Syntax
-import           Prelude                     hiding (unlines, (&&), (||))
-import           Prettyprinter               (LayoutOptions (..),
-                                              PageWidth (..), layoutPretty,
-                                              pretty)
-import           Prettyprinter.Render.String (renderString)
-import           Test.Hspec
+import Data.Text
+import Newtype.Syntax
+import Newtype.Syntax.Conditionals
+import Prettyprinter
+  ( LayoutOptions (..),
+    PageWidth (..),
+    layoutPretty,
+    pretty,
+  )
+import Prettyprinter.Render.String (renderString)
+import Test.Hspec
+import Prelude hiding (unlines, (&&), (||))
 
 (<:) :: Expr -> Expr -> BoolExpr
 a <: b = ExtendsLeft a b
@@ -29,12 +33,6 @@ a && b = And a b
 
 (||) :: BoolExpr -> BoolExpr -> BoolExpr
 a || b = Or a b
-
-ct :: Expr -> Expr -> Expr -> Expr -> ConditionalType
-ct =  ConditionalType
-
-ct' :: Expr -> Expr -> Expr -> Expr -> Expr
-ct' a b c d =  ExprConditionalType (ConditionalType a b c d)
 
 spec :: Spec
 spec = do
@@ -59,12 +57,14 @@ spec = do
       it "outputs equivalent typescript code" $ do
         let ast = ConditionalType a b then' else'
         show (pretty ast) `shouldBe` "A extends B ? Then : Else"
+
     context "when ConditionalExpr" $ do
       it "outputs equivalent typescript code" $ do
-        let ast = ConditionalExpr (a <: b) then' else'
+        let ast = expandConditional $ ConditionalExpr (a <: b) then' else'
         show (pretty ast) `shouldBe` "A extends B ? Then : Else"
+
       it "expands the condition first the expression first" $ do
-        let ast = ConditionalExpr (((a <: b) && (a !== c)) || (b === c)) then' else'
+        let ast = expandConditional $ ConditionalExpr (((a <: b) && (a !== c)) || (b === c)) then' else'
         let str = prettyShort ast
         str
           `shouldBe` fmt
