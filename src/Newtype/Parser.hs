@@ -219,6 +219,7 @@ dollar = char '$'
 pProgram :: Parser Program
 pProgram =
   do
+    scn
     statements <- pStatementList
     void eof
     return (Program statements)

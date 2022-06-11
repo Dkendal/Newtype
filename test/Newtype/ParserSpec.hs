@@ -40,6 +40,26 @@ spec = do
               TypeDefinition "B" [] (DotAccess (mkIdent "b") (mkIdent "c"))
             ]
 
+      it "can start with a comment" $ do
+        subject
+          ( unlines
+              [ "-- comment",
+                "type A = a.b"
+              ]
+          )
+          `shouldBe` Program
+            [TypeDefinition "A" [] (DotAccess (mkIdent "a") (mkIdent "b"))]
+
+      it "can start with a blank line" $ do
+        subject
+          ( unlines
+              [ "",
+                "type A = a.b"
+              ]
+          )
+          `shouldBe` Program
+            [TypeDefinition "A" [] (DotAccess (mkIdent "a") (mkIdent "b"))]
+
     describe "statements" $ do
       let subject = parse' pStatement
 
