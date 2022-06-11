@@ -27,7 +27,7 @@ data Statement
   | InterfaceDefinition
       { name :: String,
         params :: [TypeParam],
-        extends :: [Expr],
+        extends :: Maybe Ident,
         props :: [ObjectLiteralProperty]
       }
   deriving (Eq, Show)
@@ -51,7 +51,11 @@ data ImportSpecifier
   | ImportedAlias {from :: String, to :: String}
   deriving (Eq, Show)
 
-newtype TypeParam = TypeParam {name :: String}
+data TypeParam = TypeParam
+  { name :: String,
+    defaultValue :: Maybe Expr,
+    constraint :: Maybe Expr
+  }
   deriving (Eq, Show)
 
 data Expr
@@ -211,7 +215,7 @@ instance Pretty PrimitiveType where
   pretty PrimitiveBigInt = "bigint"
 
 instance Pretty TypeParam where
-  pretty (TypeParam s) = pretty s
+  pretty (TypeParam name _ _) = pretty name
   prettyList [] = emptyDoc
   prettyList l = angles . hsep . punctuate comma . map pretty $ l
 
@@ -234,6 +238,19 @@ instance Pretty ConditionalType where
         )
 
 -------------------------------------------------------------------------------
+-- Smart constructors                                                        --
+-------------------------------------------------------------------------------
+
+mkIdent :: String -> Expr
+mkIdent = ExprIdent . Ident
+
+ctExpr :: Expr -> Expr -> Expr -> Expr -> Expr
+ctExpr lhs rhs then' else' = ExprConditionalType (ConditionalType lhs rhs then' else')
+
+never :: Expr
+never = PrimitiveType PrimitiveNever
+
+-------------------------------------------------------------------------------
 -- Helpers                                                                   --
 -------------------------------------------------------------------------------
 
@@ -250,12 +267,3 @@ prettyOptional (Just True) = "?"
 prettyOpList :: Expr -> Doc ann
 prettyOpList a =
   group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a
-
-mkIdent :: String -> Expr
-mkIdent = ExprIdent . Ident
-
-ctExpr :: Expr -> Expr -> Expr -> Expr -> Expr
-ctExpr lhs rhs then' else' = ExprConditionalType (ConditionalType lhs rhs then' else')
-
-never :: Expr
-never = PrimitiveType PrimitiveNever

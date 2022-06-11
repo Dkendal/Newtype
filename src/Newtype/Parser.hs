@@ -20,138 +20,6 @@ import Text.Megaparsec.Debug
 
 type Parser = Parsec Void Text
 
-lineComment = L.skipLineComment "--"
-
-blockComment = L.skipBlockComment "{-" "-}"
-
-sc :: Parser ()
-sc = L.space (void $ char ' ' <|> char '\t') lineComment blockComment
-
-scn :: Parser ()
-scn = L.space space1 lineComment blockComment
-
-nonIndented :: Parser a -> Parser a
-nonIndented = L.nonIndented scn
-
-indentGuard :: Ordering -> Pos -> Parser Pos
-indentGuard = L.indentGuard scn
-
-indentBlock :: Parser (L.IndentOpt Parser a b) -> Parser a
-indentBlock = L.indentBlock scn
-
-lexeme :: Parser a -> Parser a
-lexeme = L.lexeme scn
-
-lexeme' :: Parser a -> Parser a
-lexeme' = L.lexeme sc
-
-symbol :: Text -> Parser Text
-symbol = L.symbol scn
-
-symbol' :: Text -> Parser Text
-symbol' = L.symbol sc
-
-keyword :: Text -> Parser Text
-keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
-
-binary name f = InfixL (f <$ symbol name)
-
-prefix name f = Prefix (f <$ symbol name)
-
-postfix name f = Postfix (f <$ symbol name)
-
-stringLiteral :: Parser String
-stringLiteral = char '\"' *> manyTill L.charLiteral (char '\"')
-
-integer :: Parser Integer
-integer = lexeme L.decimal
-
-float :: Parser Double
-float = lexeme L.float
-
-lparen :: Parser Text
-lparen = symbol "("
-
-rparen :: Parser Text
-rparen = symbol ")"
-
-parens :: Parser a -> Parser a
-parens = between lparen rparen
-
-lbrace :: Parser Text
-lbrace = symbol "{"
-
-rbrace :: Parser Text
-rbrace = symbol "}"
-
-braces :: Parser a -> Parser a
-braces = between lbrace rbrace
-
-langle :: Parser Text
-langle = symbol "<"
-
-rangle :: Parser Text
-rangle = symbol ">"
-
-angles :: Parser Text -> Parser Text
-angles = between langle rangle
-
-lbracket :: Parser Text
-lbracket = symbol "["
-
-rbracket :: Parser Text
-rbracket = symbol "]"
-
-brackets :: Parser a -> Parser a
-brackets = between lbracket rbracket
-
-semicolon :: Parser Text
-semicolon = symbol ";"
-
-arrow :: Parser Text
-arrow = symbol "->"
-
-leftArrow :: Parser Text
-leftArrow = symbol "<-"
-
-rightArrow :: Parser Text
-rightArrow = symbol "->"
-
-pipe :: Parser Text
-pipe = symbol "|"
-
-amp :: Parser Text
-amp = symbol "&"
-
-bang :: Parser Text
-bang = symbol "!"
-
-comma :: Parser Text
-comma = symbol ","
-
-colon :: Parser Text
-colon = symbol ":"
-
-qmark :: Parser Text
-qmark = symbol "?"
-
-pound :: Parser Text
-pound = symbol "#"
-
-caret :: Parser Text
-caret = symbol "^"
-
-dot :: Parser Text
-dot = symbol "."
-
-equals :: Parser Text
-equals = symbol "="
-
-inferSym :: Parser Text
-inferSym = qmark
-
-op n = (lexeme . try) (string n <* notFollowedBy punctuationChar)
-
 -- list of reserved words
 reservedWords :: [String]
 reservedWords =
@@ -190,12 +58,193 @@ reservedWords =
     "return"
   ]
 
+-- list of reserved prefix operators
 builtins :: [Text]
 builtins = ["keyof", "typeof"]
 
+-------------------------------------------------------------------------------
+-- Lexing support                                                            --
+-------------------------------------------------------------------------------
+
+lineComment = L.skipLineComment "--"
+
+blockComment = L.skipBlockComment "{-" "-}"
+
+sc :: Parser ()
+sc = L.space (void $ char ' ' <|> char '\t') lineComment blockComment
+
+scn :: Parser ()
+scn = L.space space1 lineComment blockComment
+
+nonIndented :: Parser a -> Parser a
+nonIndented = L.nonIndented scn
+
+indentGuard :: Ordering -> Pos -> Parser Pos
+indentGuard = L.indentGuard scn
+
+indentBlock :: Parser (L.IndentOpt Parser a b) -> Parser a
+indentBlock = L.indentBlock scn
+
+lexeme :: Parser a -> Parser a
+lexeme = L.lexeme scn
+
+lexeme' :: Parser a -> Parser a
+lexeme' = L.lexeme sc
+
+symbol :: Text -> Parser Text
+symbol = L.symbol scn
+
+symbol' :: Text -> Parser Text
+symbol' = L.symbol sc
+
+keyword :: Text -> Parser Text
+keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
+
+stringLiteral :: Parser String
+stringLiteral = char '\"' *> L.charLiteral `manyTill` char '\"'
+
+integer :: Parser Integer
+integer = lexeme L.decimal
+
+float :: Parser Double
+float = lexeme L.float
+
+-- | Left associative binary operator.
+binary name f = InfixL (f <$ symbol name)
+
+prefix name f = Prefix (f <$ symbol name)
+
+postfix name f = Postfix (f <$ symbol name)
+
+-- | Parse an operator, using backtracking to ensure that the operator is not a
+-- prefix of a valid identifier.
+op n = (lexeme . try) (string n <* notFollowedBy punctuationChar)
+
+-------------------------------------------------------------------------------
+-- Symbols                                                                   --
+-------------------------------------------------------------------------------
+
+lparen :: Parser Text
+lparen = symbol "("
+{-# INLINE lparen #-}
+
+rparen :: Parser Text
+rparen = symbol ")"
+{-# INLINE rparen #-}
+
+lbrace :: Parser Text
+lbrace = symbol "{"
+{-# INLINE lbrace #-}
+
+rbrace :: Parser Text
+rbrace = symbol "}"
+{-# INLINE rbrace #-}
+
+langle :: Parser Text
+langle = symbol "<"
+{-# INLINE langle #-}
+
+rangle :: Parser Text
+rangle = symbol ">"
+{-# INLINE rangle #-}
+
+lbracket :: Parser Text
+lbracket = symbol "["
+{-# INLINE lbracket #-}
+
+rbracket :: Parser Text
+rbracket = symbol "]"
+{-# INLINE rbracket #-}
+
+semicolon :: Parser Text
+semicolon = symbol ";"
+{-# INLINE semicolon #-}
+
+arrowLeft :: Parser Text
+arrowLeft = symbol "<-"
+{-# INLINE arrowLeft #-}
+
+arrowRight :: Parser Text
+arrowRight = symbol "->"
+{-# INLINE arrowRight #-}
+
+pipe :: Parser Text
+pipe = symbol "|"
+{-# INLINE pipe #-}
+
+amp :: Parser Text
+amp = symbol "&"
+{-# INLINE amp #-}
+
+bang :: Parser Text
+bang = symbol "!"
+{-# INLINE bang #-}
+
+comma :: Parser Text
+comma = symbol ","
+{-# INLINE comma #-}
+
+colon :: Parser Text
+colon = symbol ":"
+{-# INLINE colon #-}
+
+qmark :: Parser Text
+qmark = symbol "?"
+{-# INLINE qmark #-}
+
+pound :: Parser Text
+pound = symbol "#"
+{-# INLINE pound #-}
+
+caret :: Parser Text
+caret = symbol "^"
+{-# INLINE caret #-}
+
+dot :: Parser Text
+dot = symbol "."
+{-# INLINE dot #-}
+
+equals :: Parser Text
+equals = symbol "="
+{-# INLINE equals #-}
+
+inferSym :: Parser Text
+inferSym = qmark
+{-# INLINE inferSym #-}
+
+underscore :: Parser (Token Text)
+underscore = char '_'
+{-# INLINE underscore #-}
+
+dollar :: Parser (Token Text)
+dollar = char '$'
+{-# INLINE dollar #-}
+
+-------------------------------------------------------------------------------
+-- Pairs                                                                     --
+-------------------------------------------------------------------------------
+
+parens :: Parser a -> Parser a
+parens = between lparen rparen
+{-# INLINE parens #-}
+
+braces :: Parser a -> Parser a
+braces = between lbrace rbrace
+{-# INLINE braces #-}
+
+angles :: Parser Text -> Parser Text
+angles = between langle rangle
+{-# INLINE angles #-}
+
+brackets :: Parser a -> Parser a
+brackets = between lbracket rbracket
+{-# INLINE brackets #-}
+
+-- | First character of a valid identifier.
 identifierHead :: Parser Char
 identifierHead = letterChar <|> underscore <|> dollar
 
+-- | Rest of a valid identifier.
 identifierTail :: Parser Char
 identifierTail = alphaNumChar <|> underscore <|> dollar
 
@@ -208,13 +257,9 @@ identifier = (lexeme . try) (p >>= check)
         then fail $ "keyword " ++ show x ++ " cannot be an identifier"
         else return x
 
-underscore :: Parser (Token Text)
-underscore = char '_'
-{-# INLINE underscore #-}
-
-dollar :: Parser (Token Text)
-dollar = char '$'
-{-# INLINE dollar #-}
+-------------------------------------------------------------------------------
+-- Production rules                                                          --
+-------------------------------------------------------------------------------
 
 pProgram :: Parser Program
 pProgram =
@@ -265,7 +310,12 @@ pTypeDefinition = do
   paramNames <- many identifier
   void equals
   body <- pExpr
-  let params = [TypeParam {name} | name <- paramNames]
+  let defaultValue = Nothing
+  let constraint = Nothing
+  let params =
+        [ TypeParam {name, defaultValue, constraint}
+          | name <- paramNames
+        ]
   return TypeDefinition {..}
 
 pInterfaceDefintion :: Parser Statement
@@ -277,7 +327,7 @@ pInterfaceDefintion = do
   props <- many $ pObjectLiteralProperty <* space
   return InterfaceDefinition {..}
   where
-    extends = []
+    extends = Nothing
     params = []
 
 -- Same as expression, but with recursive terms removed
@@ -460,12 +510,22 @@ pObjectLiteralProperty = do
   value <- pExpr
   return (KeyValue {..})
 
+-- | readonly keyword of an object literal property
+--
+-- Example source:
+-- * `readonly foo: bar`
+-- * `-readonly foo: bar`
 pReadonly =
   optional . choice $
     [ True <$ keyword "readonly",
       False <$ keyword "-readonly"
     ]
 
+-- | optional keyword of an object literal property
+--
+-- Example source:
+-- * `foo?: bar`
+-- * `foo-?: bar`
 pOptional =
   optional . choice $
     [ True <$ qmark,

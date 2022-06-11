@@ -18,13 +18,11 @@ spec = do
   let c = mkIdent "C"
   let d = mkIdent "D"
   let e = mkIdent "E"
+  let parse' parser source =
+        case parse (parser <* eof) "" source of
+          Left err -> error $ errorBundlePretty err
+          Right x -> x
   describe "NewtypeParser" $ do
-    let parse' parser source =
-          let result = parse (parser <* eof) "" source
-           in case result of
-                Left err -> error $ errorBundlePretty err
-                Right x -> x
-
     describe "programs" $ do
       let subject = parse' pProgram
 
@@ -68,7 +66,18 @@ spec = do
           subject "type A = B" `shouldBe` TypeDefinition "A" [] b
 
         it "parses a type definition with type parameters" $ do
-          subject "type A b = B" `shouldBe` TypeDefinition "A" [TypeParam "b"] b
+          subject "type A b = B"
+            `shouldBe` TypeDefinition
+              { name = "A",
+                params =
+                  [ TypeParam
+                      { name = "b",
+                        defaultValue = Nothing,
+                        constraint = Nothing
+                      }
+                  ],
+                body = b
+              }
 
         it "parses a type definition with a definition that uses dot access" $ do
           parse' pProgram "type BuiltIn = M.BuiltIn"
