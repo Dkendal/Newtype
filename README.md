@@ -136,7 +136,7 @@ If the `else` branch is omitted, it is assumed to be `never`.
 
 #### Boolean infix operators
 
-Expressions can be combined using boolean infix operators.
+Expressions can be combined using `and`, and `or`.
 
 ```haskell
 if A <: B then if C <: D then E
@@ -145,8 +145,16 @@ if A <: B then if C <: D then E
 Can be rewritten as:
 
 ```haskell
-if A <: B and C <: D then E
+type T =
+  if A <: B and C <: D
+  then E
 ```
+
+Which is equivalent to:
+
+```typescript
+type T = A extends B ? (C extends D ? E : never) : never;
+````
 
 #### Case statements
 
