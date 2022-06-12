@@ -159,10 +159,17 @@ type T = A extends B ? (C extends D ? E : never) : never;
 #### Case statements
 
 ```haskell
-case A of
-  string -> 1
-  object -> 2
-  _ -> never
+type T =
+  case A of
+    string -> 1
+    object -> 2
+    _ -> never
+```
+
+Which is equivalent to:
+
+```typescript
+type T = A extends string ? 1 : A extends object ? 2 : never;
 ```
 
 ## Related projects
