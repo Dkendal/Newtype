@@ -1,7 +1,4 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 
 module Newtype.Parser where
 
@@ -160,13 +157,13 @@ semicolon :: Parser Text
 semicolon = symbol ";"
 {-# INLINE semicolon #-}
 
-arrowLeft :: Parser Text
-arrowLeft = symbol "<-"
-{-# INLINE arrowLeft #-}
+larrow :: Parser Text
+larrow = symbol "<-"
+{-# INLINE larrow #-}
 
-arrowRight :: Parser Text
-arrowRight = symbol "->"
-{-# INLINE arrowRight #-}
+rarrow :: Parser Text
+rarrow = symbol "->"
+{-# INLINE rarrow #-}
 
 pipe :: Parser Text
 pipe = symbol "|"
@@ -336,7 +333,7 @@ pTerm =
   choice
     [ try pGenericApplication <?> "generic type application",
       try pTuple <?> "tuple",
-      try pMappedType <?> "mapped type",
+      try pMappedType,
       pExprConditionalType <?> "conditional type",
       pNumberIntegerLiteral <?> "number",
       pNumberDoubleLiteral <?> "number",
@@ -398,13 +395,27 @@ pBoolExpr =
 
 pMappedType :: Parser Expr
 pMappedType =
+  braces p
+  where
+    p = do
+      value <- pExpr <?> "mapped type property value"
+      symbol ":"
+      isReadonly <- pReadonly
+      key <- pExpr <?> "mapped type property key"
+      isOptional <- pOptional
+      asExpr <- optional $ keyword "as" *> pExpr
+      larrow
+      source <- pExpr <?> "mapped type source"
+      return MappedType {..}
+
+pMappedType' :: Parser Expr
+pMappedType' =
   do
-    -- TODO: I don't know if there's a way to disambiguate this statement without parens
     value <- pIdent' <|> parens pExpr
     keyword "for"
-    propertyKey <- pIdent'
+    key <- pIdent'
     keyword "in"
-    propertyKeySource <- pIdent'
+    source <- pIdent'
     withAs <- optional $ do
       keyword "as"
       isReadonly <- pReadonly
@@ -447,19 +458,24 @@ pCaseStatement =
 pExpr :: Parser Expr
 pExpr = choice [pTypeOp, pTerm]
 
+-- | Parse an expression with a type operator. A type operator may be a builtin
+-- prefix operator like `typeof` or `keyof`, or a prefix operator: like `!` for
+-- access, or type union or intersection, `|` or `&` respectively.
 pTypeOp :: Parser Expr
 pTypeOp =
   makeExprParser
     pTerm
-    [ [ Prefix $ do
+    [ [ InfixL $ DotAccess <$ (dot <?> "dot access"),
+        InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy "=")
+      ],
+      [ Prefix $ do
           kw <- choice (map keyword builtins) <?> "builtin type function"
           let name = unpack kw
           return (Builtin name)
       ],
-      [InfixL $ DotAccess <$ (dot <?> "dot access")],
-      [InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy "=")],
-      [InfixL $ Intersection <$ (amp <?> "type intersection")],
-      [InfixL $ Union <$ (pipe <?> "type union")]
+      [ InfixL $ Intersection <$ (amp <?> "type intersection"),
+        InfixL $ Union <$ (pipe <?> "type union")
+      ]
     ]
 
 pInferIdent :: Parser Expr
@@ -527,7 +543,10 @@ pReadonly =
 -- * `foo?: bar`
 -- * `foo-?: bar`
 pOptional =
-  optional . choice $
-    [ True <$ qmark,
-      False <$ keyword "-?"
-    ]
+  p <?> "optional postfix key modifier"
+  where
+    p =
+      optional . choice $
+        [ True <$ qmark,
+          False <$ keyword "-?"
+        ]

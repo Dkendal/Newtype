@@ -75,8 +75,8 @@ data Expr
   | ExprConditionalType ConditionalType
   | MappedType
       { value :: Expr,
-        propertyKey :: Expr,
-        propertyKeySource :: Expr,
+        key :: Expr,
+        source :: Expr,
         asExpr :: Maybe Expr,
         isReadonly :: Maybe Bool,
         isOptional :: Maybe Bool
@@ -153,8 +153,8 @@ instance Pretty ImportSpecifier where
 instance Pretty Expr where
   pretty Hole = "_"
   pretty (PrimitiveType t) = pretty t
-  pretty MappedType {asExpr = Just asExpr, propertyKey, ..}
-    | asExpr == propertyKey =
+  pretty MappedType {asExpr = Just asExpr, key, ..}
+    | asExpr == key =
       pretty MappedType {asExpr = Nothing, ..}
   pretty MappedType {..} =
     braces (lhs <+> pretty value)
@@ -162,7 +162,7 @@ instance Pretty Expr where
       as = case asExpr of
         Nothing -> emptyDoc
         (Just expr) -> space <> "as" <+> pretty expr
-      index = pretty propertyKey <+> "in" <+> pretty propertyKeySource <> as
+      index = pretty key <+> "in" <+> pretty source <> as
       lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
   pretty (Builtin a b) = group (pretty a <+> pretty b)
   pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"

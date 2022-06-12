@@ -36,6 +36,7 @@ library
       DuplicateRecordFields
       NamedFieldPuns
       RecordWildCards
+      ScopedTypeVariables
   build-depends:
       base >=4.7 && <5
     , megaparsec
@@ -56,6 +57,7 @@ executable nt
       DuplicateRecordFields
       NamedFieldPuns
       RecordWildCards
+      ScopedTypeVariables
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -83,6 +85,7 @@ test-suite newtype-test
       DuplicateRecordFields
       NamedFieldPuns
       RecordWildCards
+      ScopedTypeVariables
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

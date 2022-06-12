@@ -23,8 +23,8 @@ parseArgs fs = concat `fmap` mapM compileFile fs
 compileFile :: String -> IO String
 compileFile path =
   do
-    source <- readFile path
-    return (either errorBundlePretty (show . pretty) (parse pProgram path source))
+    from <- readFile path
+    return (either errorBundlePretty (show . pretty) (parse pProgram path from))
 
 usage :: IO ()
 usage = putStrLn "Usage: nt [-vh] <file> ..."

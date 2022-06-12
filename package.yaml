@@ -35,6 +35,7 @@ default-extensions:
   - DuplicateRecordFields
   - NamedFieldPuns
   - RecordWildCards
+  - ScopedTypeVariables
 
 executables:
   nt:

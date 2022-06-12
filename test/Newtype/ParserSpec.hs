@@ -112,6 +112,46 @@ spec = do
           let source = "if A <: B then C"
           parse' pExpr source `shouldBe` ctExpr a b c never
 
+      describe "mapped types" $ do
+        it "should parse mapped types" $ do
+          let source = "{ Value : Key <- Type}"
+          let expected =
+                MappedType
+                  { value = mkIdent "Value",
+                    key = mkIdent "Key",
+                    source = mkIdent "Type",
+                    asExpr = Nothing,
+                    isReadonly = Nothing,
+                    isOptional = Nothing
+                  }
+          parse' pExpr source `shouldBe` expected
+
+        it "should parse key remapping with the `as` keyword" $ do
+          let source = "{ Value : Key as OtherKey <- Type}"
+          let expected =
+                MappedType
+                  { value = mkIdent "Value",
+                    key = mkIdent "Key",
+                    source = mkIdent "Type",
+                    asExpr = Just (mkIdent "OtherKey"),
+                    isReadonly = Nothing,
+                    isOptional = Nothing
+                  }
+          parse' pExpr source `shouldBe` expected
+
+        it "should parse the `readonly` prefix modifier applied to the key" $ do
+          let source = "{ Value : readonly Key <- Type}"
+          let expected =
+                MappedType
+                  { value = mkIdent "Value",
+                    key = mkIdent "Key",
+                    source = mkIdent "Type",
+                    asExpr = Nothing,
+                    isReadonly = Just True,
+                    isOptional = Nothing
+                  }
+          parse' pExpr source `shouldBe` expected
+
       describe "generic application" $ do
         it "parses" $ do
           let source = "A B C"

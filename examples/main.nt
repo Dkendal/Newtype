@@ -49,6 +49,16 @@ type Kind
   | typeof bigint_
   | typeof object_
 
+-- export type AnyNever<T extends object> = keyof T extends infer S
+--   ? S extends any
+--     ? { [K in A.Cast<S, string | number | symbol>]: never }
+--     : never
+--   : never;
+
+type AnyNever T when T <: Object =
+  if keyof T <: ?S and S <: any
+  then { never | K <- A.Cast S string | number | symbol }
+
 -- Interface syntax, TBD
 --
 -- -- Default arguments?
