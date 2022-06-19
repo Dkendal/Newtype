@@ -27,9 +27,14 @@ data Statement
   | InterfaceDefinition
       { name :: String,
         params :: [TypeParam],
-        extends :: Maybe Ident,
-        props :: [ObjectLiteralProperty]
+        extends :: Maybe Extensible,
+        props :: [Property]
       }
+  deriving (Eq, Show)
+
+data Extensible
+  = ExtendIdent Ident
+  | ExtendGeneric GenericApplication
   deriving (Eq, Show)
 
 data ImportClause
@@ -63,8 +68,8 @@ data Expr
   | NumberIntegerLiteral Integer
   | NumberDoubleLiteral Double
   | BooleanLiteral Bool
-  | ObjectLiteral [ObjectLiteralProperty]
-  | GenericApplication Ident [Expr]
+  | ObjectLiteral [Property]
+  | ExprGenericApplication GenericApplication
   | Access Expr Expr
   | DotAccess Expr Expr
   | PrimitiveType PrimitiveType
@@ -86,6 +91,10 @@ data Expr
   | Hole
   deriving (Eq, Show)
 
+data GenericApplication
+  = GenericApplication Ident [Expr]
+  deriving (Eq, Show)
+
 data PrimitiveType
   = PrimitiveNever
   | PrimitiveAny
@@ -100,7 +109,7 @@ data PrimitiveType
   deriving (Eq, Show)
 
 newtype Ident = Ident String
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data ConditionalType = ConditionalType
   { lhs :: Expr,
@@ -110,12 +119,22 @@ data ConditionalType = ConditionalType
   }
   deriving (Show, Eq)
 
-data ObjectLiteralProperty = KeyValue
-  { isReadonly :: Maybe Bool,
-    isOptional :: Maybe Bool,
-    key :: String,
-    value :: Expr
-  }
+data Property
+  = DataProperty
+      { isReadonly :: Maybe Bool,
+        isOptional :: Maybe Bool,
+        accessor :: Maybe Accessor,
+        key :: String,
+        value :: Expr
+      }
+  | AccessorProperty
+      { accessor :: Maybe Accessor,
+        key :: String,
+        value :: Expr
+      }
+  deriving (Eq, Show)
+
+data Accessor = Getter | Setter
   deriving (Eq, Show)
 
 -------------------------------------------------------------------------------
@@ -172,8 +191,7 @@ instance Pretty Expr where
   pretty (BooleanLiteral True) = "true"
   pretty (BooleanLiteral False) = "false"
   pretty (StringLiteral value) = dquotes . pretty $ value
-  pretty (GenericApplication ident []) = pretty ident
-  pretty (GenericApplication typeName params) = pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
+  pretty (ExprGenericApplication a) = pretty a
   pretty (ObjectLiteral []) = "{}"
   pretty (ObjectLiteral props) =
     group
@@ -199,6 +217,11 @@ instance Pretty Expr where
       fmt a = pretty a
   pretty (ExprConditionalType a) = pretty a
 
+instance Pretty GenericApplication where
+  pretty (GenericApplication ident []) = pretty ident
+  pretty (GenericApplication typeName params) =
+    pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
+
 instance Pretty Ident where
   pretty (Ident s) = pretty s
 
@@ -219,13 +242,15 @@ instance Pretty TypeParam where
   prettyList [] = emptyDoc
   prettyList l = angles . hsep . punctuate comma . map pretty $ l
 
-instance Pretty ObjectLiteralProperty where
-  pretty KeyValue {..} =
+instance Pretty Property where
+  pretty DataProperty {..} =
     lhs <+> pretty value
     where
       readonly = prettyReadonly isReadonly
       optional = prettyOptional isOptional
       lhs = group readonly <> pretty key <> optional <> ":"
+  pretty AccessorProperty {..} =
+    error "not implemented"
 
 instance Pretty ConditionalType where
   pretty (ConditionalType a b then' else') =
@@ -243,6 +268,9 @@ instance Pretty ConditionalType where
 
 mkIdent :: String -> Expr
 mkIdent = ExprIdent . Ident
+
+genericAp :: Ident -> [Expr] -> Expr
+genericAp = (ExprGenericApplication .) . GenericApplication
 
 ctExpr :: Expr -> Expr -> Expr -> Expr -> Expr
 ctExpr lhs rhs then' else' = ExprConditionalType (ConditionalType lhs rhs then' else')

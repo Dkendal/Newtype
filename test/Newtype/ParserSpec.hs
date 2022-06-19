@@ -61,9 +61,86 @@ spec = do
     describe "statements" $ do
       let subject = parse' pStatement
 
+      describe "interface definition" $ do
+        it "parses an interface definition" $ do
+          let expected =
+                InterfaceDefinition
+                  { name = "A",
+                    params =
+                      [ TypeParam
+                          { name = "t1",
+                            defaultValue = Just (PrimitiveType PrimitiveAny),
+                            constraint = Just (PrimitiveType PrimitiveString)
+                          },
+                        TypeParam
+                          { name = "t2",
+                            defaultValue = Just (PrimitiveType PrimitiveAny),
+                            constraint = Just (PrimitiveType PrimitiveNumber)
+                          }
+                      ],
+                    extends =
+                      Just
+                        ( ExtendGeneric
+                            ( GenericApplication
+                                (Ident "Foo")
+                                [ ExprIdent
+                                    (Ident "Bar")
+                                ]
+                            )
+                        ),
+                    props =
+                      [ DataProperty
+                          { isReadonly = Nothing,
+                            isOptional = Nothing,
+                            accessor = Nothing,
+                            key = "a",
+                            value = ExprIdent (Ident "A")
+                          },
+                        DataProperty
+                          { isReadonly = Nothing,
+                            isOptional = Nothing,
+                            accessor = Nothing,
+                            key = "b",
+                            value = ExprIdent (Ident "B")
+                          }
+                      ]
+                  }
+
+          subject
+            ( unlines
+                [ "interface A t1 t2",
+                  "  when",
+                  "    t1 <: string",
+                  "    t2 <: number",
+                  "  defaults",
+                  "    t1 = any",
+                  "    t2 = any",
+                  "  extends Foo Bar",
+                  "  where",
+                  "    a = A",
+                  "    b = B"
+                ]
+            )
+            `shouldBe` expected
+
       describe "type definition" $ do
         it "parses a type definition" $ do
           subject "type A = B" `shouldBe` TypeDefinition "A" [] b
+
+        -- it "parses type definitions with default values for type parameters" $ do
+        --   subject
+        --     ( unlines
+        --         [ "type Type A B",
+        --           "  when"
+        --           "    A <: number",
+        --           "    B <: number",
+        --           "  defaults",
+        --           "    A = 1",
+        --           "    B = 2"
+        --           "  = { a: A, b: B }"
+        --         ]
+        --     )
+        --     `shouldBe` TypeDefinition "A" [TypeParameter "T" Nothing b] b
 
         it "parses a type definition with type parameters" $ do
           subject "type A b = B"
@@ -155,22 +232,55 @@ spec = do
       describe "generic application" $ do
         it "parses" $ do
           let source = "A B C"
-          subject source `shouldBe` GenericApplication (Ident "A") [b, c]
+          let expected =
+                ExprGenericApplication
+                  ( GenericApplication
+                      (Ident "A")
+                      [ ExprIdent (Ident "B"),
+                        ExprIdent (Ident "C")
+                      ]
+                  )
+          subject source `shouldBe` expected
 
         it "parses parenthesized expressions" $ do
           let source = "(A B C)"
-          subject source `shouldBe` GenericApplication (Ident "A") [b, c]
+          let expected =
+                ExprGenericApplication
+                  ( GenericApplication
+                      (Ident "A")
+                      [ ExprIdent (Ident "B"),
+                        ExprIdent (Ident "C")
+                      ]
+                  )
+          subject source `shouldBe` expected
 
-        it "doesn't matter how man parens there are" $ do
+        it "doesn't matter how many parens there are" $ do
           let source = "((A B C))"
-          subject source `shouldBe` GenericApplication (Ident "A") [b, c]
+          let expected =
+                ExprGenericApplication
+                  ( GenericApplication
+                      (Ident "A")
+                      [ ExprIdent (Ident "B"),
+                        ExprIdent (Ident "C")
+                      ]
+                  )
+
+          subject source `shouldBe` expected
 
         it "should parse nested expressions in the arguments" $ do
           let source = "A (B C)"
-          subject source
-            `shouldBe` GenericApplication
-              (Ident "A")
-              [GenericApplication (Ident "B") [c]]
+          let expected =
+                ExprGenericApplication
+                  ( GenericApplication
+                      (Ident "A")
+                      [ ExprGenericApplication
+                          ( GenericApplication
+                              (Ident "B")
+                              [ExprIdent (Ident "C")]
+                          )
+                      ]
+                  )
+          subject source `shouldBe` expected
 
     describe "conditional expr" $ do
       let subject = parse' pBoolExpr

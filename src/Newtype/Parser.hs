@@ -5,9 +5,12 @@ module Newtype.Parser where
 import Control.Applicative hiding (many, some)
 import Control.Monad
 import Control.Monad.Combinators.Expr
+import Data.Functor
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text, pack, unpack)
 import Data.Void
+import Debug.Trace
 import Newtype.Syntax
 import Newtype.Syntax.Conditionals
 import Text.Megaparsec hiding (State)
@@ -21,38 +24,59 @@ type Parser = Parsec Void Text
 reservedWords :: [String]
 reservedWords =
   [ "and",
+    "any",
     "as",
     "async",
     "await",
+    "boolean",
     "case",
+    "class",
+    "const",
+    "delete",
     "do",
+    "defaults",
     "else",
+    "enum",
+    "extends",
+    "false",
     "for",
     "from",
+    "function",
+    "get",
     "goto",
     "if",
+    "implements",
     "import",
+    "interface",
     "keyof",
+    "let",
+    "member",
+    "never",
+    "new",
     "not",
+    "null",
+    "number",
+    "object",
     "of",
     "or",
     "readonly",
     "require",
+    "return",
+    "set",
+    "string",
+    "symbol",
     "then",
-    "typeof",
-    "while",
-    "yield",
+    "true",
     "type",
-    "interface",
-    "class",
-    "enum",
-    "extends",
-    "implements",
-    "let",
-    "const",
+    "typeof",
+    "undefined",
     "var",
-    "function",
-    "return"
+    "void",
+    "while",
+    "where",
+    "when",
+    "with",
+    "yield"
   ]
 
 -- list of reserved prefix operators
@@ -317,21 +341,75 @@ pTypeDefinition = do
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do
-  void $ keyword "interface"
-  name <- identifier
-  void $ keyword "where"
-  void newline
-  props <- many $ pObjectLiteralProperty <* space
+  keyword "interface"
+  name <- identifier <?> "interface name"
+  paramNames <- many identifier
+  constraints <- whenClause
+  defaults <- defaultsClause
+  extends <- optional extendsClause <?> "interface extends clause"
+  props <- whereClause
+  let params = makeParams paramNames constraints defaults
   return InterfaceDefinition {..}
   where
-    extends = Nothing
-    params = []
+    whereClause = do
+      keyword "where"
+      some pMember <?> "interface properties"
+
+    defaultsClause = do
+      t <- optional $ do
+        keyword "defaults"
+        some $ do
+          Ident name <- pIdent
+          equals
+          value <- pExpr
+          return (name, value)
+      return $ maybe Map.empty Map.fromList t
+
+    whenClause = do
+      t <- optional $ do
+        keyword "when"
+        some $ do
+          Ident lhs <- pIdent
+          symbol "<:"
+          rhs <- pExpr
+          return (lhs, rhs)
+      return $ maybe Map.empty Map.fromList t
+
+    makeParams paramNames constraints defaults =
+      [ TypeParam
+          { name = paramName,
+            defaultValue = Map.lookup paramName defaults,
+            constraint = Map.lookup paramName constraints
+          }
+        | let defaultValue = Nothing,
+          paramName <- paramNames
+      ]
+
+    -- Example input:
+    --  extends Foo
+    --  extends Foo A B C
+    --  extends (Foo A B C)
+    extendsClause :: Parser Extensible
+    extendsClause = keyword "extends" *> generic <|> id
+    generic = parens generic <|> ExtendGeneric <$> pGenericApplication
+    id = ExtendIdent <$> pIdent
+
+    -- Example input: "member x = 1"
+    pMember = do
+      isReadonly <- pReadonly
+      key <- identifier
+      isOptional <- pOptional
+      equals
+      value <- pExpr
+      let accessor = Nothing
+      return $ DataProperty {..}
 
 -- Same as expression, but with recursive terms removed
 pTerm :: Parser Expr
 pTerm =
   choice
-    [ try pGenericApplication <?> "generic type application",
+    [ (PrimitiveType <$> pPrimitive) <?> "type primitive",
+      try (ExprGenericApplication <$> pGenericApplication) <?> "generic type application",
       try pTuple <?> "tuple",
       try pMappedType,
       pExprConditionalType <?> "conditional type",
@@ -348,12 +426,26 @@ pTerm =
       hidden . parens $ pExpr
     ]
 
+pPrimitive :: Parser PrimitiveType
+pPrimitive =
+  choice
+    [ keyword "never" $> PrimitiveNever,
+      keyword "any" $> PrimitiveAny,
+      keyword "unknown" $> PrimitiveUnknown,
+      keyword "number" $> PrimitiveNumber,
+      keyword "bigint" $> PrimitiveBigInt,
+      keyword "string" $> PrimitiveString,
+      keyword "boolean" $> PrimitiveBoolean,
+      keyword "null" $> PrimitiveNull,
+      keyword "undefined" $> PrimitiveUndefined,
+      keyword "void" $> PrimitiveVoid
+    ]
+
 pHole :: Parser Expr
 pHole = Hole <$ symbol "_" <* notFollowedBy identifierTail
 
 pExprConditionalType :: Parser Expr
-pExprConditionalType = do
-  -- NOTE: I'm not sure about doing online expansion here
+pExprConditionalType =
   ExprConditionalType . expandConditional <$> pConditionalExpr
 
 pConditionalExpr :: Parser ConditionalExpr
@@ -504,9 +596,9 @@ pIdent' = ExprIdent <$> pIdent <?> "identifier"
 
 pObjectLiteral :: Parser Expr
 pObjectLiteral =
-  ObjectLiteral <$> braces (pObjectLiteralProperty `sepBy` comma)
+  ObjectLiteral <$> braces (pProperty `sepBy` comma)
 
-pGenericApplication :: Parser Expr
+pGenericApplication :: Parser GenericApplication
 pGenericApplication = do
   pos <- L.indentLevel
   id <- pIdent
@@ -515,16 +607,17 @@ pGenericApplication = do
       [ indentGuard GT pos *> pIdent',
         indentGuard GT pos *> try pTerm
       ]
-  return (GenericApplication id params)
+  return $ GenericApplication id params
 
-pObjectLiteralProperty :: Parser ObjectLiteralProperty
-pObjectLiteralProperty = do
+pProperty :: Parser Property
+pProperty = do
   isReadonly <- pReadonly
   key <- identifier
   isOptional <- pOptional
   void colon
   value <- pExpr
-  return (KeyValue {..})
+  let accessor = Nothing
+  return (DataProperty {..})
 
 -- | readonly keyword of an object literal property
 --
