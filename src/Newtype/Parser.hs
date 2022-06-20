@@ -20,6 +20,8 @@ import Text.Megaparsec.Debug
 
 type Parser = Parsec Void Text
 
+type FormalParamMap = Map.Map String Expr
+
 -- list of reserved words
 reservedWords :: [String]
 reservedWords =
@@ -328,62 +330,23 @@ pTypeDefinition :: Parser Statement
 pTypeDefinition = do
   void $ keyword "type"
   name <- identifier
-  paramNames <- many identifier
-  void equals
+  params <- pFormalParameters
+  equals
   body <- pExpr
-  let defaultValue = Nothing
-  let constraint = Nothing
-  let params =
-        [ TypeParam {name, defaultValue, constraint}
-          | name <- paramNames
-        ]
   return TypeDefinition {..}
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do
   keyword "interface"
   name <- identifier <?> "interface name"
-  paramNames <- many identifier
-  constraints <- whenClause
-  defaults <- defaultsClause
+  params <- pFormalParameters
   extends <- optional extendsClause <?> "interface extends clause"
   props <- whereClause
-  let params = makeParams paramNames constraints defaults
   return InterfaceDefinition {..}
   where
     whereClause = do
       keyword "where"
       some pMember <?> "interface properties"
-
-    defaultsClause = do
-      t <- optional $ do
-        keyword "defaults"
-        some $ do
-          Ident name <- pIdent
-          equals
-          value <- pExpr
-          return (name, value)
-      return $ maybe Map.empty Map.fromList t
-
-    whenClause = do
-      t <- optional $ do
-        keyword "when"
-        some $ do
-          Ident lhs <- pIdent
-          symbol "<:"
-          rhs <- pExpr
-          return (lhs, rhs)
-      return $ maybe Map.empty Map.fromList t
-
-    makeParams paramNames constraints defaults =
-      [ TypeParam
-          { name = paramName,
-            defaultValue = Map.lookup paramName defaults,
-            constraint = Map.lookup paramName constraints
-          }
-        | let defaultValue = Nothing,
-          paramName <- paramNames
-      ]
 
     -- Example input:
     --  extends Foo
@@ -403,6 +366,32 @@ pInterfaceDefintion = do
       value <- pExpr
       let accessor = Nothing
       return $ DataProperty {..}
+
+pFormalParameters :: Parser [TypeParam]
+pFormalParameters = do
+  makeParams <$> many identifier <*> pWhenClause <*> pDefaultsClause
+
+pDefaultsClause :: Parser FormalParamMap
+pDefaultsClause = do
+  t <- optional $ do
+    keyword "defaults"
+    some $ do
+      Ident name <- pIdent
+      equals
+      value <- pExpr
+      return (name, value)
+  return $ maybe Map.empty Map.fromList t
+
+pWhenClause :: Parser FormalParamMap
+pWhenClause = do
+  t <- optional $ do
+    keyword "when"
+    some $ do
+      Ident lhs <- pIdent
+      symbol "<:"
+      rhs <- pExpr
+      return (lhs, rhs)
+  return $ maybe Map.empty Map.fromList t
 
 -- Same as expression, but with recursive terms removed
 pTerm :: Parser Expr
@@ -643,3 +632,14 @@ pOptional =
         [ True <$ qmark,
           False <$ keyword "-?"
         ]
+
+makeParams :: [String] -> FormalParamMap -> FormalParamMap -> [TypeParam]
+makeParams paramNames constraints defaults =
+  [ TypeParam
+      { name = paramName,
+        defaultValue = Map.lookup paramName defaults,
+        constraint = Map.lookup paramName constraints
+      }
+    | let defaultValue = Nothing,
+      paramName <- paramNames
+  ]

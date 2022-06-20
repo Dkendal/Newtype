@@ -127,20 +127,53 @@ spec = do
         it "parses a type definition" $ do
           subject "type A = B" `shouldBe` TypeDefinition "A" [] b
 
-        -- it "parses type definitions with default values for type parameters" $ do
-        --   subject
-        --     ( unlines
-        --         [ "type Type A B",
-        --           "  when"
-        --           "    A <: number",
-        --           "    B <: number",
-        --           "  defaults",
-        --           "    A = 1",
-        --           "    B = 2"
-        --           "  = { a: A, b: B }"
-        --         ]
-        --     )
-        --     `shouldBe` TypeDefinition "A" [TypeParameter "T" Nothing b] b
+        it "parses type definitions with default values for type parameters" $ do
+          let expected =
+                TypeDefinition
+                  { name = "Type",
+                    params =
+                      [ TypeParam
+                          { name = "A",
+                            defaultValue = Just (NumberIntegerLiteral 1),
+                            constraint = Just (PrimitiveType PrimitiveNumber)
+                          },
+                        TypeParam
+                          { name = "B",
+                            defaultValue = Just (NumberIntegerLiteral 2),
+                            constraint = Just (PrimitiveType PrimitiveNumber)
+                          }
+                      ],
+                    body =
+                      ObjectLiteral
+                        [ DataProperty
+                            { isReadonly = Nothing,
+                              isOptional = Nothing,
+                              accessor = Nothing,
+                              key = "a",
+                              value = ExprIdent (Ident "A")
+                            },
+                          DataProperty
+                            { isReadonly = Nothing,
+                              isOptional = Nothing,
+                              accessor = Nothing,
+                              key = "b",
+                              value = ExprIdent (Ident "B")
+                            }
+                        ]
+                  }
+          subject
+            ( unlines
+                [ "type Type A B",
+                  "  when",
+                  "    A <: number",
+                  "    B <: number",
+                  "  defaults",
+                  "    A = 1",
+                  "    B = 2",
+                  "  = { a: A, b: B }"
+                ]
+            )
+            `shouldBe` expected
 
         it "parses a type definition with type parameters" $ do
           subject "type A b = B"
