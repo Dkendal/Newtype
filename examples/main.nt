@@ -32,9 +32,9 @@ type ExtractSubcapture T =
   if not T <: M.Primitive | M.BuiltIn and T <: object
   then T ! Exclude (keyof T) (keyof []) (keyof {})
 
-type PartialAssignment K V =
-  if not V == never and K <: string
-  then V for k in K
+type PartialAssignment Key Value =
+  if not Value == never and Key <: string
+  then { Value : k <- Key }
 
 type EmptyToNever T = if not {} <: T then T
 
@@ -57,7 +57,7 @@ type Kind
 
 type AnyNever T when T <: Object =
   if keyof T <: ?S and S <: any
-  then { never | K <- A.Cast S string | number | symbol }
+  then { never : K <- A.Cast S string | number | symbol }
 
 -- Interface syntax, TBD
 --

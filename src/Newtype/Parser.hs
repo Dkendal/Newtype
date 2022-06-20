@@ -121,7 +121,7 @@ symbol' :: Text -> Parser Text
 symbol' = L.symbol sc
 
 keyword :: Text -> Parser Text
-keyword txt = lexeme (string txt <* notFollowedBy alphaNumChar)
+keyword txt = lexeme (string txt <* notFollowedBy identifierTail)
 
 stringLiteral :: Parser String
 stringLiteral = char '\"' *> L.charLiteral `manyTill` char '\"'
@@ -397,7 +397,7 @@ pWhenClause = do
 pTerm :: Parser Expr
 pTerm =
   choice
-    [ (PrimitiveType <$> pPrimitive) <?> "type primitive",
+    [ try (PrimitiveType <$> pPrimitive) <?> "type primitive",
       try (ExprGenericApplication <$> pGenericApplication) <?> "generic type application",
       try pTuple <?> "tuple",
       try pMappedType,
@@ -427,7 +427,9 @@ pPrimitive =
       keyword "boolean" $> PrimitiveBoolean,
       keyword "null" $> PrimitiveNull,
       keyword "undefined" $> PrimitiveUndefined,
-      keyword "void" $> PrimitiveVoid
+      keyword "void" $> PrimitiveVoid,
+      keyword "object" $> PrimitiveObject,
+      keyword "symbol" $> PrimitiveSymbol
     ]
 
 pHole :: Parser Expr
@@ -474,6 +476,8 @@ pBoolExpr =
             NotEquals lhs <$ keyword "!=" <*> pExpr
           ]
 
+-- Example input:
+--    { V : K <- keyof T }
 pMappedType :: Parser Expr
 pMappedType =
   braces p

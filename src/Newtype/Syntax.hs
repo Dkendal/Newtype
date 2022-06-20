@@ -106,6 +106,8 @@ data PrimitiveType
   | PrimitiveNull
   | PrimitiveUndefined
   | PrimitiveVoid
+  | PrimitiveObject
+  | PrimitiveSymbol
   deriving (Eq, Show)
 
 newtype Ident = Ident String
@@ -236,6 +238,8 @@ instance Pretty PrimitiveType where
   pretty PrimitiveUndefined = "undefined"
   pretty PrimitiveVoid = "void"
   pretty PrimitiveBigInt = "bigint"
+  pretty PrimitiveSymbol = "symbol"
+  pretty PrimitiveObject = "object"
 
 instance Pretty TypeParam where
   pretty (TypeParam name _ _) = pretty name
