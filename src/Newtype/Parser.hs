@@ -310,14 +310,14 @@ pImportClause =
 pStatement :: Parser Statement
 pStatement =
   choice
-    [ pExport,
+    [ -- pExport,
       pImport,
       pTypeDefinition,
       pInterfaceDefintion
     ]
 
-pExport :: Parser Statement
-pExport = ExportStatement <$ string "export"
+-- pExport :: Parser Statement
+-- pExport = ExportStatement <$ string "export"
 
 pImport :: Parser Statement
 pImport = do

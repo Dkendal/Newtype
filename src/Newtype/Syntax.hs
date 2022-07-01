@@ -18,7 +18,7 @@ data Statement
       { importClause :: ImportClause,
         fromClause :: String
       }
-  | ExportStatement
+  | ExportStatement [Ident]
   | TypeDefinition
       { name :: String,
         params :: [TypeParam],
@@ -147,12 +147,19 @@ instance Pretty Program where
 
 instance Pretty Statement where
   pretty ImportDeclaration {..} =
-    "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause)
+    "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause) <> semi
+  --
   pretty TypeDefinition {..} =
-    group ("type" <+> pretty name <> prettyList params) <> group (nest 2 (line <> "=" <+> pretty body))
-  pretty ExportStatement = emptyDoc
+    group head <> group (nest 2 body') <> semi
+    where
+      head = "type" <+> pretty name <> prettyList params
+      body' = line <> "=" <+> pretty body
+  --
+  pretty (ExportStatement s) =
+    "export" <+> (braces . hsep . punctuate comma . map pretty) s <> semi
+  --
   pretty InterfaceDefinition {..} =
-    (group "interface" <+> pretty name) <+> vsep [lbrace, body, rbrace]
+    (group "interface" <+> pretty name) <+> vsep [lbrace, body, rbrace] <> semi
     where
       body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
 

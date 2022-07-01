@@ -9,6 +9,7 @@ import System.Exit
 import Text.Megaparsec (errorBundlePretty, parse)
 import qualified Text.Megaparsec ()
 import Prelude hiding (readFile)
+import Newtype.Compiler (compile)
 
 main :: IO ()
 main =
@@ -23,8 +24,8 @@ parseArgs fs = concat `fmap` mapM compileFile fs
 compileFile :: String -> IO String
 compileFile path =
   do
-    from <- readFile path
-    return (either errorBundlePretty (show . pretty) (parse pProgram path from))
+    sourceCode <- readFile path
+    return (either errorBundlePretty (show . pretty) (compile path sourceCode))
 
 usage :: IO ()
 usage = putStrLn "Usage: nt [-vh] <file> ..."

@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Newtype.Compiler
       Newtype.Parser
       Newtype.Syntax
       Newtype.Syntax.Conditionals
@@ -76,6 +77,7 @@ test-suite newtype-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Newtype.CompilerSpec
       Newtype.ConformanceSpec
       Newtype.ParserSpec
       Newtype.Syntax.ConditionalsSpec

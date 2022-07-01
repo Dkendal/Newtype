@@ -44,6 +44,12 @@ spec = do
   let fmt = unpack . stripEnd . unlines
   let prettyShort ast = renderString (layoutPretty (LayoutOptions (AvailablePerLine 1 1)) (pretty ast))
   describe "pretty" $ do
+    describe "Statements" $ do
+      describe "ExportStatement" $ do
+        it "formats the statement" $ do
+          let ast = ExportStatement [Ident "A", Ident "B"]
+          show (pretty ast) `shouldBe` "export {A, B};"
+
     context "when Tuple" $ do
       it "formats properly when empty" $ do
         let ast = Tuple []

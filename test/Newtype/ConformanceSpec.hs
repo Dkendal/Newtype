@@ -25,9 +25,9 @@ specProgram =
               "type B = 2"
             ]
           expected =
-            [ "type A = 1",
+            [ "type A = 1;",
               "",
-              "type B = 2"
+              "type B = 2;"
             ]
        in pp pProgram (unlines actual) `shouldBe` here expected
     it "can have successive type definitions with complex terms" $ do
@@ -36,9 +36,9 @@ specProgram =
               "type T2 = (B.C)"
             ]
           expected =
-            [ "type T1 = A.B",
+            [ "type T1 = A.B;",
               "",
-              "type T2 = B.C"
+              "type T2 = B.C;"
             ]
        in pp pProgram (unlines actual) `shouldBe` here expected
 
