@@ -131,8 +131,8 @@ spec = do
                   "    t2 = any",
                   "  extends Foo Bar",
                   "  where",
-                  "    a = A",
-                  "    b = B"
+                  "    a : A",
+                  "    b : B"
                 ]
             )
             `shouldBe` expected
@@ -328,6 +328,20 @@ spec = do
                       ]
                   )
           subject source `shouldBe` expected
+
+    describe "properties" $ do
+      let subject = parse' pProperty
+      it "can parse index property" $ do
+        let src = "index key : string"
+        let ast =
+              DataProperty
+                { isReadonly = Nothing,
+                  isOptional = Nothing,
+                  accessor = Nothing,
+                  key = "key",
+                  value = PrimitiveType PrimitiveString
+                }
+        subject src `shouldBe` ast
 
     describe "conditional expr" $ do
       let subject = parse' pBoolExpr

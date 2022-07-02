@@ -346,7 +346,7 @@ pInterfaceDefintion = do
   where
     whereClause = do
       keyword "where"
-      some pMember <?> "interface properties"
+      some pProperty <?> "interface properties"
 
     -- Example input:
     --  extends Foo
@@ -356,16 +356,6 @@ pInterfaceDefintion = do
     extendsClause = keyword "extends" *> generic <|> id
     generic = parens generic <|> ExtendGeneric <$> pGenericApplication
     id = ExtendIdent <$> pIdent
-
-    -- Example input: "member x = 1"
-    pMember = do
-      isReadonly <- pReadonly
-      key <- identifier
-      isOptional <- pOptional
-      equals
-      value <- pExpr
-      let accessor = Nothing
-      return $ DataProperty {..}
 
 pFormalParameters :: Parser [TypeParam]
 pFormalParameters = do
@@ -605,9 +595,10 @@ pGenericApplication = do
 pProperty :: Parser Property
 pProperty = do
   isReadonly <- pReadonly
+  isIndex <- optional (keyword "index")
   key <- identifier
   isOptional <- pOptional
-  void colon
+  symbol ":"
   value <- pExpr
   let accessor = Nothing
   return (DataProperty {..})
