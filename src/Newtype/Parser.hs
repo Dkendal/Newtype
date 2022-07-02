@@ -595,7 +595,7 @@ pGenericApplication = do
 pProperty :: Parser Property
 pProperty = do
   isReadonly <- pReadonly
-  isIndex <- optional (keyword "index")
+  isIndex <- fmap isJust (optional (keyword "index"))
   key <- identifier
   isOptional <- pOptional
   symbol ":"

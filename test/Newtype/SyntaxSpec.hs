@@ -105,6 +105,30 @@ spec = do
               "    : Else"
             ]
 
+    describe "properties" $ do
+      context "index properties" $ do
+        it "formats output" $ do
+          let ast = DataProperty False Nothing (Just True) Nothing "key" (PrimitiveType PrimitiveAny)
+          let str = "key?: any"
+          show (pretty ast) `shouldBe` str
+
+      context "optional properties" $ do
+        it "formats output" $ do
+          let ast = DataProperty False Nothing (Just True) Nothing "key" (PrimitiveType PrimitiveAny)
+          let str = "key?: any"
+          show (pretty ast) `shouldBe` str
+
+      context "readonly properties" $ do
+        it "formats output" $ do
+          let ast = DataProperty False (Just True) Nothing Nothing "key" (PrimitiveType PrimitiveAny)
+          let str = "readonly key: any"
+          show (pretty ast) `shouldBe` str
+
+      it "formats output" $ do
+        let ast = DataProperty False Nothing Nothing Nothing "key" (PrimitiveType PrimitiveAny)
+        let str = "key: any"
+        show (pretty ast) `shouldBe` str
+
   describe "expandConditional" $ do
     describe "extends left" $
       it "left as is" $ do

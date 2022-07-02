@@ -123,7 +123,8 @@ data ConditionalType = ConditionalType
 
 data Property
   = DataProperty
-      { isReadonly :: Maybe Bool,
+      { isIndex :: Bool,
+        isReadonly :: Maybe Bool,
         isOptional :: Maybe Bool,
         accessor :: Maybe Accessor,
         key :: String,

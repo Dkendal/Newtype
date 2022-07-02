@@ -106,6 +106,7 @@ spec = do
                       [ DataProperty
                           { isReadonly = Nothing,
                             isOptional = Nothing,
+                            isIndex = False,
                             accessor = Nothing,
                             key = "a",
                             value = ExprIdent (Ident "A")
@@ -113,6 +114,7 @@ spec = do
                         DataProperty
                           { isReadonly = Nothing,
                             isOptional = Nothing,
+                            isIndex = False,
                             accessor = Nothing,
                             key = "b",
                             value = ExprIdent (Ident "B")
@@ -162,6 +164,7 @@ spec = do
                         [ DataProperty
                             { isReadonly = Nothing,
                               isOptional = Nothing,
+                              isIndex = False,
                               accessor = Nothing,
                               key = "a",
                               value = ExprIdent (Ident "A")
@@ -169,6 +172,7 @@ spec = do
                           DataProperty
                             { isReadonly = Nothing,
                               isOptional = Nothing,
+                              isIndex = False,
                               accessor = Nothing,
                               key = "b",
                               value = ExprIdent (Ident "B")
@@ -335,7 +339,8 @@ spec = do
         let src = "index key : string"
         let ast =
               DataProperty
-                { isReadonly = Nothing,
+                { isIndex = True,
+                  isReadonly = Nothing,
                   isOptional = Nothing,
                   accessor = Nothing,
                   key = "key",
