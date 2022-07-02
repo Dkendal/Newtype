@@ -22,7 +22,7 @@ spec = do
         case parse (parser <* eof) "" source of
           Left err -> error $ errorBundlePretty err
           Right x -> x
-  describe "NewtypeParser" $ do
+  describe "Newtype.Parser" $ do
     describe "programs" $ do
       let subject = parse' pProgram
 
@@ -62,6 +62,19 @@ spec = do
       let subject = parse' pStatement
 
       describe "interface definition" $ do
+        it "can parse an empty interface" $ do
+          let src = unlines ["interface A"]
+          subject src `shouldBe` InterfaceDefinition "A" [] Nothing []
+
+        it "can parse an empty interface with params" $ do
+          let src = unlines ["interface A t1"]
+          subject src
+            `shouldBe` InterfaceDefinition
+              "A"
+              [TypeParam "t1" Nothing Nothing]
+              Nothing
+              []
+
         it "parses an interface definition" $ do
           let expected =
                 InterfaceDefinition

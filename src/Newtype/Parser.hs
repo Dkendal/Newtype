@@ -341,7 +341,7 @@ pInterfaceDefintion = do
   name <- identifier <?> "interface name"
   params <- pFormalParameters
   extends <- optional extendsClause <?> "interface extends clause"
-  props <- whereClause
+  props <- fmap (fromMaybe []) (optional whereClause)
   return InterfaceDefinition {..}
   where
     whereClause = do
