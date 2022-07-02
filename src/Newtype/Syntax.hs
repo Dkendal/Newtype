@@ -159,8 +159,9 @@ instance Pretty Statement where
     "export" <+> (braces . hsep . punctuate comma . map pretty) s <> semi
   --
   pretty InterfaceDefinition {..} =
-    (group "interface" <+> pretty name) <+> vsep [lbrace, body, rbrace] <> semi
+    head <+> vsep [lbrace, body, rbrace] <> semi
     where
+      head = group "interface" <+> pretty name <> prettyList params
       body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
 
   prettyList statements = vsep (punctuate line (map pretty statements))

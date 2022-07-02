@@ -45,6 +45,22 @@ spec = do
   let prettyShort ast = renderString (layoutPretty (LayoutOptions (AvailablePerLine 1 1)) (pretty ast))
   describe "pretty" $ do
     describe "Statements" $ do
+      describe "InterfaceDefinition" $ do
+        it "formats the statement" $ do
+          let ast =
+                InterfaceDefinition
+                  "A"
+                  [TypeParam "T" Nothing Nothing]
+                  Nothing
+                  []
+          let src =
+                fmt
+                  [ "interface A<T> {",
+                    "  ",
+                    "};"
+                  ]
+          show (pretty ast) `shouldBe` src
+
       describe "ExportStatement" $ do
         it "formats the statement" $ do
           let ast = ExportStatement [Ident "A", Ident "B"]
