@@ -68,12 +68,13 @@ spec = do
 
         it "can parse an empty interface with params" $ do
           let src = unlines ["interface A t1"]
-          subject src
-            `shouldBe` InterfaceDefinition
-              "A"
-              [TypeParam "t1" Nothing Nothing]
-              Nothing
-              []
+          let ast =
+                InterfaceDefinition
+                  "A"
+                  [TypeParam "t1" Nothing Nothing]
+                  Nothing
+                  []
+          subject src `shouldBe` ast
 
         it "parses an interface definition" $ do
           let expected =

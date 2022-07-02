@@ -50,12 +50,16 @@ spec = do
           let ast =
                 InterfaceDefinition
                   "A"
-                  [TypeParam "T" Nothing Nothing]
+                  [ TypeParam
+                      "T"
+                      (Just (PrimitiveType PrimitiveAny))
+                      (Just (PrimitiveType PrimitiveAny))
+                  ]
                   Nothing
                   []
           let src =
                 fmt
-                  [ "interface A<T> {",
+                  [ "interface A<T = any extends any> {",
                     "  ",
                     "};"
                   ]

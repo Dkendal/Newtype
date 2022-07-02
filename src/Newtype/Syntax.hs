@@ -250,7 +250,10 @@ instance Pretty PrimitiveType where
   pretty PrimitiveObject = "object"
 
 instance Pretty TypeParam where
-  pretty (TypeParam name _ _) = pretty name
+  pretty (TypeParam name defaultValue constraint) =
+    pretty name
+      <> maybe emptyDoc (\d -> " = " <> pretty d) defaultValue
+      <> maybe emptyDoc (\d -> " extends " <> pretty d) constraint
   prettyList [] = emptyDoc
   prettyList l = angles . hsep . punctuate comma . map pretty $ l
 
