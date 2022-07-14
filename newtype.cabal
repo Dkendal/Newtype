@@ -27,6 +27,7 @@ library
   exposed-modules:
       Newtype.Compiler
       Newtype.Parser
+      Newtype.Parser.Tokens
       Newtype.Syntax
       Newtype.Syntax.Conditionals
   other-modules:
@@ -42,6 +43,7 @@ library
       base >=4.7 && <5
     , containers
     , megaparsec
+    , mtl
     , parser-combinators
     , prettyprinter
     , syb
@@ -65,6 +67,7 @@ executable nt
       base >=4.7 && <5
     , containers
     , megaparsec
+    , mtl
     , newtype
     , parser-combinators
     , prettyprinter
@@ -78,7 +81,6 @@ test-suite newtype-test
   main-is: Spec.hs
   other-modules:
       Newtype.CompilerSpec
-      Newtype.ConformanceSpec
       Newtype.ParserSpec
       Newtype.Syntax.ConditionalsSpec
       Newtype.SyntaxSpec
@@ -95,9 +97,13 @@ test-suite newtype-test
       QuickCheck
     , base >=4.7 && <5
     , containers
+    , here
     , hspec
     , hspec-contrib
+    , hspec-golden
+    , hspec-megaparsec
     , megaparsec
+    , mtl
     , newtype
     , parser-combinators
     , prettyprinter

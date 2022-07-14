@@ -9,280 +9,26 @@ import Data.Functor
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text, pack, unpack)
-import Data.Void
-import Debug.Trace
+import Newtype.Parser.Tokens
 import Newtype.Syntax
 import Newtype.Syntax.Conditionals
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
-import Text.Megaparsec.Debug
-
-type Parser = Parsec Void Text
+import Text.Megaparsec.Debug (dbg)
+import Data.Void (Void)
+import Control.Monad.State (evalState)
 
 type FormalParamMap = Map.Map String Expr
 
--- list of reserved words
-reservedWords :: [String]
-reservedWords =
-  [ "and",
-    "any",
-    "as",
-    "async",
-    "await",
-    "boolean",
-    "case",
-    "class",
-    "const",
-    "delete",
-    "do",
-    "defaults",
-    "else",
-    "enum",
-    "extends",
-    "false",
-    "for",
-    "from",
-    "function",
-    "get",
-    "goto",
-    "if",
-    "implements",
-    "import",
-    "interface",
-    "keyof",
-    "let",
-    "member",
-    "never",
-    "new",
-    "not",
-    "null",
-    "number",
-    "object",
-    "of",
-    "or",
-    "readonly",
-    "require",
-    "return",
-    "set",
-    "string",
-    "symbol",
-    "then",
-    "true",
-    "type",
-    "typeof",
-    "undefined",
-    "var",
-    "void",
-    "while",
-    "where",
-    "when",
-    "with",
-    "yield"
-  ]
+type CompilerError = ParseErrorBundle Text Void
 
--- list of reserved prefix operators
-builtins :: [Text]
-builtins = ["keyof", "typeof"]
-
--------------------------------------------------------------------------------
--- Lexing support                                                            --
--------------------------------------------------------------------------------
-
-lineComment = L.skipLineComment "--"
-
-blockComment = L.skipBlockComment "{-" "-}"
-
-sc :: Parser ()
-sc = L.space (void $ char ' ' <|> char '\t') lineComment blockComment
-
-scn :: Parser ()
-scn = L.space space1 lineComment blockComment
-
-nonIndented :: Parser a -> Parser a
-nonIndented = L.nonIndented scn
-
-indentGuard :: Ordering -> Pos -> Parser Pos
-indentGuard = L.indentGuard scn
-
-indentBlock :: Parser (L.IndentOpt Parser a b) -> Parser a
-indentBlock = L.indentBlock scn
-
-lexeme :: Parser a -> Parser a
-lexeme = L.lexeme scn
-
-lexeme' :: Parser a -> Parser a
-lexeme' = L.lexeme sc
-
-symbol :: Text -> Parser Text
-symbol = L.symbol scn
-
-symbol' :: Text -> Parser Text
-symbol' = L.symbol sc
-
-keyword :: Text -> Parser Text
-keyword txt = lexeme (string txt <* notFollowedBy identifierTail)
-
-stringLiteral :: Parser String
-stringLiteral = char '\"' *> L.charLiteral `manyTill` char '\"'
-
-integer :: Parser Integer
-integer = lexeme L.decimal
-
-float :: Parser Double
-float = lexeme L.float
-
--- | Left associative binary operator.
-binary name f = InfixL (f <$ symbol name)
-
-prefix name f = Prefix (f <$ symbol name)
-
-postfix name f = Postfix (f <$ symbol name)
-
--- | Parse an operator, using backtracking to ensure that the operator is not a
--- prefix of a valid identifier.
-op n = (lexeme . try) (string n <* notFollowedBy punctuationChar)
-
--------------------------------------------------------------------------------
--- Symbols                                                                   --
--------------------------------------------------------------------------------
-
-lparen :: Parser Text
-lparen = symbol "("
-{-# INLINE lparen #-}
-
-rparen :: Parser Text
-rparen = symbol ")"
-{-# INLINE rparen #-}
-
-lbrace :: Parser Text
-lbrace = symbol "{"
-{-# INLINE lbrace #-}
-
-rbrace :: Parser Text
-rbrace = symbol "}"
-{-# INLINE rbrace #-}
-
-langle :: Parser Text
-langle = symbol "<"
-{-# INLINE langle #-}
-
-rangle :: Parser Text
-rangle = symbol ">"
-{-# INLINE rangle #-}
-
-lbracket :: Parser Text
-lbracket = symbol "["
-{-# INLINE lbracket #-}
-
-rbracket :: Parser Text
-rbracket = symbol "]"
-{-# INLINE rbracket #-}
-
-semicolon :: Parser Text
-semicolon = symbol ";"
-{-# INLINE semicolon #-}
-
-larrow :: Parser Text
-larrow = symbol "<-"
-{-# INLINE larrow #-}
-
-rarrow :: Parser Text
-rarrow = symbol "->"
-{-# INLINE rarrow #-}
-
-pipe :: Parser Text
-pipe = symbol "|"
-{-# INLINE pipe #-}
-
-amp :: Parser Text
-amp = symbol "&"
-{-# INLINE amp #-}
-
-bang :: Parser Text
-bang = symbol "!"
-{-# INLINE bang #-}
-
-comma :: Parser Text
-comma = symbol ","
-{-# INLINE comma #-}
-
-colon :: Parser Text
-colon = symbol ":"
-{-# INLINE colon #-}
-
-qmark :: Parser Text
-qmark = symbol "?"
-{-# INLINE qmark #-}
-
-pound :: Parser Text
-pound = symbol "#"
-{-# INLINE pound #-}
-
-caret :: Parser Text
-caret = symbol "^"
-{-# INLINE caret #-}
-
-dot :: Parser Text
-dot = symbol "."
-{-# INLINE dot #-}
-
-equals :: Parser Text
-equals = symbol "="
-{-# INLINE equals #-}
-
-inferSym :: Parser Text
-inferSym = qmark
-{-# INLINE inferSym #-}
-
-underscore :: Parser (Token Text)
-underscore = char '_'
-{-# INLINE underscore #-}
-
-dollar :: Parser (Token Text)
-dollar = char '$'
-{-# INLINE dollar #-}
-
--------------------------------------------------------------------------------
--- Pairs                                                                     --
--------------------------------------------------------------------------------
-
-parens :: Parser a -> Parser a
-parens = between lparen rparen
-{-# INLINE parens #-}
-
-braces :: Parser a -> Parser a
-braces = between lbrace rbrace
-{-# INLINE braces #-}
-
-angles :: Parser Text -> Parser Text
-angles = between langle rangle
-{-# INLINE angles #-}
-
-brackets :: Parser a -> Parser a
-brackets = between lbracket rbracket
-{-# INLINE brackets #-}
-
--- | First character of a valid identifier.
-identifierHead :: Parser Char
-identifierHead = letterChar <|> underscore <|> dollar
-
--- | Rest of a valid identifier.
-identifierTail :: Parser Char
-identifierTail = alphaNumChar <|> underscore <|> dollar
-
-identifier :: Parser String
-identifier = (lexeme . try) (p >>= check)
+runNewTypeParser :: Parser a -> String -> Text -> Either CompilerError a
+runNewTypeParser parser filename source =
+  evalState stateAction initialState
   where
-    p = (:) <$> identifierHead <*> many identifierTail
-    check x =
-      if x `elem` reservedWords
-        then fail $ "keyword " ++ show x ++ " cannot be an identifier"
-        else return x
-
--------------------------------------------------------------------------------
--- Production rules                                                          --
--------------------------------------------------------------------------------
+    stateAction = runParserT parser filename source
+    initialState = pos1
 
 pProgram :: Parser Program
 pProgram =
@@ -294,59 +40,62 @@ pProgram =
   where
     pStatementList = sepEndBy pStatement scn
 
-pImportClause :: Parser ImportClause
-pImportClause =
-  ImportClauseNamed <$> parens (pSpecifier `sepBy` comma)
+pStatement :: Parser Statement
+pStatement =
+  nonIndented $
+    choice
+      [ pImport,
+        pTypeDefinition,
+        pInterfaceDefintion
+      ]
+
+pImport :: Parser Statement
+pImport = do
+  keyword "import"
+  fromClause <- lexeme stringLiteral <?> "package name"
+  importClause <- pImportClause
+  return ImportDeclaration {..}
   where
+    pImportClause =
+      parens $ do
+        members <- pSpecifier `sepBy` comma
+        return $ ImportClauseNamed members
+
     pSpecifier = do
       binding <- identifier
       alias <- optional $ do
         void $ keyword "as"
         identifier
-      case alias of
-        Just importedBinding -> return (ImportedAlias binding importedBinding)
-        Nothing -> return (ImportedBinding binding)
-
-pStatement :: Parser Statement
-pStatement =
-  choice
-    [ -- pExport,
-      pImport,
-      pTypeDefinition,
-      pInterfaceDefintion
-    ]
-
--- pExport :: Parser Statement
--- pExport = ExportStatement <$ string "export"
-
-pImport :: Parser Statement
-pImport = do
-  void $ keyword "import"
-  fromClause <- lexeme stringLiteral <?> "package name"
-  importClause <- pImportClause
-  return ImportDeclaration {..}
+      return $ maybe (ImportedBinding binding) (ImportedAlias binding) alias
 
 pTypeDefinition :: Parser Statement
 pTypeDefinition = do
-  void $ keyword "type"
-  name <- identifier
-  params <- pFormalParameters
-  equals
+  pos <- L.indentLevel
+  name <- moduleIdent
+  indentGuard GT pos
+  params <- pFormalTypeParams
+  colon
   body <- pExpr
   return TypeDefinition {..}
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do
+  pos <- L.indentLevel
   keyword "interface"
-  name <- identifier <?> "interface name"
-  params <- pFormalParameters
+  name <- moduleIdent <?> "interface name"
+  indentGuard GT pos
+  params <- pFormalTypeParams
+  indentGuard GT pos
   extends <- optional extendsClause <?> "interface extends clause"
-  props <- fmap (fromMaybe []) (optional whereClause)
+  indentGuard GT pos
+  props <- fmap (fromMaybe []) (optional . whereClause $ pos)
   return InterfaceDefinition {..}
   where
-    whereClause = do
+    whereClause :: Pos -> Parser [Property]
+    whereClause pos = do
       keyword "where"
-      some pProperty <?> "interface properties"
+      pos <- indentGuard GT pos
+      many (indentGuard EQ pos >> pProperty) <?> "interface properties"
 
     -- Example input:
     --  extends Foo
@@ -357,9 +106,29 @@ pInterfaceDefintion = do
     generic = parens generic <|> ExtendGeneric <$> pGenericApplication
     id = ExtendIdent <$> pIdent
 
-pFormalParameters :: Parser [TypeParam]
-pFormalParameters = do
-  makeParams <$> many identifier <*> pWhenClause <*> pDefaultsClause
+-- | Formal type parameters to a type or interface definition
+pFormalTypeParams :: Parser [TypeParam]
+pFormalTypeParams = do
+  many (pNakedIdent <|> pIdent)
+  where
+    -- Example input:
+    -- a
+    -- (a : Type)
+    -- (a : Type = Int)
+    pNakedIdent = do
+      name <- varIdent
+      return (TypeParam name Nothing Nothing)
+
+    pIdent =
+      parens $ do
+        name <- varIdent
+        constraint <- optional $ do
+          symbol "<:"
+          pExpr
+        defaultValue <- optional $ do
+          equals
+          pExpr
+        return (TypeParam name defaultValue constraint)
 
 pDefaultsClause :: Parser FormalParamMap
 pDefaultsClause = do
@@ -392,9 +161,10 @@ pTerm =
       try pTuple <?> "tuple",
       try pMappedType,
       pExprConditionalType <?> "conditional type",
+      (expandCaseStatement <$> pCaseStatement) <?> "case statement",
+      try pFunctionLiteral <?> "function literal",
       pNumberIntegerLiteral <?> "number",
       pNumberDoubleLiteral <?> "number",
-      (expandCaseStatement <$> pCaseStatement) <?> "case statement",
       pBooleanLiteral <?> "boolean literal",
       pStringLiteral <?> "string literal",
       pIdent' <?> "identifier",
@@ -404,6 +174,37 @@ pTerm =
       pObjectLiteral <?> "object literal",
       hidden . parens $ pExpr
     ]
+
+-- | Parse a function literal.
+-- Example input:
+--  () => void
+--  (n: number) => number
+--  (head: number, ...tail: Array number) => number
+pFunctionLiteral :: Parser Expr
+pFunctionLiteral =
+  do
+    typeParams <- optional $ do
+      keyword "forall"
+      params <- varIdent `sepBy1` comma
+      period
+      return params
+    lparen
+    params <- pParams <?> "function parameters"
+    rest <- pRest <?> "function rest parameter"
+    rparen
+    keyword "=>"
+    returnType <- pExpr <?> "function return type"
+    return FunctionLiteral {..}
+  where
+    pParams = sepEndBy pParam comma
+    pRest = optional $ do
+      symbol "..."
+      pParam
+    pParam = do
+      name <- identifier
+      colon
+      type_ <- pExpr
+      return (name, type_)
 
 pPrimitive :: Parser PrimitiveType
 pPrimitive =
@@ -474,7 +275,7 @@ pMappedType =
   where
     p = do
       value <- pExpr <?> "mapped type property value"
-      symbol ":"
+      colon
       isReadonly <- pReadonly
       key <- pExpr <?> "mapped type property key"
       isOptional <- pOptional
@@ -540,8 +341,8 @@ pTypeOp :: Parser Expr
 pTypeOp =
   makeExprParser
     pTerm
-    [ [ InfixL $ DotAccess <$ (dot <?> "dot access"),
-        InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy "=")
+    [ [ InfixL $ DotAccess <$ (period <?> "dot access"),
+        InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy (string "="))
       ],
       [ Prefix $ do
           kw <- choice (map keyword builtins) <?> "builtin type function"
@@ -574,6 +375,12 @@ pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
 pIdent :: Parser Ident
 pIdent = Ident <$> identifier <?> "identifier"
 
+pModuleIdent :: Parser Ident
+pModuleIdent = Ident <$> moduleIdent <?> "top level identifier"
+
+pVarIdent :: Parser Ident
+pVarIdent = Ident <$> varIdent <?> "variable identifier"
+
 pIdent' :: Parser Expr
 pIdent' = ExprIdent <$> pIdent <?> "identifier"
 
@@ -584,7 +391,7 @@ pObjectLiteral =
 pGenericApplication :: Parser GenericApplication
 pGenericApplication = do
   pos <- L.indentLevel
-  id <- pIdent
+  id <- pModuleIdent
   params <-
     some . choice $
       [ indentGuard GT pos *> pIdent',
@@ -598,7 +405,7 @@ pProperty = do
   isIndex <- fmap isJust (optional (keyword "index"))
   key <- identifier
   isOptional <- pOptional
-  symbol ":"
+  colon
   value <- pExpr
   let accessor = Nothing
   return (DataProperty {..})

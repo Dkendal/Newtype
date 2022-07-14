@@ -28,6 +28,7 @@ dependencies:
   - syb
   - containers
   - uniplate
+  - mtl
 
 library:
   source-dirs: src
@@ -63,4 +64,7 @@ tests:
       - newtype
       - hspec
       - hspec-contrib
+      - hspec-golden
+      - hspec-megaparsec
       - QuickCheck
+      - here

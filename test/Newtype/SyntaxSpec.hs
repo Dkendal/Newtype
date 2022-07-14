@@ -59,9 +59,9 @@ spec = do
                   []
           let src =
                 fmt
-                  [ "interface A<T = any extends any> {",
+                  [ "interface A<T extends any = any> {",
                     "  ",
-                    "};"
+                    "}"
                   ]
           show (pretty ast) `shouldBe` src
 
@@ -82,34 +82,34 @@ spec = do
     context "when ExtendsExpr" $ do
       it "outputs equivalent typescript code" $ do
         let ast = ConditionalType a b then' else'
-        show (pretty ast) `shouldBe` "A extends B ? Then : Else"
+        show (pretty ast) `shouldBe` "(A extends B ? Then : Else)"
 
     context "when ConditionalExpr" $ do
       it "outputs equivalent typescript code" $ do
         let ast = expandConditional $ ConditionalExpr (a <: b) then' else'
-        show (pretty ast) `shouldBe` "A extends B ? Then : Else"
+        show (pretty ast) `shouldBe` "(A extends B ? Then : Else)"
 
       it "expands the condition first the expression first" $ do
         let ast = expandConditional $ ConditionalExpr (((a <: b) && (a !== c)) || (b === c)) then' else'
         let str = prettyShort ast
         str
           `shouldBe` fmt
-            [ "A extends B",
-              "  ? [A] extends [C]",
-              "    ? [B] extends [C]",
+            [ "(A extends B",
+              "  ? ([A] extends [C]",
+              "    ? ([B] extends [C]",
               "      ? Then",
-              "      : Else",
-              "    : Then",
-              "  : [B] extends [C]",
+              "      : Else)",
+              "    : Then)",
+              "  : ([B] extends [C]",
               "    ? Then",
-              "    : Else"
+              "    : Else))"
             ]
 
     describe "properties" $ do
       context "index properties" $ do
         it "formats output" $ do
-          let ast = DataProperty False Nothing (Just True) Nothing "key" (PrimitiveType PrimitiveAny)
-          let str = "key?: any"
+          let ast = DataProperty True Nothing Nothing Nothing "key" (PrimitiveType PrimitiveAny)
+          let str = "[key]: any"
           show (pretty ast) `shouldBe` str
 
       context "optional properties" $ do

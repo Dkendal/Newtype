@@ -63,10 +63,18 @@ data TypeParam = TypeParam
   }
   deriving (Eq, Show)
 
+type FnFormalParam = (String, Expr)
+
 data Expr
   = StringLiteral String
   | NumberIntegerLiteral Integer
   | NumberDoubleLiteral Double
+  | FunctionLiteral
+      { typeParams :: Maybe [String],
+        params :: [FnFormalParam],
+        rest :: Maybe FnFormalParam,
+        returnType :: Expr
+      }
   | BooleanLiteral Bool
   | ObjectLiteral [Property]
   | ExprGenericApplication GenericApplication
@@ -160,7 +168,7 @@ instance Pretty Statement where
     "export" <+> (braces . hsep . punctuate comma . map pretty) s <> semi
   --
   pretty InterfaceDefinition {..} =
-    head <+> vsep [lbrace, body, rbrace] <> semi
+    head <+> vsep [lbrace, body, rbrace]
     where
       head = group "interface" <+> pretty name <> prettyList params
       body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
@@ -181,6 +189,15 @@ instance Pretty ImportSpecifier where
     braces . hsep . punctuate comma . map pretty $ lst
 
 instance Pretty Expr where
+  pretty FunctionLiteral {..} = doc
+    where
+      doc :: Doc ann
+      doc = (maybe emptyDoc prettyTypeParams typeParams) <> (parens $ prettyParams params <+> prettyRest rest <+> "=>" <+> pretty returnType)
+      prettyTypeParams l = "<" <> hsep (punctuate comma (map pretty l)) <> ">"
+      prettyParams params = hsep $ punctuate comma $ map prettyParam params
+      prettyParam (name, type') = pretty name <> ":" <+> pretty type'
+      prettyRest Nothing = emptyDoc
+      prettyRest (Just t) = "..." <> prettyParam t
   pretty Hole = "_"
   pretty (PrimitiveType t) = pretty t
   pretty MappedType {asExpr = Just asExpr, key, ..}
@@ -217,12 +234,12 @@ instance Pretty Expr where
   pretty (Tuple []) = "[]"
   pretty (Tuple exprs) = (brackets . hsep) (punctuate comma (map pretty exprs))
   pretty (Intersection left right) =
-    fmt left <+> "&" <+> fmt right
+    fmt left <> softline <> "&" <> softline <> fmt right
     where
       fmt (Union a b) = prettyOpList (Union a b)
       fmt a = pretty a
   pretty (Union left right) =
-    fmt left <+> "|" <+> fmt right
+    fmt left <> softline <> "|" <+> fmt right
     where
       fmt (Intersection a b) = prettyOpList (Intersection a b)
       fmt a = pretty a
@@ -253,8 +270,8 @@ instance Pretty PrimitiveType where
 instance Pretty TypeParam where
   pretty (TypeParam name defaultValue constraint) =
     pretty name
-      <> maybe emptyDoc (\d -> " = " <> pretty d) defaultValue
       <> maybe emptyDoc (\d -> " extends " <> pretty d) constraint
+      <> maybe emptyDoc (\d -> " = " <> pretty d) defaultValue
   prettyList [] = emptyDoc
   prettyList l = angles . hsep . punctuate comma . map pretty $ l
 
@@ -264,19 +281,27 @@ instance Pretty Property where
     where
       readonly = prettyReadonly isReadonly
       optional = prettyOptional isOptional
-      lhs = group readonly <> pretty key <> optional <> ":"
+      lhs =
+        group readonly
+          <> (if isIndex then "[" <> pretty key <> "]" else pretty key)
+          <> optional
+          <> ":"
   pretty AccessorProperty {..} =
     error "not implemented"
 
 instance Pretty ConditionalType where
-  pretty (ConditionalType a b then' else') =
-    group (pretty a <+> "extends" <+> pretty b)
-      <> nest
-        2
-        ( softline <> (group "?" <+> pretty then')
-            <> softline
-            <> (group ":" <+> pretty else')
-        )
+  pretty (ConditionalType lhs rhs then' else') =
+    group . parens $ doc
+    where
+      doc = condition <> nest 2 body
+
+      condition = pretty lhs <+> "extends" <+> pretty rhs
+
+      body = thenDoc <> elseDoc
+
+      thenDoc = line <> "?" <+> pretty then'
+
+      elseDoc = line <> ":" <+> pretty else'
 
 -------------------------------------------------------------------------------
 -- Smart constructors                                                        --

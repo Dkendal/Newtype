@@ -1,29 +1,44 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
 
 module Newtype.ParserSpec (spec) where
 
+import Control.Monad (forM_)
+import Data.String.Here.Uninterpolated
 import Data.Text
+import Debug.Trace
 import Newtype.Parser
 import Newtype.Syntax
 import Newtype.Syntax.Conditionals
+import Prettyprinter
 import Test.Hspec
+import Test.Hspec.Golden (defaultGolden)
+import Test.Hspec.Megaparsec
 import Text.Megaparsec
 import Prelude hiding (unlines)
 
+a = mkIdent "A"
+
+b = mkIdent "B"
+
+c = mkIdent "C"
+
+d = mkIdent "D"
+
+e = mkIdent "E"
+
+parse' parser source =
+  case runNewTypeParser (parser <* eof) "" source of
+    Left err -> error $ errorBundlePretty err
+    Right x -> x
+
 spec :: Spec
 spec = do
-  let a = mkIdent "A"
-  let b = mkIdent "B"
-  let c = mkIdent "C"
-  let d = mkIdent "D"
-  let e = mkIdent "E"
-  let parse' parser source =
-        case parse (parser <* eof) "" source of
-          Left err -> error $ errorBundlePretty err
-          Right x -> x
   describe "Newtype.Parser" $ do
-    describe "programs" $ do
+    describe "pProgram" $ do
       let subject = parse' pProgram
 
       it "parses a program with multiple type defintions that use dot access" $ do
@@ -58,282 +73,134 @@ spec = do
           `shouldBe` Program
             [TypeDefinition "A" [] (DotAccess (mkIdent "a") (mkIdent "b"))]
 
-    describe "statements" $ do
-      let subject = parse' pStatement
+      fit "can parse sample program" $ do
+        let src =
+              [here|
+import "ts-toolbelt" (A, F, L)
 
-      describe "interface definition" $ do
-        it "can parse an empty interface" $ do
-          let src = unlines ["interface A"]
-          subject src `shouldBe` InterfaceDefinition "A" [] Nothing []
+import "." ( __ )
 
-        it "can parse an empty interface with params" $ do
-          let src = unlines ["interface A t1"]
-          let ast =
-                InterfaceDefinition
-                  "A"
-                  [TypeParam "t1" Nothing Nothing]
-                  Nothing
-                  []
-          subject src `shouldBe` ast
+import "./const.js"
+  ( __capture__
+  , __kind__
+  , any_
+  , bigint_
+  , boolean_
+  , function_
+  , number_
+  , object_
+  , rest_
+  , string_
+  , symbol_
+  )
 
-        it "parses an interface definition" $ do
-          let expected =
-                InterfaceDefinition
-                  { name = "A",
-                    params =
-                      [ TypeParam
-                          { name = "t1",
-                            defaultValue = Just (PrimitiveType PrimitiveAny),
-                            constraint = Just (PrimitiveType PrimitiveString)
-                          },
-                        TypeParam
-                          { name = "t2",
-                            defaultValue = Just (PrimitiveType PrimitiveAny),
-                            constraint = Just (PrimitiveType PrimitiveNumber)
-                          }
-                      ],
-                    extends =
-                      Just
-                        ( ExtendGeneric
-                            ( GenericApplication
-                                (Ident "Foo")
-                                [ ExprIdent
-                                    (Ident "Bar")
-                                ]
-                            )
-                        ),
-                    props =
-                      [ DataProperty
-                          { isReadonly = Nothing,
-                            isOptional = Nothing,
-                            isIndex = False,
-                            accessor = Nothing,
-                            key = "a",
-                            value = ExprIdent (Ident "A")
-                          },
-                        DataProperty
-                          { isReadonly = Nothing,
-                            isOptional = Nothing,
-                            isIndex = False,
-                            accessor = Nothing,
-                            key = "b",
-                            value = ExprIdent (Ident "B")
-                          }
-                      ]
-                  }
+True : 1
 
-          subject
-            ( unlines
-                [ "interface A t1 t2",
-                  "  when",
-                  "    t1 <: string",
-                  "    t2 <: number",
-                  "  defaults",
-                  "    t1 = any",
-                  "    t2 = any",
-                  "  extends Foo Bar",
-                  "  where",
-                  "    a : A",
-                  "    b : B"
-                ]
-            )
-            `shouldBe` expected
+ExtractSubcapture t :
+  if not t <: M.Primitive | M.BuiltIn and t <: object
+    then t ! (Exclude (keyof t) (keyof [] | keyof {}))
 
-      describe "type definition" $ do
-        it "parses a type definition" $ do
-          subject "type A = B" `shouldBe` TypeDefinition "A" [] b
+PartialAssignment key value :
+  if not value <: never and key <: string
+    then { value : k <- key }
 
-        it "parses type definitions with default values for type parameters" $ do
-          let expected =
-                TypeDefinition
-                  { name = "Type",
-                    params =
-                      [ TypeParam
-                          { name = "A",
-                            defaultValue = Just (NumberIntegerLiteral 1),
-                            constraint = Just (PrimitiveType PrimitiveNumber)
-                          },
-                        TypeParam
-                          { name = "B",
-                            defaultValue = Just (NumberIntegerLiteral 2),
-                            constraint = Just (PrimitiveType PrimitiveNumber)
-                          }
-                      ],
-                    body =
-                      ObjectLiteral
-                        [ DataProperty
-                            { isReadonly = Nothing,
-                              isOptional = Nothing,
-                              isIndex = False,
-                              accessor = Nothing,
-                              key = "a",
-                              value = ExprIdent (Ident "A")
-                            },
-                          DataProperty
-                            { isReadonly = Nothing,
-                              isOptional = Nothing,
-                              isIndex = False,
-                              accessor = Nothing,
-                              key = "b",
-                              value = ExprIdent (Ident "B")
-                            }
-                        ]
-                  }
-          subject
-            ( unlines
-                [ "type Type A B",
-                  "  when",
-                  "    A <: number",
-                  "    B <: number",
-                  "  defaults",
-                  "    A = 1",
-                  "    B = 2",
-                  "  = { a: A, b: B }"
-                ]
-            )
-            `shouldBe` expected
+EmptyToNever t :
+  case t of
+    {} -> never
+    _ -> t
 
-        it "parses a type definition with type parameters" $ do
-          subject "type A b = B"
-            `shouldBe` TypeDefinition
-              { name = "A",
-                params =
-                  [ TypeParam
-                      { name = "b",
-                        defaultValue = Nothing,
-                        constraint = Nothing
-                      }
-                  ],
-                body = b
-              }
+Kind
+  : typeof any_
+  | typeof rest_
+  | typeof string_
+  | typeof number_
+  | typeof boolean_
+  | typeof function_
+  | typeof symbol_
+  | typeof bigint_
+  | typeof object_
 
-        it "parses a type definition with a definition that uses dot access" $ do
-          parse' pProgram "type BuiltIn = M.BuiltIn"
-            `shouldBe` Program
-              [TypeDefinition "BuiltIn" [] (DotAccess (mkIdent "M") (mkIdent "BuiltIn"))]
+interface Hole (type_ = any) (label = any) where
+  readonly index __kind__ : Label
+  T : Type
 
-    describe "expressions" $ do
-      let subject = parse' pExpr
+HoleInnerType t :
+  case t of
+    Hole ?u -> u
+    _ -> t
 
-      describe "dot access" $ do
-        it "parses a dot access" $ do
-          subject "a.b.c" `shouldBe` (mkIdent "a" `DotAccess` mkIdent "b" `DotAccess` mkIdent "c")
+interface Capture (name <: string = any) (pattern = any) where
+  readonly index __capture__ : name
+  readonly pattern : pattern
 
-      describe "access" $ do
-        it "parses access with the bang operator" $ do
-          subject "a ! b" `shouldBe` (mkIdent "a" `Access` mkIdent "b")
+RecursiveExpandCapture t :
+  -- Guard against any as mapping it will cause an infite descent
+  if t == any
+    then t
+    else
+      case t of
+        Hole | Capture -> ExpandCapture T
+        Record string any -> { ExpandCapture T!K  : k <- keyof T }
+        _ -> t
 
-        it "parses access with the bang operator and no whitespace" $ do
-          subject "a!b" `shouldBe` (mkIdent "a" `Access` mkIdent "b")
+PatternHandler pattern : (arg : VariableCapture pattern) => unknown
 
-      describe "literal values" $
-        it "parses numbers" $ do
-          let source = "1"
-          subject source `shouldBe` NumberIntegerLiteral 1
+GenericFunctionLiteral : forall t, u . (arg : t) => u
 
-      describe "conditional types" $ do
-        it "should parse if ... then ... else" $ do
-          let source = "if A <: B then C else D"
-          parse' pExpr source `shouldBe` ctExpr a b c d
+                    |]
+        let out = show (pretty (subject src))
+        trace out out `shouldBe` ""
 
-        it "should parse if ... then" $ do
-          let source = "if A <: B then C"
-          parse' pExpr source `shouldBe` ctExpr a b c never
+      it "can parse sample program" $ do
+        let src =
+              [here|
+                -- Basic type def
+                A : B
 
-      describe "mapped types" $ do
-        it "should parse mapped types" $ do
-          let source = "{ Value : Key <- Type}"
-          let expected =
-                MappedType
-                  { value = mkIdent "Value",
-                    key = mkIdent "Key",
-                    source = mkIdent "Type",
-                    asExpr = Nothing,
-                    isReadonly = Nothing,
-                    isOptional = Nothing
-                  }
-          parse' pExpr source `shouldBe` expected
+                -- empty object literal
+                A : {}
 
-        it "should parse key remapping with the `as` keyword" $ do
-          let source = "{ Value : Key as OtherKey <- Type}"
-          let expected =
-                MappedType
-                  { value = mkIdent "Value",
-                    key = mkIdent "Key",
-                    source = mkIdent "Type",
-                    asExpr = Just (mkIdent "OtherKey"),
-                    isReadonly = Nothing,
-                    isOptional = Nothing
-                  }
-          parse' pExpr source `shouldBe` expected
+                -- object literal
+                A : { readonly a? : B, b : C }
 
-        it "should parse the `readonly` prefix modifier applied to the key" $ do
-          let source = "{ Value : readonly Key <- Type}"
-          let expected =
-                MappedType
-                  { value = mkIdent "Value",
-                    key = mkIdent "Key",
-                    source = mkIdent "Type",
-                    asExpr = Nothing,
-                    isReadonly = Just True,
-                    isOptional = Nothing
-                  }
-          parse' pExpr source `shouldBe` expected
+                -- Type def with conditions
+                A a b (c <: Object = any) : B
 
-      describe "generic application" $ do
-        it "parses" $ do
-          let source = "A B C"
-          let expected =
-                ExprGenericApplication
-                  ( GenericApplication
-                      (Ident "A")
-                      [ ExprIdent (Ident "B"),
-                        ExprIdent (Ident "C")
-                      ]
-                  )
-          subject source `shouldBe` expected
+                -- infer type
+                A a :
+                  if a <: B ?b
+                    then b
+                    else a
 
-        it "parses parenthesized expressions" $ do
-          let source = "(A B C)"
-          let expected =
-                ExprGenericApplication
-                  ( GenericApplication
-                      (Ident "A")
-                      [ ExprIdent (Ident "B"),
-                        ExprIdent (Ident "C")
-                      ]
-                  )
-          subject source `shouldBe` expected
+                -- case
+                A a :
+                  case a of
+                    B -> B
+                    D -> D
 
-        it "doesn't matter how many parens there are" $ do
-          let source = "((A B C))"
-          let expected =
-                ExprGenericApplication
-                  ( GenericApplication
-                      (Ident "A")
-                      [ ExprIdent (Ident "B"),
-                        ExprIdent (Ident "C")
-                      ]
-                  )
+                -- case with fall through
+                A a :
+                  case a of
+                    B -> B
+                    D -> D
+                    _ -> a
 
-          subject source `shouldBe` expected
+                -- Empty interface
+                interface A
 
-        it "should parse nested expressions in the arguments" $ do
-          let source = "A (B C)"
-          let expected =
-                ExprGenericApplication
-                  ( GenericApplication
-                      (Ident "A")
-                      [ ExprGenericApplication
-                          ( GenericApplication
-                              (Ident "B")
-                              [ExprIdent (Ident "C")]
-                          )
-                      ]
-                  )
-          subject source `shouldBe` expected
+                -- Interface with props
+                interface A (b <: any) where
+                  readonly index a? : b
 
-    describe "properties" $ do
+                |]
+        let out = show (pretty (subject src))
+        defaultGolden (goldenName 'pProgram "simple-program-example") (trace out out)
+
+    pStatementSpec
+
+    pExprSpec
+
+    describe "pProperty" $ do
       let subject = parse' pProperty
       it "can parse index property" $ do
         let src = "index key : string"
@@ -348,7 +215,7 @@ spec = do
                 }
         subject src `shouldBe` ast
 
-    describe "conditional expr" $ do
+    describe "pBoolExpr" $ do
       let subject = parse' pBoolExpr
 
       it "parses extends left" $ do
@@ -383,7 +250,7 @@ spec = do
         let source = "(A <: B and B <: C) or D <: E"
         subject source `shouldBe` Or (And (ExtendsLeft a b) (ExtendsLeft b c)) (ExtendsLeft d e)
 
-    describe "case expression" $ do
+    describe "pCaseStatement" $ do
       let subject = parse' pCaseStatement
 
       it "should parse multiple cases" $ do
@@ -415,3 +282,320 @@ spec = do
               Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C")),
               Case Hole (ExprIdent (Ident "A"))
             ]
+
+goldenName :: Show a => a -> String -> String
+goldenName s1 s2 = show s1 ++ s2
+
+pStatementSpec :: Spec
+pStatementSpec = do
+  describe "pStatement" $ do
+    let subject = parse' pStatement
+
+    describe "interface definition" $ do
+      it "can parse an empty interface" $ do
+        let src = unlines ["interface A"]
+        subject src `shouldBe` InterfaceDefinition "A" [] Nothing []
+
+      it "can parse an empty interface with params" $ do
+        let src = unlines ["interface A t1"]
+        let ast =
+              InterfaceDefinition
+                "A"
+                [TypeParam "t1" Nothing Nothing]
+                Nothing
+                []
+        subject src `shouldBe` ast
+
+      it "parses an interface definition" $ do
+        let expected =
+              InterfaceDefinition
+                { name = "A",
+                  params =
+                    [ TypeParam
+                        { name = "t1",
+                          defaultValue = Just (PrimitiveType PrimitiveAny),
+                          constraint = Just (PrimitiveType PrimitiveString)
+                        },
+                      TypeParam
+                        { name = "t2",
+                          defaultValue = Just (PrimitiveType PrimitiveAny),
+                          constraint = Just (PrimitiveType PrimitiveNumber)
+                        }
+                    ],
+                  extends =
+                    Just
+                      ( ExtendGeneric
+                          ( GenericApplication
+                              (Ident "Foo")
+                              [ ExprIdent
+                                  (Ident "Bar")
+                              ]
+                          )
+                      ),
+                  props =
+                    [ DataProperty
+                        { isReadonly = Nothing,
+                          isOptional = Nothing,
+                          isIndex = False,
+                          accessor = Nothing,
+                          key = "a",
+                          value = ExprIdent (Ident "A")
+                        },
+                      DataProperty
+                        { isReadonly = Nothing,
+                          isOptional = Nothing,
+                          isIndex = False,
+                          accessor = Nothing,
+                          key = "b",
+                          value = ExprIdent (Ident "B")
+                        }
+                    ]
+                }
+
+        subject
+          ( unlines
+              [ "interface A t1 t2",
+                "  when",
+                "    t1 <: string",
+                "    t2 <: number",
+                "  defaults",
+                "    t1 = any",
+                "    t2 = any",
+                "  extends Foo Bar",
+                "  where",
+                "    a : A",
+                "    b : B"
+              ]
+          )
+          `shouldBe` expected
+
+    describe "type definition" $ do
+      it "parses a type definition" $ do
+        subject "type A = B" `shouldBe` TypeDefinition "A" [] b
+
+      it "parses a type definition with type parameters" $ do
+        subject "type A b = B"
+          `shouldBe` TypeDefinition
+            { name = "A",
+              params =
+                [ TypeParam
+                    { name = "b",
+                      defaultValue = Nothing,
+                      constraint = Nothing
+                    }
+                ],
+              body = b
+            }
+
+      it "parses type definitions with default values for type parameters" $ do
+        (defaultGolden (goldenName 'pStatement "-type-when-defaults") . show . subject . unlines)
+          [ "type Type A B",
+            "  when",
+            "    A <: number",
+            "    B <: number",
+            "  defaults",
+            "    A = 1",
+            "    B = 2",
+            "  = { a: A, b: B }"
+          ]
+
+      it "parses a type definition with a definition that uses dot access" $ do
+        parse' pProgram "type BuiltIn = M.BuiltIn"
+          `shouldBe` Program
+            [TypeDefinition "BuiltIn" [] (DotAccess (mkIdent "M") (mkIdent "BuiltIn"))]
+
+pExprSpec :: Spec
+pExprSpec = describe "pExpr" $ do
+  let subject = parse' pExpr
+
+  literalValueSpec
+
+  describe "dot access" $ do
+    it "parses a dot access" $ do
+      subject "a.b.c" `shouldBe` (mkIdent "a" `DotAccess` mkIdent "b" `DotAccess` mkIdent "c")
+
+  describe "access" $ do
+    it "parses access with the bang operator" $ do
+      subject "a ! b" `shouldBe` (mkIdent "a" `Access` mkIdent "b")
+
+    it "parses access with the bang operator and no whitespace" $ do
+      subject "a!b" `shouldBe` (mkIdent "a" `Access` mkIdent "b")
+
+  describe "primitive types" $ do
+    let cases =
+          [ ("string", PrimitiveString),
+            ("number", PrimitiveNumber),
+            ("boolean", PrimitiveBoolean),
+            ("null", PrimitiveNull),
+            ("undefined", PrimitiveUndefined),
+            ("any", PrimitiveAny),
+            ("void", PrimitiveVoid),
+            ("never", PrimitiveNever),
+            ("object", PrimitiveObject),
+            ("unknown", PrimitiveUnknown)
+          ]
+    forM_ cases $ \(name, expected) ->
+      it ("parses " <> name) $ do
+        subject (pack name) `shouldBe` PrimitiveType expected
+
+  describe "conditional types" $ do
+    it "should parse if ... then ... else" $ do
+      let source = "if A <: B then C else D"
+      parse' pExpr source `shouldBe` ctExpr a b c d
+
+    it "should parse if ... then" $ do
+      let source = "if A <: B then C"
+      parse' pExpr source `shouldBe` ctExpr a b c never
+
+  describe "mapped types" $ do
+    it "should parse mapped types" $ do
+      let source = "{ Value : Key <- Type}"
+      let expected =
+            MappedType
+              { value = mkIdent "Value",
+                key = mkIdent "Key",
+                source = mkIdent "Type",
+                asExpr = Nothing,
+                isReadonly = Nothing,
+                isOptional = Nothing
+              }
+      parse' pExpr source `shouldBe` expected
+
+    it "should parse key remapping with the `as` keyword" $ do
+      let source = "{ Value : Key as OtherKey <- Type}"
+      let expected =
+            MappedType
+              { value = mkIdent "Value",
+                key = mkIdent "Key",
+                source = mkIdent "Type",
+                asExpr = Just (mkIdent "OtherKey"),
+                isReadonly = Nothing,
+                isOptional = Nothing
+              }
+      parse' pExpr source `shouldBe` expected
+
+    it "should parse the `readonly` prefix modifier applied to the key" $ do
+      let source = "{ Value : readonly Key <- Type}"
+      let expected =
+            MappedType
+              { value = mkIdent "Value",
+                key = mkIdent "Key",
+                source = mkIdent "Type",
+                asExpr = Nothing,
+                isReadonly = Just True,
+                isOptional = Nothing
+              }
+      parse' pExpr source `shouldBe` expected
+
+  describe "generic application" $ do
+    it "parses" $ do
+      let source = "A B C"
+      let expected =
+            ExprGenericApplication
+              ( GenericApplication
+                  (Ident "A")
+                  [ ExprIdent (Ident "B"),
+                    ExprIdent (Ident "C")
+                  ]
+              )
+      subject source `shouldBe` expected
+
+    it "parses parenthesized expressions" $ do
+      let source = "(A B C)"
+      let expected =
+            ExprGenericApplication
+              ( GenericApplication
+                  (Ident "A")
+                  [ ExprIdent (Ident "B"),
+                    ExprIdent (Ident "C")
+                  ]
+              )
+      subject source `shouldBe` expected
+
+    it "doesn't matter how many parens there are" $ do
+      let source = "((A B C))"
+      let expected =
+            ExprGenericApplication
+              ( GenericApplication
+                  (Ident "A")
+                  [ ExprIdent (Ident "B"),
+                    ExprIdent (Ident "C")
+                  ]
+              )
+
+      subject source `shouldBe` expected
+
+    it "should parse nested expressions in the arguments" $ do
+      let source = "A (B C)"
+      let expected =
+            ExprGenericApplication
+              ( GenericApplication
+                  (Ident "A")
+                  [ ExprGenericApplication
+                      ( GenericApplication
+                          (Ident "B")
+                          [ExprIdent (Ident "C")]
+                      )
+                  ]
+              )
+      subject source `shouldBe` expected
+
+literalValueSpec :: Spec
+literalValueSpec = describe "literal values" $ do
+  let subject = parse' pExpr
+
+  describe "numbers" $ do
+    it "parses integers" $ do
+      let source = "1"
+      let ast = NumberIntegerLiteral 1
+      subject source `shouldBe` ast
+
+  describe "strings" $
+    it "produces an ast" $ do
+      let source = "\"foobar\""
+      let ast = StringLiteral "foobar"
+      subject source `shouldBe` ast
+
+  describe "booleans" $
+    it "produces an ast" $ do
+      let source = "true"
+      let ast = BooleanLiteral True
+      subject source `shouldBe` ast
+
+  describe "functions" $ do
+    it "parses functions with no formal parameters" $ do
+      let source = "() => 1"
+      let ast = FunctionLiteral {typeParams = Nothing, params = [], rest = Nothing, returnType = NumberIntegerLiteral 1}
+      subject source `shouldBe` ast
+
+    it "parses functions with formal parameters" $ do
+      let source = "(x: number, y: number) => number"
+      runNewTypeParser pExpr "" source
+        `shouldParse` FunctionLiteral
+          { typeParams = Nothing,
+            params =
+              [ ("x", PrimitiveType PrimitiveNumber),
+                ("y", PrimitiveType PrimitiveNumber)
+              ],
+            rest = Nothing,
+            returnType = PrimitiveType PrimitiveNumber
+          }
+
+    it "parses functions with a rest parameter" $ do
+      let source = "(hd: number, ... tl: Array number) => number"
+      runNewTypeParser pExpr "" source
+        `shouldParse` FunctionLiteral
+          { typeParams = Nothing,
+            params = [("hd", PrimitiveType PrimitiveNumber)],
+            rest =
+              Just
+                ( "tl",
+                  ExprGenericApplication
+                    ( GenericApplication
+                        (Ident "Array")
+                        [ PrimitiveType PrimitiveNumber
+                        ]
+                    )
+                ),
+            returnType = PrimitiveType PrimitiveNumber
+          }
