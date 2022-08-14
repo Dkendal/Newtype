@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Newtype.Compiler
+      Newtype.Eval
       Newtype.Parser
       Newtype.Parser.Tokens
       Newtype.Syntax
@@ -44,6 +45,7 @@ library
     , containers
     , megaparsec
     , mtl
+    , nicify-lib
     , parser-combinators
     , prettyprinter
     , syb
@@ -69,6 +71,7 @@ executable nt
     , megaparsec
     , mtl
     , newtype
+    , nicify-lib
     , parser-combinators
     , prettyprinter
     , syb
@@ -100,11 +103,13 @@ test-suite newtype-test
     , here
     , hspec
     , hspec-contrib
+    , hspec-expectations-pretty-diff
     , hspec-golden
     , hspec-megaparsec
     , megaparsec
     , mtl
     , newtype
+    , nicify-lib
     , parser-combinators
     , prettyprinter
     , syb

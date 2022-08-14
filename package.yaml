@@ -29,6 +29,7 @@ dependencies:
   - containers
   - uniplate
   - mtl
+  - nicify-lib
 
 library:
   source-dirs: src
@@ -64,6 +65,7 @@ tests:
       - newtype
       - hspec
       - hspec-contrib
+      - hspec-expectations-pretty-diff
       - hspec-golden
       - hspec-megaparsec
       - QuickCheck

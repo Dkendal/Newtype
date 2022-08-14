@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -6,7 +7,8 @@
 module Newtype.Syntax where
 
 import Control.Monad
-import Data.Generics.Uniplate
+import qualified Data.Data as D
+import qualified Data.List as List
 import Data.Maybe
 import Prettyprinter
 
@@ -30,12 +32,16 @@ data Statement
         extends :: Maybe Extensible,
         props :: [Property]
       }
-  deriving (Eq, Show)
+  | TestDefinition
+      { name :: String,
+        body :: Expr
+      }
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 data Extensible
   = ExtendIdent Ident
   | ExtendGeneric GenericApplication
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 data ImportClause
   = ImportClauseDefault String
@@ -49,34 +55,24 @@ data ImportClause
       { defaultBinding :: String,
         namedBindings :: [ImportSpecifier]
       }
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 data ImportSpecifier
   = ImportedBinding String
   | ImportedAlias {from :: String, to :: String}
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 data TypeParam = TypeParam
   { name :: String,
     defaultValue :: Maybe Expr,
     constraint :: Maybe Expr
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 type FnFormalParam = (String, Expr)
 
 data Expr
-  = StringLiteral String
-  | NumberIntegerLiteral Integer
-  | NumberDoubleLiteral Double
-  | FunctionLiteral
-      { typeParams :: Maybe [String],
-        params :: [FnFormalParam],
-        rest :: Maybe FnFormalParam,
-        returnType :: Expr
-      }
-  | BooleanLiteral Bool
-  | ObjectLiteral [Property]
+  = Literal Literal
   | ExprGenericApplication GenericApplication
   | Access Expr Expr
   | DotAccess Expr Expr
@@ -97,11 +93,25 @@ data Expr
   | Union Expr Expr
   | Intersection Expr Expr
   | Hole
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
+
+data Literal
+  = StringLiteral String
+  | NumberIntegerLiteral Integer
+  | NumberDoubleLiteral Double
+  | FunctionLiteral
+      { typeParams :: Maybe [String],
+        params :: [FnFormalParam],
+        rest :: Maybe FnFormalParam,
+        returnType :: Expr
+      }
+  | BooleanLiteral Bool
+  | ObjectLiteral [Property]
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 data GenericApplication
   = GenericApplication Ident [Expr]
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 data PrimitiveType
   = PrimitiveNever
@@ -116,10 +126,10 @@ data PrimitiveType
   | PrimitiveVoid
   | PrimitiveObject
   | PrimitiveSymbol
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 newtype Ident = Ident String
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, D.Data, D.Typeable)
 
 data ConditionalType = ConditionalType
   { lhs :: Expr,
@@ -127,7 +137,7 @@ data ConditionalType = ConditionalType
     thenExpr :: Expr,
     elseExpr :: Expr
   }
-  deriving (Show, Eq)
+  deriving (Show, Eq, D.Data, D.Typeable)
 
 data Property
   = DataProperty
@@ -143,10 +153,10 @@ data Property
         key :: String,
         value :: Expr
       }
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 data Accessor = Getter | Setter
-  deriving (Eq, Show)
+  deriving (Eq, Show, D.Data, D.Typeable)
 
 -------------------------------------------------------------------------------
 -- Pretty instances                                                          --
@@ -172,6 +182,7 @@ instance Pretty Statement where
     where
       head = group "interface" <+> pretty name <> prettyList params
       body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
+  pretty TestDefinition {} = error "TODO"
 
   prettyList statements = vsep (punctuate line (map pretty statements))
 
@@ -188,16 +199,33 @@ instance Pretty ImportSpecifier where
   prettyList lst =
     braces . hsep . punctuate comma . map pretty $ lst
 
-instance Pretty Expr where
+instance Pretty Literal where
   pretty FunctionLiteral {..} = doc
     where
       doc :: Doc ann
-      doc = (maybe emptyDoc prettyTypeParams typeParams) <> (parens $ prettyParams params <+> prettyRest rest <+> "=>" <+> pretty returnType)
+      doc = maybe emptyDoc prettyTypeParams typeParams <> parens (prettyParams params <+> prettyRest rest <+> "=>" <+> pretty returnType)
       prettyTypeParams l = "<" <> hsep (punctuate comma (map pretty l)) <> ">"
       prettyParams params = hsep $ punctuate comma $ map prettyParam params
       prettyParam (name, type') = pretty name <> ":" <+> pretty type'
       prettyRest Nothing = emptyDoc
       prettyRest (Just t) = "..." <> prettyParam t
+  pretty (NumberIntegerLiteral value) = pretty value
+  pretty (NumberDoubleLiteral value) = pretty value
+  pretty (BooleanLiteral True) = "true"
+  pretty (BooleanLiteral False) = "false"
+  pretty (StringLiteral value) = dquotes . pretty $ value
+  pretty (ObjectLiteral []) = "{}"
+  pretty (ObjectLiteral props) =
+    group
+      ( encloseSep
+          (flatAlt "{ " "{")
+          (flatAlt " }" "}")
+          ", "
+          (map pretty props)
+      )
+
+instance Pretty Expr where
+  pretty (Literal x) = pretty x
   pretty Hole = "_"
   pretty (PrimitiveType t) = pretty t
   pretty MappedType {asExpr = Just asExpr, key, ..}
@@ -214,21 +242,7 @@ instance Pretty Expr where
   pretty (Builtin a b) = group (pretty a <+> pretty b)
   pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"
   pretty (DotAccess a b) = pretty a <> "." <> pretty b
-  pretty (NumberIntegerLiteral value) = pretty value
-  pretty (NumberDoubleLiteral value) = pretty value
-  pretty (BooleanLiteral True) = "true"
-  pretty (BooleanLiteral False) = "false"
-  pretty (StringLiteral value) = dquotes . pretty $ value
   pretty (ExprGenericApplication a) = pretty a
-  pretty (ObjectLiteral []) = "{}"
-  pretty (ObjectLiteral props) =
-    group
-      ( encloseSep
-          (flatAlt "{ " "{")
-          (flatAlt " }" "}")
-          ", "
-          (map pretty props)
-      )
   pretty (ExprIdent id) = pretty id
   pretty (ExprInferIdent (Ident id)) = group "infer" <+> pretty id
   pretty (Tuple []) = "[]"
@@ -318,6 +332,18 @@ ctExpr lhs rhs then' else' = ExprConditionalType (ConditionalType lhs rhs then' 
 
 never :: Expr
 never = PrimitiveType PrimitiveNever
+
+any = PrimitiveType PrimitiveAny
+
+union :: [Expr] -> Expr
+union [] = never
+union [h] = h
+union (h : t) = List.foldl Union h t
+
+intersection :: [Expr] -> Expr
+intersection [] = never
+intersection [h] = h
+intersection (h : t) = List.foldl Intersection h t
 
 -------------------------------------------------------------------------------
 -- Helpers                                                                   --

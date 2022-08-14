@@ -44,10 +44,20 @@ pStatement :: Parser Statement
 pStatement =
   nonIndented $
     choice
-      [ pImport,
+      [ pTestDefinition,
+        pImport,
         pTypeDefinition,
         pInterfaceDefintion
       ]
+
+pTestDefinition :: Parser Statement
+pTestDefinition =
+  do
+    keyword "test"
+    name <- lexeme stringLiteral
+    keyword "where"
+    body <- pExpr
+    return TestDefinition {..}
 
 pImport :: Parser Statement
 pImport = do
@@ -83,19 +93,15 @@ pInterfaceDefintion = do
   pos <- L.indentLevel
   keyword "interface"
   name <- moduleIdent <?> "interface name"
-  indentGuard GT pos
   params <- pFormalTypeParams
-  indentGuard GT pos
   extends <- optional extendsClause <?> "interface extends clause"
-  indentGuard GT pos
   props <- fmap (fromMaybe []) (optional . whereClause $ pos)
   return InterfaceDefinition {..}
   where
     whereClause :: Pos -> Parser [Property]
     whereClause pos = do
       keyword "where"
-      pos <- indentGuard GT pos
-      many (indentGuard EQ pos >> pProperty) <?> "interface properties"
+      some pProperty <?> "interface properties"
 
     -- Example input:
     --  extends Foo
@@ -194,7 +200,7 @@ pFunctionLiteral =
     rparen
     keyword "=>"
     returnType <- pExpr <?> "function return type"
-    return FunctionLiteral {..}
+    return $ Literal FunctionLiteral {..}
   where
     pParams = sepEndBy pParam comma
     pRest = optional $ do
@@ -358,16 +364,16 @@ pInferIdent :: Parser Expr
 pInferIdent = inferSym >> ExprInferIdent <$> pIdent <?> "infered identifier"
 
 pNumberIntegerLiteral :: Parser Expr
-pNumberIntegerLiteral = NumberIntegerLiteral <$> integer
+pNumberIntegerLiteral = Literal . NumberIntegerLiteral <$> integer
 
 pNumberDoubleLiteral :: Parser Expr
-pNumberDoubleLiteral = NumberDoubleLiteral <$> float
+pNumberDoubleLiteral = Literal . NumberDoubleLiteral <$> float
 
 pBooleanLiteral :: Parser Expr
-pBooleanLiteral = BooleanLiteral <$> choice [True <$ keyword "true", False <$ keyword "false"]
+pBooleanLiteral = Literal . BooleanLiteral <$> choice [True <$ keyword "true", False <$ keyword "false"]
 
 pStringLiteral :: Parser Expr
-pStringLiteral = StringLiteral <$> stringLiteral
+pStringLiteral = Literal . StringLiteral <$> stringLiteral
 
 pTuple :: Parser Expr
 pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
@@ -386,7 +392,7 @@ pIdent' = ExprIdent <$> pIdent <?> "identifier"
 
 pObjectLiteral :: Parser Expr
 pObjectLiteral =
-  ObjectLiteral <$> braces (pProperty `sepBy` comma)
+  Literal . ObjectLiteral <$> braces (pProperty `sepBy` comma)
 
 pGenericApplication :: Parser GenericApplication
 pGenericApplication = do
