@@ -18,22 +18,6 @@ import Prelude as P hiding (lines, unlines)
 
 spec :: Spec
 spec = do
-  describe "parseAdjMatrix" $ do
-    it "can parse a matrix table" $ do
-      let tbl =
-            parseAdjMatrix
-              '|'
-              [ "|   | a | b |",
-                "| x | 1 | 0 |",
-                "| y |   | 1 |"
-              ]
-
-      let out =
-            [ ("x", [("a", "1"), ("b", "0")]),
-              ("y", [("a", ""), ("b", "1")])
-            ]
-      tbl `shouldBe` out
-
   describe "evalProgram" $ do
     it "can expand a generic" $ do
       let input = unlines ["Id t : t", "A : Id 1"]

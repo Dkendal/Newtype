@@ -89,6 +89,7 @@ test-suite newtype-test
       Newtype.Syntax.ConditionalsSpec
       Newtype.SyntaxSpec
       Test.Hspec.Newtype
+      Test.Hspec.NewtypeSpec
       Paths_newtype
   hs-source-dirs:
       test
