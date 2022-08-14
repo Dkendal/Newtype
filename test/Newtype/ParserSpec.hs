@@ -14,6 +14,7 @@ import Prettyprinter
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty
 import Test.Hspec.Megaparsec
+import Test.Hspec.Newtype
 import Text.Megaparsec hiding (parse)
 import Prelude as P hiding (lines, unlines)
 
@@ -155,33 +156,6 @@ spec =
           let out = "(n extends string ? 1 : 2)"
           expr src `shouldCompileTo` out
 
-{-
- Example input:
- "
- |   | a | b |
- | x | 1 | 0 |
- | y |   | 1 |
- "
- Example output:
- [("x", [("a", "1"), ("b", "0")]), ("y", [("a", ""), ("b", "1")])]
- -}
-parseAdjMatrix :: Char -> [Text] -> [(Text, [(Text, Text)])]
-parseAdjMatrix colSep textLines =
-  do
-    let headers = P.tail . P.head $ tbl
-    do
-      row <- P.tail tbl
-      let colHeader = P.head row
-      let rowWithHeaders = P.zip headers (P.tail row)
-      return (colHeader, rowWithHeaders)
-  where
-    tbl =
-      do
-        l <- textLines
-        return $ do
-          cell <- splitOn (singleton colSep) (dropAround (colSep ==) l)
-          return $ strip cell
-
 -- in Prelude.map (\(name, row) -> (name, row)) rows''
 
 evalExprSpec :: Spec
@@ -203,7 +177,7 @@ evalExprSpec = do
       tbl `shouldBe` out
 
   describe "evalProgram" $ do
-    fit "can expand a generic" $ do
+    it "can expand a generic" $ do
       let input = unlines ["Id t : t", "A : Id 1"]
           output = unlines ["Id t : t", "A : 1"]
        in program' input `shouldBe` program output
@@ -244,7 +218,7 @@ evalExprSpec = do
             Left e -> expectationFailure $ errorBundlePretty e
             Right ex -> ex
 
-  fdescribe "evalExpr" $ do
+  describe "evalExpr" $ do
     it "distributes over both branches when the lhs is `any`" $ do
       let src = "if any <: 1 then 2 else 3"
       fmap evalExpr (expr src) `shouldBe` expr "2 | 3"

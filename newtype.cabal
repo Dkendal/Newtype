@@ -84,9 +84,11 @@ test-suite newtype-test
   main-is: Spec.hs
   other-modules:
       Newtype.CompilerSpec
+      Newtype.EvalSpec
       Newtype.ParserSpec
       Newtype.Syntax.ConditionalsSpec
       Newtype.SyntaxSpec
+      Test.Hspec.Newtype
       Paths_newtype
   hs-source-dirs:
       test
