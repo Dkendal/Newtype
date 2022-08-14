@@ -1,15 +1,13 @@
 module Main where
 
-import Data.Text.IO hiding (putStrLn)
-import Newtype.Parser (pProgram)
-import qualified Newtype.Parser ()
+import Data.Text.IO (readFile)
+import Newtype.Compiler (compile)
 import Prettyprinter (pretty)
-import System.Environment
-import System.Exit
-import Text.Megaparsec (errorBundlePretty, parse)
+import System.Environment (getArgs)
+import System.Exit (exitSuccess)
+import Text.Megaparsec (errorBundlePretty)
 import qualified Text.Megaparsec ()
 import Prelude hiding (readFile)
-import Newtype.Compiler (compile)
 
 main :: IO ()
 main =

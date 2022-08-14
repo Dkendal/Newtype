@@ -1,14 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Newtype.Parser where
+module Newtype.Parser (module Newtype.Parser, module Newtype.Parser.Tokens) where
 
 import Control.Applicative hiding (many, some)
 import Control.Monad
 import Control.Monad.Combinators.Expr
+import Control.Monad.State (evalState)
 import Data.Functor
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text, pack, unpack)
+import Data.Void (Void)
 import Newtype.Parser.Tokens
 import Newtype.Syntax
 import Newtype.Syntax.Conditionals
@@ -16,14 +18,14 @@ import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Megaparsec.Debug (dbg)
-import Data.Void (Void)
-import Control.Monad.State (evalState)
 
 type FormalParamMap = Map.Map String Expr
 
 type CompilerError = ParseErrorBundle Text Void
 
-runNewTypeParser :: Parser a -> String -> Text -> Either CompilerError a
+type ParserResult a = Either CompilerError a
+
+runNewTypeParser :: Parser a -> String -> Text -> ParserResult a
 runNewTypeParser parser filename source =
   evalState stateAction initialState
   where
