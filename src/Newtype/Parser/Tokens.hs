@@ -122,7 +122,7 @@ keyword' :: Text -> Parser Text
 keyword' txt = lexeme' (string txt <* notFollowedBy identifierTail)
 
 stringLiteral :: Parser String
-stringLiteral = char '\"' *> L.charLiteral `manyTill` char '\"'
+stringLiteral = lexeme $ char '\"' *> L.charLiteral `manyTill` char '\"'
 
 integer :: Parser Integer
 integer = lexeme L.decimal

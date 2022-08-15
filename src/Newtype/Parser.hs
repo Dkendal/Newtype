@@ -56,7 +56,7 @@ pTestDefinition :: Parser Statement
 pTestDefinition =
   do
     keyword "test"
-    name <- lexeme stringLiteral
+    name <- stringLiteral
     keyword "where"
     body <- pExpr
     return TestDefinition {..}
@@ -64,7 +64,7 @@ pTestDefinition =
 pImport :: Parser Statement
 pImport = do
   keyword "import"
-  fromClause <- lexeme stringLiteral <?> "package name"
+  fromClause <- stringLiteral <?> "package name"
   importClause <- pImportClause
   return ImportDeclaration {..}
   where
