@@ -6,7 +6,6 @@
 module Newtype.ParserSpec (spec) where
 
 import Data.Text
-import Newtype.Eval
 import Newtype.Parser
 import Newtype.Syntax
 import Prettyprinter
@@ -23,8 +22,8 @@ spec =
       it "parses a test statement" $ do
         parse pProgram
           `shouldSucceedOn` unlines
-            [ "test \"does the thing\" where",
-              "  AssertEqual 1 1"
+            [ "test \"does the thing\" where"
+            , "  AssertEqual 1 1"
             ]
 
     -- it "can eval the test program" $ do
@@ -65,28 +64,28 @@ spec =
       it "can have properties" $ do
         let src =
               unlines
-                [ "interface A where",
-                  "  a : string"
+                [ "interface A where"
+                , "  a : string"
                 ]
         let out =
               unlines'
-                [ "interface A {",
-                  "  a: string;",
-                  "}"
+                [ "interface A {"
+                , "  a: string;"
+                , "}"
                 ]
         parse pProgram src `shouldCompileTo` out
 
       it "can apply modifiers to properties" $ do
         let src =
               unlines
-                [ "interface A where",
-                  "  readonly index a? : string"
+                [ "interface A where"
+                , "  readonly index a? : string"
                 ]
         let out =
               unlines'
-                [ "interface A {",
-                  "  readonly [a]?: string;",
-                  "}"
+                [ "interface A {"
+                , "  readonly [a]?: string;"
+                , "}"
                 ]
         parse pProgram src `shouldCompileTo` out
 
@@ -135,8 +134,8 @@ spec =
         it "can have one case and default to never for the else case" $ do
           let src =
                 unlines
-                  [ "case n of",
-                    "  string -> 1"
+                  [ "case n of"
+                  , "  string -> 1"
                   ]
           let out = "(n extends string ? 1 : never)"
           expr src `shouldCompileTo` out
@@ -144,17 +143,17 @@ spec =
         it "can't just have a fallthrough case" $ do
           let src =
                 unlines
-                  [ "case n of",
-                    "  _ -> 1"
+                  [ "case n of"
+                  , "  _ -> 1"
                   ]
           expr `shouldFailOn` src
 
         it "can have have a fallthrough case" $ do
           let src =
                 unlines
-                  [ "case n of",
-                    "  string -> 1",
-                    "  _ -> 2"
+                  [ "case n of"
+                  , "  string -> 1"
+                  , "  _ -> 2"
                   ]
           let out = "(n extends string ? 1 : 2)"
           expr src `shouldCompileTo` out
