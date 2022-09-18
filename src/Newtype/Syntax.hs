@@ -77,7 +77,7 @@ data Expr
   | Access Expr Expr
   | DotAccess Expr Expr
   | PrimitiveType PrimitiveType
-  | Builtin String Expr
+  | Keyof Expr
   | ExprIdent Ident
   | ExprInferIdent Ident
   | Tuple [Expr]
@@ -97,6 +97,7 @@ data Expr
 
 data Literal
   = StringLiteral String
+  -- | SymbolLiteral String
   | NumberIntegerLiteral Integer
   | NumberDoubleLiteral Double
   | FunctionLiteral
@@ -239,7 +240,7 @@ instance Pretty Expr where
         (Just expr) -> space <> "as" <+> pretty expr
       index = pretty key <+> "in" <+> pretty source <> as
       lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
-  pretty (Builtin a b) = group (pretty a <+> pretty b)
+  pretty (Keyof a) = group ("keyof" <+> pretty a)
   pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"
   pretty (DotAccess a b) = pretty a <> "." <> pretty b
   pretty (ExprGenericApplication a) = pretty a
@@ -323,6 +324,9 @@ instance Pretty ConditionalType where
 
 mkIdent :: String -> Expr
 mkIdent = ExprIdent . Ident
+
+mkString :: String -> Expr
+mkString = Literal . StringLiteral
 
 genericAp :: Ident -> [Expr] -> Expr
 genericAp = (ExprGenericApplication .) . GenericApplication

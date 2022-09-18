@@ -137,10 +137,13 @@ float' :: Parser Double
 float' = lexeme' L.float
 
 -- | Left associative binary operator.
+binary :: Text -> (a -> a -> a) -> Operator (ParsecT Void Text (State Pos)) a
 binary name f = InfixL (f <$ symbol name)
 
+prefix :: Text -> (a -> a) -> Operator (ParsecT Void Text (State Pos)) a
 prefix name f = Prefix (f <$ symbol name)
 
+postfix :: Text -> (a -> a) -> Operator (ParsecT Void Text (State Pos)) a
 postfix name f = Postfix (f <$ symbol name)
 
 -- | Parse an operator, using backtracking to ensure that the operator is not a

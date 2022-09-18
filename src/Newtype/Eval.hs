@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Newtype.Eval where
 
@@ -7,10 +8,12 @@ import Control.Monad
 import qualified Data.Data as D
 import Data.Dynamic
 import Data.Functor
-import Data.Generics.Uniplate.Data as U
+import qualified Data.Generics.Uniplate.Data as Uniplate
 import qualified Data.List as List
 import qualified Data.Map.Strict as FM
-import Data.Maybe (catMaybes, fromMaybe)
+import qualified Data.Maybe as Maybe
+import Data.String.Here.Interpolated
+import Debug
 import Debug.Trace
 import Newtype.Syntax
 import Text.Nicify
@@ -21,85 +24,119 @@ type TestResult = Expr
 newtype SymbolTable = SymbolTable {symMap :: FM.Map String Symbol}
   deriving (Show)
 
-pp label a = trace (label ++ (nicify . show) a)
-
 evalProgram :: Program -> Program
 evalProgram p@Program {..} =
   Program statements'
   where
     -- Collect all type definitions to a symbol table
-    definitions = catMaybes [mkSymFunc x | x <- statements, isTypeDefLike x]
+    definitions = Maybe.catMaybes [mkSymFunc x | x <- statements, isTypeDefLike x]
     symbolTable = mkSymbolTable definitions
-    -- For lack of a better name, evaluate the expression to a concrete value
-    optimizeS = U.transformBi (resolveExpr symbolTable)
-    statements' = optimizeS <$> statements
+    -- Bottom- up eval symbols with sources from the symbol table
+    transform = Uniplate.transformBi (evalSymbols symbolTable)
+    statements' = transform <$> statements
 
-resolveExpr :: SymbolTable -> Expr -> Expr
-resolveExpr scope a@(Literal _) = a
-resolveExpr scope expr@(ExprGenericApplication (GenericApplication name args)) =
-  -- If the function is not defined, return the original expression
-  expr `fromMaybe` do
-    -- Find the definition of the function
-    -- FIXME: check if this is just a value firse
-    td <- getSym name scope
-    -- Apply the arguments to the definition of the function
-    return $ callFunc scope td args
-resolveExpr scope (Access ex ex') = error "NI: Access"
-resolveExpr scope (DotAccess ex ex') = error "NI: DotAccess"
-resolveExpr scope (PrimitiveType pt) = error "NI: PrimitiveType"
-resolveExpr scope (Builtin s ex) = error "NI: Builtin"
-resolveExpr scope a@(ExprIdent id) =
-  fromMaybe a (getSymValue id scope)
-resolveExpr scope (ExprInferIdent id) = error "NI: ExprInferIdent"
-resolveExpr scope (Tuple exs) = error "NI: Tuple"
-resolveExpr scope (ExprConditionalType ConditionalType {..})
-  | lhs == any =
-    union [thenExpr, elseExpr]
-resolveExpr scope (ExprConditionalType ConditionalType {..}) =
-  if lhs `isAssignable` rhs
-    then resolveExpr scope thenExpr
-    else resolveExpr scope elseExpr
-resolveExpr scope (MappedType ex ex' ex3 m_ex m_b ma) = error "NI: MappedType"
-resolveExpr scope (Union ex ex') = error "NI: Union"
-resolveExpr scope (Intersection ex ex') = error "NI: Intersection"
-resolveExpr scope Hole = error "NI: Hole"
+evalSymbols :: SymbolTable -> Expr -> Expr
+evalSymbols scope expr = f
+  where
+    f =
+      case expr of
+        -- Special case for:
+        --     if any <: ... then ...
+        -- `any` both satisfies the constraint, but also doesn't ?? because
+        -- it could be anything so it returns both branches.
+        -- https://github.com/microsoft/TypeScript/issues/40049
+        (ExprConditionalType ConditionalType {..})
+          | lhs == any ->
+            union [thenExpr, elseExpr]
+        (ExprConditionalType ConditionalType {..}) ->
+          if lhs `isAssignable` rhs
+            then evalSymbols scope thenExpr
+            else evalSymbols scope elseExpr
+        (Keyof (Literal (ObjectLiteral props))) ->
+          -- Convert each property to a string literal, pack them into a union
+          union [mkString key | DataProperty {key} <- props]
+        (ExprGenericApplication (GenericApplication id args)) ->
+          -- If the function is not defined, return the original expression
+          -- Find the definition of the function
+          -- Apply the arguments to the definition of the function
+          maybe expr f (get id)
+          where
+            f sym =
+              let result = applyFunction scope args sym
+               in trace (prettyPrint expr ++ " == " ++ prettyPrint result) result
+        (ExprIdent id@Ident {}) -> maybe expr symbolValue (get id)
+        MappedType {..} ->
+          literal props
+          where
+            props = [f item | item <- toList source]
+            f item = prop
+              where
+                scope' =
+                  bind (fromExprIdent key) (string item) scope
+                prop =
+                  DataProperty
+                    { isReadonly
+                    , isOptional
+                    , isIndex = False
+                    , accessor = Nothing
+                    , key = item
+                    , value = transform scope' value
+                    }
+        x -> x
+    get id = getSym id scope
+    literal = Literal . ObjectLiteral
+    string = Literal . StringLiteral
+
+-- | Bottom-up traveral, replace all symbols with their values
+transform :: SymbolTable -> Expr -> Expr
+transform symbolTable = Uniplate.transform (evalSymbols symbolTable)
+
+-- | Resolve an expression like `Id 1` (or in TS `Id<1>`) to a concrete value.
+applyFunction :: SymbolTable -> [Expr] -> Symbol -> Expr
+applyFunction parentScope args sym =
+  case sym of
+    SymbolVal {..} -> symbolValue
+    SymbolFunc {..} ->
+      transform symbolTable symbolValue
+      where
+        symbolTable = SymbolTable map
+        parentMap = symMap parentScope
+        map = FM.unionWith onConflict parentMap argumentSymbols
+        argumentSymbols = FM.fromList list
+        -- Arguments and TypeParams should be of the same length
+        -- Arguments may be shorter if they are optional
+        list = [(name, SymbolVal name expr) | (name, expr) <- zipped]
+        zipped = zip [name | TypeParam {..} <- params] args
+        -- Merge the argument symbols with the parent scope
+        onConflict _ _ = error "variable shadowed"
+
+toList :: Expr -> [String]
+toList (Union a b) = concatMap toList [a, b]
+toList (Literal (StringLiteral a)) = [a]
+toList (Literal (NumberIntegerLiteral a)) = [show a]
+toList other = error $ "RuntimeError: " <> nicify (show other) <> " must extend `string | number | symbol`"
 
 data Symbol
   = SymbolFunc {name :: String, params :: [TypeParam], symbolValue :: Expr}
   | SymbolVal {name :: String, symbolValue :: Expr}
   deriving (Show, D.Data, D.Typeable)
 
--- Resolve an expression like `Id 1` (or in TS `Id<1>`) to a concrete value.
-callFunc :: SymbolTable -> Symbol -> [Expr] -> Expr
-callFunc parentScope td@SymbolFunc {..} args =
-  resolveExpr scope symbolValue
-  where
-    argumentSymbols = FM.fromList list
-      where
-        -- Arguments and TypeParams should be of the same length
-        -- Arguments may be shorter if they are optional
-        zipped = zip [name | TypeParam {..} <- params] args
-        list = [(name, SymbolVal name expr) | (name, expr) <- zipped]
-    -- Merge the argument symbols with the parent scope
-    scope =
-      SymbolTable $
-        FM.unionWith
-          -- Don't allow overwriting of existing symbols
-          (\_ _ -> error "variable shadowed")
-          (symMap parentScope)
-          argumentSymbols
-callFunc _ SymbolVal {..} _ = symbolValue
-
 mkSymFunc :: Statement -> Maybe Symbol
 mkSymFunc (TypeDefinition name params body) = Just $ SymbolFunc name params body
 mkSymFunc (InterfaceDefinition name params extends props) = Just $ error "TODO"
 mkSymFunc _ = Nothing
 
+-- | Lookup a symbol in the symbol table
 getSym :: Ident -> SymbolTable -> Maybe Symbol
 getSym (Ident n) (SymbolTable st) = FM.lookup n st
 
 getSymValue :: Ident -> SymbolTable -> Maybe Expr
 getSymValue (Ident n) (SymbolTable st) = symbolValue <$> FM.lookup n st
+
+-- | Bind a value to a name in the symbol table
+bind :: String -> Expr -> SymbolTable -> SymbolTable
+bind name symbolValue (SymbolTable st) =
+  SymbolTable $ FM.insert name (SymbolVal {name, symbolValue}) st
 
 mkSymbolTable :: [Symbol] -> SymbolTable
 mkSymbolTable stmnts = SymbolTable fm
@@ -186,3 +223,7 @@ isTopType _ = False
 isBottomType :: Expr -> Bool
 isBottomType (PrimitiveType PrimitiveNever) = True
 isBottomType _ = False
+
+fromExprIdent = \case
+  ExprIdent (Ident id) -> id
+  x -> error $ "Expected ExprIdent, got " ++ show x

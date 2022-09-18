@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Debug
       Newtype.Compiler
       Newtype.Eval
       Newtype.Parser
@@ -40,9 +41,12 @@ library
       NamedFieldPuns
       RecordWildCards
       ScopedTypeVariables
+      QuasiQuotes
   build-depends:
       base >=4.7 && <5
     , containers
+    , here
+    , heredoc
     , megaparsec
     , mtl
     , nicify-lib
@@ -64,10 +68,13 @@ executable nt
       NamedFieldPuns
       RecordWildCards
       ScopedTypeVariables
+      QuasiQuotes
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
     , containers
+    , here
+    , heredoc
     , megaparsec
     , mtl
     , newtype
@@ -98,12 +105,14 @@ test-suite newtype-test
       NamedFieldPuns
       RecordWildCards
       ScopedTypeVariables
+      QuasiQuotes
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
     , base >=4.7 && <5
     , containers
     , here
+    , heredoc
     , hspec
     , hspec-contrib
     , hspec-expectations-pretty-diff

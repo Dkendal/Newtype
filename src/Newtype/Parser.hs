@@ -345,6 +345,7 @@ pExpr = choice [pTypeOp, pTerm]
 -- | Parse an expression with a type operator. A type operator may be a builtin
 -- prefix operator like `typeof` or `keyof`, or a prefix operator: like `!` for
 -- access, or type union or intersection, `|` or `&` respectively.
+-- |
 pTypeOp :: Parser Expr
 pTypeOp =
   makeExprParser
@@ -352,14 +353,8 @@ pTypeOp =
     [ [ InfixL $ DotAccess <$ (period <?> "dot access"),
         InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy (string "="))
       ],
-      [ Prefix $ do
-          kw <- choice (map keyword builtins) <?> "builtin type function"
-          let name = unpack kw
-          return (Builtin name)
-      ],
-      [ InfixL $ Intersection <$ (amp <?> "type intersection"),
-        InfixL $ Union <$ (pipe <?> "type union")
-      ]
+      [prefix "keyof" Keyof],
+      [binary "&" Intersection, binary "|" Union]
     ]
 
 pInferIdent :: Parser Expr

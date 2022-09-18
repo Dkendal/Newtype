@@ -30,6 +30,8 @@ dependencies:
   - uniplate
   - mtl
   - nicify-lib
+  - here
+  - heredoc
 
 library:
   source-dirs: src
@@ -39,6 +41,7 @@ default-extensions:
   - NamedFieldPuns
   - RecordWildCards
   - ScopedTypeVariables
+  - QuasiQuotes
 
 executables:
   nt:
@@ -69,4 +72,3 @@ tests:
       - hspec-golden
       - hspec-megaparsec
       - QuickCheck
-      - here

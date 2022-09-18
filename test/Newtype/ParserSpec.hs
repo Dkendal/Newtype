@@ -90,6 +90,14 @@ spec =
                 ]
         parse pProgram src `shouldCompileTo` out
 
+    describe "union types" $ do
+      it "can parse" $ do
+        parse pProgram "A : 1 | 2" `shouldCompileTo` "type A = 1 | 2;"
+
+    describe "intersection types" $ do
+      it "can parse" $ do
+        parse pProgram "A : 1 & 2" `shouldCompileTo` "type A = 1 & 2;"
+
     describe "expressions" $ do
       describe "if-then-else" $ do
         it "can parse" $ do

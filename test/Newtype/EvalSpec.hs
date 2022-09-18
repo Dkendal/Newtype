@@ -5,14 +5,15 @@ module Newtype.EvalSpec (spec) where
 import Control.Monad (forM_)
 import Data.Text (Text, stripEnd, unlines, unpack)
 import Newtype.Eval (evalExpr, evalProgram, isAssignable)
-import Newtype.Parser (CompilerError, pExpr, pProgram)
+import Newtype.Parser (ParserResult, pExpr, pProgram)
 import Newtype.Syntax (Expr, Program)
-import Test.Hspec (Spec, describe, it, pendingWith)
-import Test.Hspec.Expectations.Pretty
-  ( expectationFailure,
-    shouldBe,
-  )
+import Test.Hspec hiding (expectationFailure, shouldBe)
+import Test.Hspec.Expectations.Pretty (
+  expectationFailure,
+  shouldBe,
+ )
 import Test.Hspec.Newtype (parse, parseAdjMatrix)
+import Text.Heredoc
 import Text.Megaparsec (errorBundlePretty)
 import Prelude as P hiding (lines, unlines)
 
@@ -20,22 +21,63 @@ spec :: Spec
 spec = do
   describe "evalProgram" $ do
     it "can expand a generic" $ do
-      let input = unlines ["Id t : t", "A : Id 1"]
-          output = unlines ["Id t : t", "A : 1"]
-       in program' input `shouldBe` program output
+      shouldEvalTo
+        [str|Id t : t
+            |A : Id 1
+            |]
+        [str|Id t : t
+            |A : 1
+            |]
+
+    it "can recursively expand a generic" $ do
+      shouldEvalTo
+        [str|A t : t
+            |B t : t
+            |C t : t
+            |Out : A (B (C 1))
+            |]
+        [str|A t : t
+            |B t : t
+            |C t : t
+            |Out : 1
+            |]
+
+    it "can perform substituion within the type defintion" $ do
+      shouldEvalTo
+        [str|F t : [t, t]
+            |Out : F 1
+            |]
+        [str|F t : [t, t]
+            |Out : [1, 1]
+            |]
+
+    it "can expand a conditional" $ do
+      shouldEvalTo
+        [str|A : if 1 <: number then true else false|]
+        [str|A : true|]
+
+    it "can expand `keyof`" $ do
+      shouldEvalTo
+        [str|A : keyof { a : 1, b : 2}|]
+        [str|A : "a" | "b"|]
+
+    it "can expand a mapped type" $ do
+      shouldEvalTo
+        [str|A : { [t, t] : t <- "a" | "b" }|]
+        [str|A : { a : ["a", "a"], b : ["b", "b"] }|]
 
   describe "isAssignable" $ do
     let tbl =
           parseAdjMatrix
             '|'
-            [ "|           | any | unknown | object | void | undefined | null | never |",
-              "| any       |     | t       | t      | t    | t         | t    | f     |",
-              "| unknown   | t   |         | f      | f    | f         | f    | f     |",
-              "| object    | t   | t       |        | f    | f         | f    | f     |",
-              "| void      | t   | t       | f      |      | f         | f    | f     |",
-              "| undefined | t   | t       | o      | t    |           | o    | f     |",
-              "| null      | t   | t       | o      | o    | o         |      | f     |",
-              "| never     | t   | t       | t      | t    | t         | t    |       |"
+            [ "|           | any | unknown | object | void | undefined | null | never |"
+            , "| any       |     | t       | t      | t    | t         | t    | f     |"
+            , "| unknown   | t   |         | f      | f    | f         | f    | f     |"
+            , "| object    | t   | t       |        | f    | f         | f    | f     |"
+            , "| void      | t   | t       | f      |      | f         | f    | f     |"
+            , "| undefined | t   | t       | o      | t    |           | o    | f     |"
+            , "| null      | t   | t       | o      | o    | o         |      | f     |"
+            , "| never     | t   | t       | t      | t    | t         | t    |       |"
             ]
     forM_ tbl $ \(lhs, m0) ->
       describe (unpack lhs) $
@@ -86,16 +128,20 @@ spec = do
       let src = "if 1 <: number then true"
       fmap evalExpr (expr src) `shouldBe` expr "true"
 
-expr' :: Text -> Either CompilerError Expr
-expr' t = evalExpr <$> expr t
+type ParserHelper a = Text -> ParserResult a
 
-expr :: Text -> Either CompilerError Expr
+shouldEvalTo :: HasCallStack => Text -> Text -> Expectation
+shouldEvalTo input output =
+  program' input `shouldBe` program output
+
+expr :: ParserHelper Expr
 expr = parse pExpr
 
-program' :: Text -> Either CompilerError Program
+program' :: ParserHelper Program
 program' t = evalProgram <$> program t
 
-program :: Text -> Either CompilerError Program
+program :: ParserHelper Program
 program = parse pProgram
 
+unlines' :: [Text] -> Text
 unlines' = stripEnd . unlines

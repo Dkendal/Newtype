@@ -22,24 +22,27 @@ import "./const"
   , symbol_
   )
 
-type True = 1
+type True : 1
 
-type Primitive = M.Primitive
+test "the truth" where
+  assertEqual True 1
 
-type BuiltIn = M.BuiltIn
+type Primitive : M.Primitive
 
-type ExtractSubcapture T =
+type BuiltIn : M.BuiltIn
+
+type ExtractSubcapture T :
   if not T <: M.Primitive | M.BuiltIn and T <: object
   then T ! Exclude (keyof T) (keyof []) (keyof {})
 
-type PartialAssignment Key Value =
+type PartialAssignment Key Value :
   if not Value == never and Key <: string
   then { Value : k <- Key }
 
-type EmptyToNever T = if not {} <: T then T
+type EmptyToNever T : if not {} <: T then T
 
 type Kind
-  = typeof any_
+  : typeof any_
   | typeof rest_
   | typeof string_
   | typeof number_
@@ -49,7 +52,7 @@ type Kind
   | typeof bigint_
   | typeof object_
 
--- export type AnyNever<T extends object> = keyof T extends infer S
+-- export type AnyNever<T extends object> : keyof T extends infer S
 --   ? S extends any
 --     ? { [K in A.Cast<S, string | number | symbol>]: never }
 --     : never
@@ -59,16 +62,6 @@ type AnyNever T when T <: Object =
   if keyof T <: ?S and S <: any
   then { never : K <- A.Cast S string | number | symbol }
 
--- Interface syntax, TBD
---
--- -- Default arguments?
--- interface Hole Type \\ any Label \\ any where
---   T: Type
---   -- Index keyword
---   readonly index __kind__ : Label
--- 
--- -- Default arguments?
--- interface Hole (type = any) (label = any) where
---   T: type
---   -- TS style index
---   readonly [__kind__] : label
+interface Hole (type : any) (label : any) where
+  readonly [__kind__] : label
+  T : type
