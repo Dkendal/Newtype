@@ -8,8 +8,9 @@ import Control.Monad.Combinators.Expr
 import Control.Monad.State (evalState)
 import Data.Functor
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Text (Text, pack, unpack)
+import qualified Data.Text as Text
 import Data.Void (Void)
 import Newtype.Parser.Tokens
 import Newtype.Syntax
@@ -174,6 +175,7 @@ pTerm =
     , pNumberIntegerLiteral <?> "number"
     , pNumberDoubleLiteral <?> "number"
     , pBooleanLiteral <?> "boolean literal"
+    , (TemplateLiteral <$> pTemplateStrings) <?> "template literal"
     , pStringLiteral <?> "string literal"
     , pIdent' <?> "identifier"
     , -- Not actually valid outside of the extends expression
@@ -182,6 +184,25 @@ pTerm =
     , pObjectLiteral <?> "object literal"
     , hidden . parens $ pExpr
     ]
+
+-- Parse typescript template strings:
+-- `foo ${bar} baz`
+pTemplateStrings :: Parser [TemplateString]
+pTemplateStrings = do
+  symbol "`"
+  s <- manyTill p (symbol "`")
+  return . catMaybes . concat $ s
+  where
+    p = do
+      s <- Just . TemplateRaw <$> someTill L.charLiteral (lookAhead (choice [symbol "${", symbol "`"]))
+
+      e <- optional $ do
+        string "${"
+        e <- pExpr
+        string "}"
+        return $ TemplateSubstitution e
+
+      return [s, e]
 
 {- | Parse a function literal.
  Example input:

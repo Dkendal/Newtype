@@ -17,24 +17,24 @@ newtype Program = Program {statements :: [Statement]}
 
 data Statement
   = ImportDeclaration
-      { importClause :: ImportClause,
-        fromClause :: String
+      { importClause :: ImportClause
+      , fromClause :: String
       }
   | ExportStatement [Ident]
   | TypeDefinition
-      { name :: String,
-        params :: [TypeParam],
-        body :: Expr
+      { name :: String
+      , params :: [TypeParam]
+      , body :: Expr
       }
   | InterfaceDefinition
-      { name :: String,
-        params :: [TypeParam],
-        extends :: Maybe Extensible,
-        props :: [Property]
+      { name :: String
+      , params :: [TypeParam]
+      , extends :: Maybe Extensible
+      , props :: [Property]
       }
   | TestDefinition
-      { name :: String,
-        body :: Expr
+      { name :: String
+      , body :: Expr
       }
   deriving (Eq, Show, D.Data, D.Typeable)
 
@@ -48,12 +48,12 @@ data ImportClause
   | ImportClauseNS String
   | ImportClauseNamed [ImportSpecifier]
   | ImportClauseDefaultAndNS
-      { defaultBinding :: String,
-        namespaceBinding :: String
+      { defaultBinding :: String
+      , namespaceBinding :: String
       }
   | ImportClauseDefaultAndNamed
-      { defaultBinding :: String,
-        namedBindings :: [ImportSpecifier]
+      { defaultBinding :: String
+      , namedBindings :: [ImportSpecifier]
       }
   deriving (Eq, Show, D.Data, D.Typeable)
 
@@ -63,9 +63,9 @@ data ImportSpecifier
   deriving (Eq, Show, D.Data, D.Typeable)
 
 data TypeParam = TypeParam
-  { name :: String,
-    defaultValue :: Maybe Expr,
-    constraint :: Maybe Expr
+  { name :: String
+  , defaultValue :: Maybe Expr
+  , constraint :: Maybe Expr
   }
   deriving (Eq, Show, D.Data, D.Typeable)
 
@@ -82,13 +82,14 @@ data Expr
   | ExprInferIdent Ident
   | Tuple [Expr]
   | ExprConditionalType ConditionalType
+  | TemplateLiteral [TemplateString]
   | MappedType
-      { value :: Expr,
-        key :: Expr,
-        source :: Expr,
-        asExpr :: Maybe Expr,
-        isReadonly :: Maybe Bool,
-        isOptional :: Maybe Bool
+      { value :: Expr
+      , key :: Expr
+      , source :: Expr
+      , asExpr :: Maybe Expr
+      , isReadonly :: Maybe Bool
+      , isOptional :: Maybe Bool
       }
   | Union Expr Expr
   | Intersection Expr Expr
@@ -97,17 +98,21 @@ data Expr
 
 data Literal
   = StringLiteral String
-  -- | SymbolLiteral String
   | NumberIntegerLiteral Integer
   | NumberDoubleLiteral Double
   | FunctionLiteral
-      { typeParams :: Maybe [String],
-        params :: [FnFormalParam],
-        rest :: Maybe FnFormalParam,
-        returnType :: Expr
+      { typeParams :: Maybe [String]
+      , params :: [FnFormalParam]
+      , rest :: Maybe FnFormalParam
+      , returnType :: Expr
       }
   | BooleanLiteral Bool
   | ObjectLiteral [Property]
+  deriving (Eq, Show, D.Data, D.Typeable)
+
+data TemplateString
+  = TemplateRaw String
+  | TemplateSubstitution Expr
   deriving (Eq, Show, D.Data, D.Typeable)
 
 data GenericApplication
@@ -133,26 +138,26 @@ newtype Ident = Ident String
   deriving (Eq, Ord, Show, D.Data, D.Typeable)
 
 data ConditionalType = ConditionalType
-  { lhs :: Expr,
-    rhs :: Expr,
-    thenExpr :: Expr,
-    elseExpr :: Expr
+  { lhs :: Expr
+  , rhs :: Expr
+  , thenExpr :: Expr
+  , elseExpr :: Expr
   }
   deriving (Show, Eq, D.Data, D.Typeable)
 
 data Property
   = DataProperty
-      { isIndex :: Bool,
-        isReadonly :: Maybe Bool,
-        isOptional :: Maybe Bool,
-        accessor :: Maybe Accessor,
-        key :: String,
-        value :: Expr
+      { isIndex :: Bool
+      , isReadonly :: Maybe Bool
+      , isOptional :: Maybe Bool
+      , accessor :: Maybe Accessor
+      , key :: String
+      , value :: Expr
       }
   | AccessorProperty
-      { accessor :: Maybe Accessor,
-        key :: String,
-        value :: Expr
+      { accessor :: Maybe Accessor
+      , key :: String
+      , value :: Expr
       }
   deriving (Eq, Show, D.Data, D.Typeable)
 
@@ -259,6 +264,13 @@ instance Pretty Expr where
       fmt (Intersection a b) = prettyOpList (Intersection a b)
       fmt a = pretty a
   pretty (ExprConditionalType a) = pretty a
+  pretty (TemplateLiteral a) = case a of
+    [] -> "``"
+    _ -> "`" <> cat (map pretty a) <> "`"
+
+instance Pretty TemplateString where
+  pretty (TemplateRaw s) = pretty s
+  pretty (TemplateSubstitution e) = "${" <> pretty e <> "}"
 
 instance Pretty GenericApplication where
   pretty (GenericApplication ident []) = pretty ident
