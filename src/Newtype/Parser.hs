@@ -46,10 +46,10 @@ pStatement :: Parser Statement
 pStatement =
   nonIndented $
     choice
-      [ pTestDefinition,
-        pImport,
-        pTypeDefinition,
-        pInterfaceDefintion
+      [ pTestDefinition
+      , pImport
+      , pTypeDefinition
+      , pInterfaceDefintion
       ]
 
 pTestDefinition :: Parser Statement
@@ -164,30 +164,31 @@ pWhenClause = do
 pTerm :: Parser Expr
 pTerm =
   choice
-    [ try (PrimitiveType <$> pPrimitive) <?> "type primitive",
-      try (ExprGenericApplication <$> pGenericApplication) <?> "generic type application",
-      try pTuple <?> "tuple",
-      try pMappedType,
-      pExprConditionalType <?> "conditional type",
-      (expandCaseStatement <$> pCaseStatement) <?> "case statement",
-      try pFunctionLiteral <?> "function literal",
-      pNumberIntegerLiteral <?> "number",
-      pNumberDoubleLiteral <?> "number",
-      pBooleanLiteral <?> "boolean literal",
-      pStringLiteral <?> "string literal",
-      pIdent' <?> "identifier",
-      -- Not actually valid outside of the extends expression
+    [ try (PrimitiveType <$> pPrimitive) <?> "type primitive"
+    , try (ExprGenericApplication <$> pGenericApplication) <?> "generic type application"
+    , try pTuple <?> "tuple"
+    , try pMappedType
+    , pExprConditionalType <?> "conditional type"
+    , (expandCaseStatement <$> pCaseStatement) <?> "case statement"
+    , try pFunctionLiteral <?> "function literal"
+    , pNumberIntegerLiteral <?> "number"
+    , pNumberDoubleLiteral <?> "number"
+    , pBooleanLiteral <?> "boolean literal"
+    , pStringLiteral <?> "string literal"
+    , pIdent' <?> "identifier"
+    , -- Not actually valid outside of the extends expression
       -- but make my life a lot easier
-      hidden pInferIdent,
-      pObjectLiteral <?> "object literal",
-      hidden . parens $ pExpr
+      hidden pInferIdent
+    , pObjectLiteral <?> "object literal"
+    , hidden . parens $ pExpr
     ]
 
--- | Parse a function literal.
--- Example input:
---  () => void
---  (n: number) => number
---  (head: number, ...tail: Array number) => number
+{- | Parse a function literal.
+ Example input:
+  () => void
+  (n: number) => number
+  (head: number, ...tail: Array number) => number
+-}
 pFunctionLiteral :: Parser Expr
 pFunctionLiteral =
   do
@@ -217,18 +218,18 @@ pFunctionLiteral =
 pPrimitive :: Parser PrimitiveType
 pPrimitive =
   choice
-    [ keyword "never" $> PrimitiveNever,
-      keyword "any" $> PrimitiveAny,
-      keyword "unknown" $> PrimitiveUnknown,
-      keyword "number" $> PrimitiveNumber,
-      keyword "bigint" $> PrimitiveBigInt,
-      keyword "string" $> PrimitiveString,
-      keyword "boolean" $> PrimitiveBoolean,
-      keyword "null" $> PrimitiveNull,
-      keyword "undefined" $> PrimitiveUndefined,
-      keyword "void" $> PrimitiveVoid,
-      keyword "object" $> PrimitiveObject,
-      keyword "symbol" $> PrimitiveSymbol
+    [ keyword "never" $> PrimitiveNever
+    , keyword "any" $> PrimitiveAny
+    , keyword "unknown" $> PrimitiveUnknown
+    , keyword "number" $> PrimitiveNumber
+    , keyword "bigint" $> PrimitiveBigInt
+    , keyword "string" $> PrimitiveString
+    , keyword "boolean" $> PrimitiveBoolean
+    , keyword "null" $> PrimitiveNull
+    , keyword "undefined" $> PrimitiveUndefined
+    , keyword "void" $> PrimitiveVoid
+    , keyword "object" $> PrimitiveObject
+    , keyword "symbol" $> PrimitiveSymbol
     ]
 
 pHole :: Parser Expr
@@ -254,9 +255,10 @@ pBoolExpr =
     expr =
       ( makeExprParser
           term
-          [ [prefix "not" Not],
-            [ binary "and" And,
-              binary "or" Or
+          [ [prefix "not" Not]
+          ,
+            [ binary "and" And
+            , binary "or" Or
             ]
           ]
           <?> "boolean expression"
@@ -269,10 +271,10 @@ pBoolExpr =
       do
         lhs <- pExpr
         choice
-          [ ExtendsLeft lhs <$ keyword "<:" <*> pExpr,
-            ExtendsRight lhs <$ keyword ":>" <*> pExpr,
-            Equals lhs <$ keyword "==" <*> pExpr,
-            NotEquals lhs <$ keyword "!=" <*> pExpr
+          [ ExtendsLeft lhs <$ keyword "<:" <*> pExpr
+          , ExtendsRight lhs <$ keyword ":>" <*> pExpr
+          , Equals lhs <$ keyword "==" <*> pExpr
+          , NotEquals lhs <$ keyword "!=" <*> pExpr
           ]
 
 -- Example input:
@@ -309,10 +311,10 @@ pMappedType' =
     return $
       fromMaybe
         MappedType
-          { asExpr = Nothing,
-            isReadonly = Nothing,
-            isOptional = Nothing,
-            ..
+          { asExpr = Nothing
+          , isReadonly = Nothing
+          , isOptional = Nothing
+          , ..
           }
         withAs
 
@@ -342,19 +344,21 @@ pCaseStatement =
 pExpr :: Parser Expr
 pExpr = choice [pTypeOp, pTerm]
 
--- | Parse an expression with a type operator. A type operator may be a builtin
--- prefix operator like `typeof` or `keyof`, or a prefix operator: like `!` for
--- access, or type union or intersection, `|` or `&` respectively.
--- |
+{- | Parse an expression with a type operator. A type operator may be a builtin
+ prefix operator like `typeof` or `keyof`, or a prefix operator: like `!` for
+ access, or type union or intersection, `|` or `&` respectively.
+ |
+-}
 pTypeOp :: Parser Expr
 pTypeOp =
   makeExprParser
     pTerm
-    [ [ InfixL $ DotAccess <$ (period <?> "dot access"),
-        InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy (string "="))
-      ],
-      [prefix "keyof" Keyof],
-      [binary "&" Intersection, binary "|" Union]
+    [
+      [ InfixL $ DotAccess <$ (period <?> "dot access")
+      , InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy (string "="))
+      ]
+    , [prefix "keyof" Keyof]
+    , [binary "&" Intersection, binary "|" Union]
     ]
 
 pInferIdent :: Parser Expr
@@ -397,8 +401,8 @@ pGenericApplication = do
   id <- pModuleIdent
   params <-
     some . choice $
-      [ indentGuard GT pos *> pIdent',
-        indentGuard GT pos *> try pTerm
+      [ indentGuard GT pos *> pIdent'
+      , indentGuard GT pos *> try pTerm
       ]
   return $ GenericApplication id params
 
@@ -413,38 +417,40 @@ pProperty = do
   let accessor = Nothing
   return (DataProperty {..})
 
--- | readonly keyword of an object literal property
---
--- Example source:
--- * `readonly foo: bar`
--- * `-readonly foo: bar`
+{- | readonly keyword of an object literal property
+
+ Example source:
+ * `readonly foo: bar`
+ * `-readonly foo: bar`
+-}
 pReadonly =
   optional . choice $
-    [ True <$ keyword "readonly",
-      False <$ keyword "-readonly"
+    [ True <$ keyword "readonly"
+    , False <$ keyword "-readonly"
     ]
 
--- | optional keyword of an object literal property
---
--- Example source:
--- * `foo?: bar`
--- * `foo-?: bar`
+{- | optional keyword of an object literal property
+
+ Example source:
+ * `foo?: bar`
+ * `foo-?: bar`
+-}
 pOptional =
   p <?> "optional postfix key modifier"
   where
     p =
       optional . choice $
-        [ True <$ qmark,
-          False <$ keyword "-?"
+        [ True <$ qmark
+        , False <$ keyword "-?"
         ]
 
 makeParams :: [String] -> FormalParamMap -> FormalParamMap -> [TypeParam]
 makeParams paramNames constraints defaults =
   [ TypeParam
-      { name = paramName,
-        defaultValue = Map.lookup paramName defaults,
-        constraint = Map.lookup paramName constraints
-      }
-    | let defaultValue = Nothing,
-      paramName <- paramNames
+    { name = paramName
+    , defaultValue = Map.lookup paramName defaults
+    , constraint = Map.lookup paramName constraints
+    }
+  | let defaultValue = Nothing
+  , paramName <- paramNames
   ]
