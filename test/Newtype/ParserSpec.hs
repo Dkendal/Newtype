@@ -16,6 +16,7 @@ import Text.Heredoc (str)
 import Text.Megaparsec hiding (parse)
 import Text.Nicify
 import Prelude as P hiding (lines, unlines)
+import Test.Hspec.Newtype
 
 spec :: Spec
 spec =
@@ -195,24 +196,7 @@ spec =
                 |]
             "(n extends string ? 1 : 2)"
 
-parse parser = runNewTypeParser (parser <* eof) ""
-
 expr :: Text -> Either CompilerError Expr
 expr = parse pExpr
-
-shouldCompile :: (HasCallStack, Pretty a) => Parser a -> Text -> Text -> Expectation
-shouldCompile parser src expected =
-  case parse parser src of
-    Left e -> expectationFailure . errorBundlePretty $ e
-    Right result -> (show . pretty $ result) `shouldBe` unpack expected
-
-shouldCompileTo :: (HasCallStack, Pretty a) => Either CompilerError a -> Text -> Expectation
-shouldCompileTo (Left e) actual =
-  expectationFailure $
-    "expected: "
-      ++ show actual
-      ++ "\nbut parsing failed with error:\n"
-      ++ errorBundlePretty e
-shouldCompileTo (Right actual) expected = (show . pretty) actual `shouldBe` unpack expected
 
 unlines' = stripEnd . unlines

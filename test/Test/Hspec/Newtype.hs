@@ -4,13 +4,15 @@ module Test.Hspec.Newtype where
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import Newtype.Compiler
 import Newtype.Parser (Parser, ParserResult, runNewTypeParser)
 import Prettyprinter (Pretty, pretty)
-import Test.Hspec.Expectations.Pretty
-  ( Expectation,
-    expectationFailure,
-    shouldBe,
-  )
+import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
+import Test.Hspec.Expectations.Pretty (
+  Expectation,
+  expectationFailure,
+  shouldBe,
+ )
 import Text.Megaparsec (eof)
 import Text.Megaparsec.Error (errorBundlePretty)
 
@@ -44,7 +46,13 @@ parseAdjMatrix colSep textLines =
 parse :: Parser a -> Text -> ParserResult a
 parse parser = runNewTypeParser (parser <* eof) ""
 
-shouldCompileTo :: Pretty a => ParserResult a -> Text -> Expectation
+shouldCompile :: (HasCallStack, Pretty a) => Parser a -> Text -> Text -> Expectation
+shouldCompile parser src expected =
+  case parse parser src of
+    Left e -> expectationFailure . errorBundlePretty $ e
+    Right result -> (show . pretty $ result) `shouldBe` T.unpack expected
+
+shouldCompileTo :: (HasCallStack, Pretty a) => Either CompilerError a -> Text -> Expectation
 shouldCompileTo (Left e) actual =
   expectationFailure $
     "expected: "

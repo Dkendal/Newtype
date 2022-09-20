@@ -7,12 +7,13 @@ import Data.Text (Text, stripEnd, unlines, unpack)
 import Newtype.Eval (evalExpr, evalProgram, isAssignable)
 import Newtype.Parser (ParserResult, pExpr, pProgram)
 import Newtype.Syntax (Expr, Program)
+import qualified Prettyprinter as PP
 import Test.Hspec hiding (expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (
   expectationFailure,
   shouldBe,
  )
-import Test.Hspec.Newtype (parse, parseAdjMatrix)
+import Test.Hspec.Newtype (parse, parseAdjMatrix, shouldCompile)
 import Text.Heredoc
 import Text.Megaparsec (errorBundlePretty)
 import Prelude as P hiding (lines, unlines)
@@ -50,6 +51,16 @@ spec = do
         [str|F t : [t, t]
             |Out : [1, 1]
             |]
+
+    describe "template literals" $ do
+      it "can be reduced to a string literal" $ do
+        shouldEvalTo
+          [str|Greeting t : `hello ${t}`
+              |Out : Greeting "world"
+              |]
+          [str|Greeting t : `hello ${t}`
+              |Out : "hello world"
+              |]
 
     it "can expand a conditional" $ do
       shouldEvalTo
@@ -133,6 +144,17 @@ type ParserHelper a = Text -> ParserResult a
 shouldEvalTo :: HasCallStack => Text -> Text -> Expectation
 shouldEvalTo input output =
   program' input `shouldBe` program output
+
+-- | Like `shouldEvalTo` but compares the pretty printed output.
+shouldEvalPretty :: HasCallStack => Text -> Text -> Expectation
+shouldEvalPretty input output =
+  case (program input, program output) of
+    (Right p1, Right p2) ->
+      let p1' = show . PP.pretty . evalProgram $ p1
+          p2' = show . PP.pretty $ p2
+       in p1' `shouldBe` p2'
+    (Left e, _) -> expectationFailure $ errorBundlePretty e
+    (_, Left e) -> expectationFailure $ errorBundlePretty e
 
 expr :: ParserHelper Expr
 expr = parse pExpr

@@ -40,6 +40,23 @@ evalSymbols scope expr = f
   where
     f =
       case expr of
+        -- Reduce template literal but merging all literal strings together
+        (TemplateLiteral list) ->
+          -- Replace the template literal with a string literal if possible
+          case foldr red [] list of
+            [] -> Literal . StringLiteral $ ""
+            [TemplateRaw x] -> Literal . StringLiteral $ x
+            xs -> TemplateLiteral xs
+          where
+            red (TemplateSubstitution (Literal (StringLiteral s))) ((TemplateRaw hd) : tl) =
+              red' s hd tl
+            red (TemplateRaw s) ((TemplateSubstitution (Literal (StringLiteral hd))) : tl) =
+              red' s hd tl
+            red (TemplateRaw s) ((TemplateRaw hd) : tl) =
+              red' s hd tl
+            red x acc = x : acc
+            red' a b l = TemplateRaw (a ++ b) : l
+
         -- Special case for:
         --     if any <: ... then ...
         -- `any` both satisfies the constraint, but also doesn't ?? because
