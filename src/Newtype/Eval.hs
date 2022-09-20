@@ -5,6 +5,7 @@ module Newtype.Eval where
 
 import Control.Applicative ((<|>))
 import Control.Monad
+import qualified Data.Char
 import qualified Data.Data as D
 import Data.Dynamic
 import Data.Functor
@@ -12,6 +13,7 @@ import qualified Data.Generics.Uniplate.Data as Uniplate
 import qualified Data.List as List
 import qualified Data.Map.Strict as FM
 import qualified Data.Maybe as Maybe
+import qualified Data.String
 import Data.String.Here.Interpolated
 import Debug
 import Debug.Trace
@@ -72,6 +74,23 @@ evalSymbols scope expr = f
         (Keyof (Literal (ObjectLiteral props))) ->
           -- Convert each property to a string literal, pack them into a union
           union [mkString key | DataProperty {key} <- props]
+        -- Special case for builtin string functions
+        ( ExprGenericApplication
+            ( GenericApplication
+                (Ident id)
+                [Literal (StringLiteral str)]
+              )
+          )
+            | id == "Uppercase" -> f Data.Char.toUpper str
+            | id == "Lowercase" -> f Data.Char.toLower str
+            | id == "Capitalize" -> mapFirstChar Data.Char.toUpper str
+            | id == "Uncapitalize" -> mapFirstChar Data.Char.toLower str
+            where
+              f ab = string . map ab
+              string = Literal . StringLiteral
+              empty = string ""
+              mapFirstChar f (x : xs) = string $ f x : xs
+              mapFirstChar _ [] = string []
         (ExprGenericApplication (GenericApplication id args)) ->
           -- If the function is not defined, return the original expression
           -- Find the definition of the function

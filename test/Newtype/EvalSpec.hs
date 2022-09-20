@@ -54,13 +54,60 @@ spec = do
 
     describe "template literals" $ do
       it "can be reduced to a string literal" $ do
-        shouldEvalTo
+        shouldEvalPretty
           [str|Greeting t : `hello ${t}`
               |Out : Greeting "world"
               |]
           [str|Greeting t : `hello ${t}`
               |Out : "hello world"
               |]
+
+      it "simpilified to strings when interpolations blocks contains strings" $ do
+        shouldEvalPretty
+          [str|Out : `${"a"} ${"b"} ${"c"}`|]
+          [str|Out : "a b c"|]
+
+      it "empty template strings are reduces to empty strings" $ do
+        shouldEvalPretty
+          [str|Out : ``|]
+          [str|Out : ""|]
+
+      describe "built in string type functions" $ do
+        it "supports `Uppercase<T>`" $ do
+          shouldEvalTo
+            [str|Greeting t : `hello ${Uppercase t}`
+                |Out : Greeting "world"
+                |]
+            [str|Greeting t : `hello ${Uppercase t}`
+                |Out : "hello WORLD"
+                |]
+
+        it "supports `Lowercase<T>`" $ do
+          shouldEvalTo
+            [str|Greeting t : `hello ${Lowercase t}`
+                |Out : Greeting "WORLD"
+                |]
+            [str|Greeting t : `hello ${Lowercase t}`
+                |Out : "hello world"
+                |]
+
+        it "supports `Capitalize<T>`" $ do
+          shouldEvalTo
+            [str|LowercaseGreeting : "hello, world"
+                |Greeting : Capitalize LowercaseGreeting
+                |]
+            [str|LowercaseGreeting : "hello, world"
+                |Greeting : "Hello, world"
+                |]
+
+        it "supports `Uncapitalize<T>`" $ do
+          shouldEvalTo
+            [str|UppercaseGreeting : "HELLO WORLD"
+                |Greeting : Uncapitalize UppercaseGreeting
+                |]
+            [str|UppercaseGreeting : "HELLO WORLD"
+                |Greeting : "hELLO WORLD"
+                |]
 
     it "can expand a conditional" $ do
       shouldEvalTo
