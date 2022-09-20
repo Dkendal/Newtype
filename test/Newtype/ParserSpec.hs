@@ -113,23 +113,29 @@ spec =
           "`hello world`"
           "`hello world`"
 
+      it "sub in the first position" $ do
+        shouldCompile
+          pExpr
+          [str|`${T hello} world`|]
+          [str|`${T<hello>} world`|]
+
       it "with a single sub" $ do
         shouldCompile
           pExpr
-          "`hello ${world}`"
-          "`hello ${world}`"
+          "`hello ${T world}`"
+          "`hello ${T<world>}`"
 
       it "with trailing text" $ do
         shouldCompile
           pExpr
-          "`hello ${world} how are you?`"
-          "`hello ${world} how are you?`"
+          "`hello ${T world} how are you?`"
+          "`hello ${T<world>} how are you?`"
 
       it "with multiple subs" $ do
         shouldCompile
           pExpr
-          "`a ${a} b ${b} c ${c}`"
-          "`a ${a} b ${b} c ${c}`"
+          "`a ${T a} b ${T b} c ${T c}`"
+          "`a ${T<a>} b ${T<b>} c ${T<c>}`"
 
     describe "expressions" $ do
       describe "if-then-else" $ do

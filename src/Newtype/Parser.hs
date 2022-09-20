@@ -190,11 +190,11 @@ pTerm =
 pTemplateStrings :: Parser [TemplateString]
 pTemplateStrings = do
   symbol "`"
-  s <- manyTill p (symbol "`")
+  s <- manyTill p $ symbol "`"
   return . catMaybes . concat $ s
   where
     p = do
-      s <- Just . TemplateRaw <$> someTill L.charLiteral (lookAhead (choice [symbol "${", symbol "`"]))
+      s <- Just . TemplateRaw <$> manyTill L.charLiteral (lookAhead (choice [symbol "${", symbol "`"]))
 
       e <- optional $ do
         string "${"

@@ -13,7 +13,7 @@ import Test.Hspec.Expectations.Pretty (
   expectationFailure,
   shouldBe,
  )
-import Test.Hspec.Newtype (parse, parseAdjMatrix, shouldCompile)
+import Test.Hspec.Newtype (parse, parseAdjMatrix)
 import Text.Heredoc
 import Text.Megaparsec (errorBundlePretty)
 import Prelude as P hiding (lines, unlines)

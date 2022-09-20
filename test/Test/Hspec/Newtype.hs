@@ -4,6 +4,7 @@ module Test.Hspec.Newtype where
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Debug.Trace
 import Newtype.Compiler
 import Newtype.Parser (Parser, ParserResult, runNewTypeParser)
 import Prettyprinter (Pretty, pretty)
