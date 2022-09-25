@@ -5,13 +5,14 @@ module Newtype.SyntaxSpec (spec) where
 
 import Data.Text
 import Newtype.Syntax
+import Newtype.Syntax (lv)
 import Newtype.Syntax.Conditionals
-import Prettyprinter
-  ( LayoutOptions (..),
-    PageWidth (..),
-    layoutPretty,
-    pretty,
-  )
+import Prettyprinter (
+  LayoutOptions (..),
+  PageWidth (..),
+  layoutPretty,
+  pretty,
+ )
 import Prettyprinter.Render.String (renderString)
 import Test.Hspec
 import Prelude hiding (unlines, (&&), (||))
@@ -59,9 +60,9 @@ spec = do
                   []
           let src =
                 fmt
-                  [ "interface A<T extends any = any> {",
-                    "  ",
-                    "}"
+                  [ "interface A<T extends any = any> {"
+                  , "  "
+                  , "}"
                   ]
           show (pretty ast) `shouldBe` src
 
@@ -72,11 +73,11 @@ spec = do
 
     context "when Tuple" $ do
       it "formats properly when empty" $ do
-        let ast = Tuple []
+        let ast = mkTuple []
         show (pretty ast) `shouldBe` "[]"
 
       it "formats properly with multiple elements" $ do
-        let ast = Tuple [a, b, c]
+        let ast = mkTuple [a, b, c]
         show (pretty ast) `shouldBe` "[A, B, C]"
 
     context "when ExtendsExpr" $ do
@@ -94,15 +95,15 @@ spec = do
         let str = prettyShort ast
         str
           `shouldBe` fmt
-            [ "(A extends B",
-              "  ? ([A] extends [C]",
-              "    ? ([B] extends [C]",
-              "      ? Then",
-              "      : Else)",
-              "    : Then)",
-              "  : ([B] extends [C]",
-              "    ? Then",
-              "    : Else))"
+            [ "(A extends B"
+            , "  ? ([A] extends [C]"
+            , "    ? ([B] extends [C]"
+            , "      ? Then"
+            , "      : Else)"
+            , "    : Then)"
+            , "  : ([B] extends [C]"
+            , "    ? Then"
+            , "    : Else))"
             ]
 
     describe "properties" $ do
@@ -151,13 +152,13 @@ spec = do
     describe "equals" $ do
       it "wraps args in a tuple" $ do
         let expr = ConditionalExpr (a === b) then' else'
-        let expected = ct (Tuple [a]) (Tuple [b]) then' else'
+        let expected = ct (mkTuple [a]) (mkTuple [b]) then' else'
         expandConditional expr `shouldBe` expected
 
     describe "not equals" $ do
       it "wraps args in a tuple, flips branches" $ do
         let expr = ConditionalExpr (a !== b) then' else'
-        let expected = ct (Tuple [a]) (Tuple [b]) else' then'
+        let expected = ct (mkTuple [a]) (mkTuple [b]) else' then'
         expandConditional expr `shouldBe` expected
 
     describe "logical AND" $ do

@@ -173,7 +173,7 @@ spec =
         it "can parse" $ do
           shouldCompile
             pExpr
-            "{ v : k <- t }"
+            "{ k: v for k in t}"
             "{[k in t]: v}"
 
       describe "case statements" $ do

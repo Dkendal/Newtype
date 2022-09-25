@@ -168,7 +168,8 @@ pTerm =
     [ try (PrimitiveType <$> pPrimitive) <?> "type primitive"
     , try (ExprGenericApplication <$> pGenericApplication) <?> "generic type application"
     , try pTuple <?> "tuple"
-    , try pMappedType
+    , try pArray <?> "array"
+    , try pDictionaryComprehension <?> "mapped type"
     , pExprConditionalType <?> "conditional type"
     , (expandCaseStatement <$> pCaseStatement) <?> "case statement"
     , try pFunctionLiteral <?> "function literal"
@@ -298,46 +299,20 @@ pBoolExpr =
           , NotEquals lhs <$ keyword "!=" <*> pExpr
           ]
 
--- Example input:
---    { V : K <- keyof T }
-pMappedType :: Parser Expr
-pMappedType =
-  braces p
-  where
-    p = do
-      value <- pExpr <?> "mapped type property value"
-      colon
-      isReadonly <- pReadonly
-      key <- pExpr <?> "mapped type property key"
-      isOptional <- pOptional
-      asExpr <- optional $ keyword "as" *> pExpr
-      larrow
-      source <- pExpr <?> "mapped type source"
-      return MappedType {..}
-
-pMappedType' :: Parser Expr
-pMappedType' =
-  do
-    value <- pIdent' <|> parens pExpr
+pDictionaryComprehension :: Parser Expr
+pDictionaryComprehension = do
+  braces $ do
+    isReadonly <- pReadonly
+    key' <- pExpr
+    isOptional <- pOptional
+    colon
+    value <- pExpr <?> "mapped type value"
     keyword "for"
-    key <- pIdent'
-    keyword "in"
-    source <- pIdent'
-    withAs <- optional $ do
-      keyword "as"
-      isReadonly <- pReadonly
-      asExpr <- Just <$> pIdent'
-      isOptional <- pOptional
-      return (MappedType {..})
-    return $
-      fromMaybe
-        MappedType
-          { asExpr = Nothing
-          , isReadonly = Nothing
-          , isOptional = Nothing
-          , ..
-          }
-        withAs
+    key <- identifier <?> "mapped type key"
+    symbol "in"
+    source <- pExpr <?> "mapped type source"
+    let asExpr = if key' == mkIdent key then Nothing else Just key'
+    return MappedType {..}
 
 pCaseStatement :: Parser CaseStatement
 pCaseStatement =
@@ -378,12 +353,25 @@ pTypeOp =
       [ InfixL $ DotAccess <$ (period <?> "dot access")
       , InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy (string "="))
       ]
-    , [prefix "keyof" Keyof]
+    ,
+      [ prefix "keyof" Keyof
+      , prefix "readonly" Readonly
+      , prefix "typeof" Typeof
+      ]
     , [binary "&" Intersection, binary "|" Union]
     ]
 
 pInferIdent :: Parser Expr
-pInferIdent = inferSym >> ExprInferIdent <$> pIdent <?> "infered identifier"
+pInferIdent =
+  do
+    inferSym
+    ident <- pIdent <?> "infered identifier"
+    constraint <- optional $ do
+      symbol "<:"
+      pExpr
+    return $ case constraint of
+      Nothing -> ExprInferIdent ident
+      Just constraint -> ExprInferIdentConstraint ident constraint
 
 pNumberIntegerLiteral :: Parser Expr
 pNumberIntegerLiteral = Literal . NumberIntegerLiteral <$> integer
@@ -398,8 +386,37 @@ pStringLiteral :: Parser Expr
 pStringLiteral = Literal . StringLiteral <$> stringLiteral
 
 pTuple :: Parser Expr
-pTuple = Tuple <$> brackets (pExpr `sepBy` comma)
+pTuple = do
+  members <- brackets $ pListValue `sepBy` comma
+  return $ Tuple members
 
+pArray :: Parser Expr
+pArray = do
+  pound
+  expr <- brackets $ pExpr
+  return . Array $ expr
+
+-- Parse members of a list or tuple, e.g:
+--  [1, 2, 3]
+--  [a, ...b]
+--  [hd: a, tl: ...b]
+--  [a: 1, b: 2]
+pListValue :: Parser ListValue
+pListValue =
+  do
+    label <- optional $ try $ identifier <* colon
+    rest <- optional $ keyword "..."
+    value <- pExpr
+    return $ case rest of
+      Nothing -> ListValue {label, value}
+      Just rest -> ListRest {label, value}
+
+-- return ListValue {..}
+
+{- | Parse a rest parameter, e.g. `...T`
+ pRest :: Parser Expr
+ pRest = Rest <$> (lexeme . try) (string "..." *> pExpr)
+-}
 pIdent :: Parser Ident
 pIdent = Ident <$> identifier <?> "identifier"
 

@@ -121,8 +121,13 @@ spec = do
 
     it "can expand a mapped type" $ do
       shouldEvalTo
-        [str|A : { [t, t] : t <- "a" | "b" }|]
+        [str|A : { t: [t, t] for t in "a" | "b" }|]
         [str|A : { a : ["a", "a"], b : ["b", "b"] }|]
+
+    fit "can expand expressions in the lhs of a mapped type" $ do
+      shouldEvalPretty
+        [str|A : { `${Uppercase k}`: k for k in "hello" | "world" }|]
+        [str|A : {HELLO: "hello", WORLD: "world"}|]
 
   describe "isAssignable" $ do
     let tbl =

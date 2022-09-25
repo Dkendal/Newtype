@@ -1,15 +1,11 @@
 module Newtype.Syntax.Conditionals where
 
 import Newtype.Syntax
-  ( ConditionalType (ConditionalType),
-    Expr (ExprConditionalType, Hole, Tuple),
-    never,
-  )
 
 data ConditionalExpr = ConditionalExpr
-  { condition :: BoolExpr,
-    thenExpr :: Expr,
-    elseExpr :: Expr
+  { condition :: BoolExpr
+  , thenExpr :: Expr
+  , elseExpr :: Expr
   }
   deriving (Show, Eq)
 
@@ -50,7 +46,7 @@ expandConditional (ConditionalExpr (ExtendsRight b a) then' else') =
 expandConditional (ConditionalExpr (Not con) then' else') =
   expandConditional (cx con else' then')
 expandConditional (ConditionalExpr (Equals a b) then' else') =
-  ct (Tuple [a]) (Tuple [b]) then' else'
+  ct (t1 a) (t1 b) then' else'
 expandConditional (ConditionalExpr (NotEquals a b) then' else') =
   expandConditional (cx (Not (Equals a b)) then' else')
 expandConditional (ConditionalExpr (And a b) then' else') =
@@ -70,3 +66,6 @@ ct' lhs rhs then' else' = ExprConditionalType $ ConditionalType lhs rhs then' el
 
 ct :: Expr -> Expr -> Expr -> Expr -> ConditionalType
 ct = ConditionalType
+
+-- | Single element tuple
+t1 a = Tuple [ListValue Nothing a]

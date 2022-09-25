@@ -78,14 +78,18 @@ data Expr
   | DotAccess Expr Expr
   | PrimitiveType PrimitiveType
   | Keyof Expr
+  | Typeof Expr
+  | Readonly Expr
   | ExprIdent Ident
   | ExprInferIdent Ident
-  | Tuple [Expr]
+  | ExprInferIdentConstraint Ident Expr
+  | Array Expr
+  | Tuple [ListValue]
   | ExprConditionalType ConditionalType
   | TemplateLiteral [TemplateString]
   | MappedType
       { value :: Expr
-      , key :: Expr
+      , key :: String
       , source :: Expr
       , asExpr :: Maybe Expr
       , isReadonly :: Maybe Bool
@@ -94,6 +98,11 @@ data Expr
   | Union Expr Expr
   | Intersection Expr Expr
   | Hole
+  deriving (Eq, Show, D.Data, D.Typeable)
+
+data ListValue
+  = ListValue {label :: Maybe String, value :: Expr}
+  | ListRest {label :: Maybe String, value :: Expr}
   deriving (Eq, Show, D.Data, D.Typeable)
 
 data Literal
@@ -235,7 +244,7 @@ instance Pretty Expr where
   pretty Hole = "_"
   pretty (PrimitiveType t) = pretty t
   pretty MappedType {asExpr = Just asExpr, key, ..}
-    | asExpr == key =
+    | asExpr == mkIdent key =
       pretty MappedType {asExpr = Nothing, ..}
   pretty MappedType {..} =
     braces (lhs <+> pretty value)
@@ -246,13 +255,25 @@ instance Pretty Expr where
       index = pretty key <+> "in" <+> pretty source <> as
       lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
   pretty (Keyof a) = group ("keyof" <+> pretty a)
+  pretty (Readonly a) = group ("readonly" <+> pretty a)
+  pretty (Typeof a) = group ("typeof" <+> pretty a)
   pretty (Access a b) = pretty a <> "[" <> pretty b <> "]"
   pretty (DotAccess a b) = pretty a <> "." <> pretty b
   pretty (ExprGenericApplication a) = pretty a
   pretty (ExprIdent id) = pretty id
   pretty (ExprInferIdent (Ident id)) = group "infer" <+> pretty id
-  pretty (Tuple []) = "[]"
-  pretty (Tuple exprs) = (brackets . hsep) (punctuate comma (map pretty exprs))
+  pretty (ExprInferIdentConstraint (Ident id) constraint) = group "infer" <+> pretty id <+> "extends" <+> pretty constraint
+  pretty (Array expr) =
+    case expr of
+      ExprInferIdent {} -> p
+      ExprInferIdentConstraint {} -> p
+      _ -> pretty expr <> "[]"
+    where
+      p = (parens . pretty $ expr) <> "[]"
+  pretty (Tuple l) =
+    case l of
+      [] -> "[]"
+      _ -> (brackets . hsep) (punctuate comma (map pretty l))
   pretty (Intersection left right) =
     fmt left <> softline <> "&" <> softline <> fmt right
     where
@@ -267,6 +288,12 @@ instance Pretty Expr where
   pretty (TemplateLiteral a) = case a of
     [] -> "``"
     _ -> "`" <> cat (map pretty a) <> "`"
+
+instance Pretty ListValue where
+  pretty (ListValue Nothing a) = pretty a
+  pretty (ListRest Nothing a) = "..." <> pretty a
+  pretty (ListValue (Just l) a) = pretty l <> ":" <+> pretty a
+  pretty (ListRest (Just l) a) = pretty l <> ": ..." <> pretty a
 
 instance Pretty TemplateString where
   pretty (TemplateRaw s) = pretty s
@@ -339,6 +366,12 @@ mkIdent = ExprIdent . Ident
 
 mkString :: String -> Expr
 mkString = Literal . StringLiteral
+
+lv :: Expr -> ListValue
+lv = ListValue Nothing
+
+mkTuple :: [Expr] -> Expr
+mkTuple l = Tuple (map lv l)
 
 genericAp :: Ident -> [Expr] -> Expr
 genericAp = (ExprGenericApplication .) . GenericApplication

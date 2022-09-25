@@ -20,6 +20,7 @@ import Debug.Trace
 import Newtype.Syntax
 import Text.Nicify
 import Prelude hiding (any)
+import Prettyprinter (pretty)
 
 type TestResult = Expr
 
@@ -97,9 +98,7 @@ evalSymbols scope expr = f
           -- Apply the arguments to the definition of the function
           maybe expr f (get id)
           where
-            f sym =
-              let result = applyFunction scope args sym
-               in trace (prettyPrint expr ++ " == " ++ prettyPrint result) result
+            f sym = applyFunction scope args sym
         (ExprIdent id@Ident {}) -> maybe expr symbolValue (get id)
         MappedType {..} ->
           literal props
@@ -107,15 +106,19 @@ evalSymbols scope expr = f
             props = [f item | item <- toList source]
             f item = prop
               where
-                scope' =
-                  bind (fromExprIdent key) (string item) scope
+                scope' = bind key (string item) scope
                 prop =
                   DataProperty
                     { isReadonly
                     , isOptional
                     , isIndex = False
                     , accessor = Nothing
-                    , key = item
+                    , key = case asExpr of
+                        Nothing -> item
+                        Just as ->
+                          let s = evalSymbols scope' as
+                           in let _ = Debug.pp "scope" scope'
+                               in show . pretty $ s
                     , value = transform scope' value
                     }
         x -> x

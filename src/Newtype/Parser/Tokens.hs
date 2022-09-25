@@ -283,7 +283,7 @@ identifier = (lexeme . try) (p >>= check)
   where
     p = (:) <$> identifierHead <*> many identifierTail
     check x =
-      if x `elem` reservedWords
+      if x `Prelude.elem` reservedWords
         then fail $ "keyword " ++ show x ++ " cannot be an identifier"
         else return x
 
@@ -297,7 +297,7 @@ moduleIdent = checkLower <|> (lexeme . try) (p >>= check)
       lookAhead lowerChar
         >> fail "top level identifiers must start with an upper case character"
     check x =
-      if x `elem` reservedWords
+      if x `Prelude.elem` reservedWords
         then fail $ "keyword " ++ show x ++ " cannot be a module identifier"
         else return x
     head = upperChar <|> rest
@@ -313,7 +313,7 @@ varIdent = checkUpper <|> (lexeme . try) (p >>= check)
         >> fail "variable names must start with a lower case character"
     p = (:) <$> head <*> many tail
     check x =
-      if x `elem` reservedWords
+      if x `Prelude.elem` reservedWords
         then fail $ "keyword " ++ show x ++ " cannot be a variable identifier"
         else return x
     head = lowerChar <|> rest
