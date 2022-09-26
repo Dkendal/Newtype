@@ -98,7 +98,7 @@ evalSymbols scope expr = f
           -- Apply the arguments to the definition of the function
           maybe expr f (get id)
           where
-            f sym = applyFunction scope args sym
+            f = applyFunction scope args
         (ExprIdent id@Ident {}) -> maybe expr symbolValue (get id)
         MappedType {..} ->
           literal props
@@ -116,9 +116,10 @@ evalSymbols scope expr = f
                     , key = case asExpr of
                         Nothing -> item
                         Just as ->
-                          let s = evalSymbols scope' as
-                           in let _ = Debug.pp "scope" scope'
-                               in show . pretty $ s
+                          let s = transform scope' as
+                          in case s of
+                            Literal (StringLiteral x) -> x
+                            _ -> error [i|Expected string literal, got #{s}|]
                     , value = transform scope' value
                     }
         x -> x
