@@ -445,15 +445,26 @@ pGenericApplication = do
   return $ GenericApplication id params
 
 pProperty :: Parser Property
-pProperty = do
-  isReadonly <- pReadonly
-  isIndex <- fmap isJust (optional (keyword "index"))
-  key <- identifier
-  isOptional <- pOptional
-  colon
-  value <- pExpr
-  let accessor = Nothing
-  return (DataProperty {..})
+pProperty = p
+  where
+    p = do
+      isReadonly <- pReadonly
+      isIndex <- optional (keyword "index")
+      case isIndex of
+        Just _ ->
+          do
+            keySource <- pExpr
+            colon
+            value <- pExpr
+            let key = "key"
+            return (IndexSignature {..})
+        Nothing ->
+          do
+            key <- identifier
+            isOptional <- pOptional
+            colon
+            value <- pExpr
+            return (DataProperty {..})
 
 {- | readonly keyword of an object literal property
 

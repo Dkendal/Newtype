@@ -52,6 +52,7 @@ library
     , nicify-lib
     , parser-combinators
     , prettyprinter
+    , regex-tdfa
     , syb
     , text
     , uniplate
@@ -81,6 +82,7 @@ executable nt
     , nicify-lib
     , parser-combinators
     , prettyprinter
+    , regex-tdfa
     , syb
     , text
     , uniplate
@@ -124,6 +126,7 @@ test-suite newtype-test
     , nicify-lib
     , parser-combinators
     , prettyprinter
+    , regex-tdfa
     , syb
     , text
     , uniplate

@@ -82,12 +82,12 @@ spec =
         let src =
               unlines
                 [ "interface A where"
-                , "  readonly index a? : string"
+                , "  readonly index string : string"
                 ]
         let out =
               unlines'
                 [ "interface A {"
-                , "  readonly [a]?: string;"
+                , "  readonly [key: string]: string;"
                 , "}"
                 ]
         shouldCompile pProgram src out

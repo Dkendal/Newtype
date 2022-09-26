@@ -11,6 +11,7 @@ import qualified Data.Data as D
 import qualified Data.List as List
 import Data.Maybe
 import Prettyprinter
+import Text.Regex.TDFA
 
 newtype Program = Program {statements :: [Statement]}
   deriving (Eq, Show)
@@ -156,21 +157,17 @@ data ConditionalType = ConditionalType
 
 data Property
   = DataProperty
-      { isIndex :: Bool
-      , isReadonly :: Maybe Bool
+      { isReadonly :: Maybe Bool
       , isOptional :: Maybe Bool
-      , accessor :: Maybe Accessor
       , key :: String
       , value :: Expr
       }
-  | AccessorProperty
-      { accessor :: Maybe Accessor
+  | IndexSignature
+      { isReadonly :: Maybe Bool
       , key :: String
+      , keySource :: Expr
       , value :: Expr
       }
-  deriving (Eq, Show, D.Data, D.Typeable)
-
-data Accessor = Getter | Setter
   deriving (Eq, Show, D.Data, D.Typeable)
 
 -------------------------------------------------------------------------------
@@ -209,10 +206,9 @@ instance Pretty ImportClause where
   pretty ImportClauseDefaultAndNamed {..} = pretty defaultBinding <+> prettyList namedBindings
 
 instance Pretty ImportSpecifier where
+  prettyList = braces . hsep . punctuate comma . map pretty
   pretty (ImportedBinding binding) = pretty binding
   pretty ImportedAlias {..} = pretty from <+> "as" <+> pretty to
-  prettyList lst =
-    braces . hsep . punctuate comma . map pretty $ lst
 
 instance Pretty Literal where
   pretty FunctionLiteral {..} = doc
@@ -243,9 +239,10 @@ instance Pretty Expr where
   pretty (Literal x) = pretty x
   pretty Hole = "_"
   pretty (PrimitiveType t) = pretty t
-  pretty MappedType {asExpr = Just asExpr, key, ..}
-    | asExpr == mkIdent key =
-      pretty MappedType {asExpr = Nothing, ..}
+  -- If asExpr and key are equal
+  pretty MappedType {asExpr = Just (Literal (StringLiteral as)), key, ..}
+    | as == key =
+        pretty MappedType {asExpr = Nothing, ..}
   pretty MappedType {..} =
     braces (lhs <+> pretty value)
     where
@@ -330,18 +327,24 @@ instance Pretty TypeParam where
   prettyList l = angles . hsep . punctuate comma . map pretty $ l
 
 instance Pretty Property where
-  pretty DataProperty {..} =
-    lhs <+> pretty value
+  pretty IndexSignature {..} =
+    doc
     where
+      doc = lhs <+> pretty value
+      lhs = group readonly <> brackets keyDoc <> colon
+      keyDoc = (pretty key <> colon <+> pretty keySource)
+      readonly = prettyReadonly isReadonly
+  pretty DataProperty {..} =
+    doc
+    where
+      doc = lhs <+> pretty value
       readonly = prettyReadonly isReadonly
       optional = prettyOptional isOptional
       lhs =
         group readonly
-          <> (if isIndex then "[" <> pretty key <> "]" else pretty key)
+          <> pretty key
           <> optional
           <> ":"
-  pretty AccessorProperty {..} =
-    error "not implemented"
 
 instance Pretty ConditionalType where
   pretty (ConditionalType lhs rhs then' else') =
@@ -411,3 +414,7 @@ prettyOptional (Just True) = "?"
 prettyOpList :: Expr -> Doc ann
 prettyOpList a =
   group $ align $ enclose (flatAlt "( " "(") (flatAlt " )" ")") $ pretty a
+
+-- Test if a string is a valid Javascript identifier name
+isIdentifierName :: String -> Bool
+isIdentifierName str = str =~ ("^[a-zA-Z_$][a-zA-Z0-9_$]*$" :: String)

@@ -5,7 +5,6 @@ module Newtype.SyntaxSpec (spec) where
 
 import Data.Text
 import Newtype.Syntax
-import Newtype.Syntax (lv)
 import Newtype.Syntax.Conditionals
 import Prettyprinter (
   LayoutOptions (..),
@@ -109,24 +108,48 @@ spec = do
     describe "properties" $ do
       context "index properties" $ do
         it "formats output" $ do
-          let ast = DataProperty True Nothing Nothing Nothing "key" (PrimitiveType PrimitiveAny)
-          let str = "[key]: any"
+          let ast =
+                IndexSignature
+                  { key = "key"
+                  , keySource = PrimitiveType PrimitiveString
+                  , value = PrimitiveType PrimitiveAny
+                  , isReadonly = Nothing
+                  }
+          let str = "[key: string]: any"
           show (pretty ast) `shouldBe` str
 
       context "optional properties" $ do
         it "formats output" $ do
-          let ast = DataProperty False Nothing (Just True) Nothing "key" (PrimitiveType PrimitiveAny)
+          let ast =
+                DataProperty
+                  { isOptional = Just True
+                  , isReadonly = Nothing
+                  , key = "key"
+                  , value = PrimitiveType PrimitiveAny
+                  }
           let str = "key?: any"
           show (pretty ast) `shouldBe` str
 
       context "readonly properties" $ do
         it "formats output" $ do
-          let ast = DataProperty False (Just True) Nothing Nothing "key" (PrimitiveType PrimitiveAny)
+          let ast =
+                DataProperty
+                  { isOptional = Nothing
+                  , isReadonly = Just True
+                  , key = "key"
+                  , value = PrimitiveType PrimitiveAny
+                  }
           let str = "readonly key: any"
           show (pretty ast) `shouldBe` str
 
       it "formats output" $ do
-        let ast = DataProperty False Nothing Nothing Nothing "key" (PrimitiveType PrimitiveAny)
+        let ast =
+              DataProperty
+                { isOptional = Nothing
+                , isReadonly = Nothing
+                , key = "key"
+                , value = PrimitiveType PrimitiveAny
+                }
         let str = "key: any"
         show (pretty ast) `shouldBe` str
 

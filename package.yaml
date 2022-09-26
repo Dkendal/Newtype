@@ -32,6 +32,7 @@ dependencies:
   - nicify-lib
   - here
   - heredoc
+  - regex-tdfa
 
 library:
   source-dirs: src

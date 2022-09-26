@@ -111,8 +111,6 @@ evalSymbols scope expr = f
                   DataProperty
                     { isReadonly
                     , isOptional
-                    , isIndex = False
-                    , accessor = Nothing
                     , key = case asExpr of
                         Nothing -> item
                         Just as ->
