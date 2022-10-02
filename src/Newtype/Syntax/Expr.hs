@@ -43,10 +43,10 @@ data Expr
   deriving (Eq, Show, D.Data, D.Typeable)
 
 instance Pretty Expr where
-  pretty = \case
-    (Literal x) -> pretty x
+  pretty e = case e of
+    Literal x -> pretty x
     Hole -> "_"
-    (PrimitiveType t) -> pretty t
+    PrimitiveType t -> pretty t
     -- If asExpr and key are equal
     MappedType {asExpr = Just (Literal (StringLiteral as)), key, ..}
       | as == key ->
@@ -59,38 +59,38 @@ instance Pretty Expr where
           (Just expr) -> space <> "as" <+> pretty expr
         index = pretty key <+> "in" <+> pretty source <> as
         lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
-    (Keyof a) -> group ("keyof" <+> pretty a)
-    (Readonly a) -> group ("readonly" <+> pretty a)
-    (Typeof a) -> group ("typeof" <+> pretty a)
-    (Access a b) -> pretty a <> "[" <> pretty b <> "]"
-    (DotAccess a b) -> pretty a <> "." <> pretty b
-    (ExprGenericApplication a) -> pretty a
-    (ExprIdent id) -> pretty id
-    (ExprInferIdent (Ident id)) -> group "infer" <+> pretty id
-    (ExprInferIdentConstraint (Ident id) constraint) -> group "infer" <+> pretty id <+> "extends" <+> pretty constraint
-    (Array expr) ->
+    Keyof a -> group ("keyof" <+> pretty a)
+    Readonly a -> group ("readonly" <+> pretty a)
+    Typeof a -> group ("typeof" <+> pretty a)
+    Access a b -> pretty a <> "[" <> pretty b <> "]"
+    DotAccess a b -> pretty a <> "." <> pretty b
+    ExprGenericApplication a -> pretty a
+    ExprIdent id -> pretty id
+    ExprInferIdent (Ident id) -> group "infer" <+> pretty id
+    ExprInferIdentConstraint (Ident id) constraint -> group "infer" <+> pretty id <+> "extends" <+> pretty constraint
+    Array expr ->
       case expr of
         ExprInferIdent {} -> p
         ExprInferIdentConstraint {} -> p
         _ -> pretty expr <> "[]"
       where
         p = (parens . pretty $ expr) <> "[]"
-    (Tuple []) -> "[]"
-    (Tuple l) -> (brackets . hsep) (punctuate comma (map pretty l))
-    (Intersection left right) ->
+    Tuple [] -> "[]"
+    Tuple l -> (brackets . hsep) (punctuate comma (map pretty l))
+    Intersection left right ->
       fmt left <> softline <> "&" <> softline <> fmt right
       where
         fmt (Union a b) = prettyOpList . pretty $ Union a b
         fmt a = pretty a
-    (Union left right) ->
+    Union left right ->
       fmt left <> softline <> "|" <+> fmt right
       where
         fmt (Intersection a b) = prettyOpList . pretty $ Intersection a b
         fmt a = pretty a
-    (ExprConditionalType a) -> pretty a
-    (TemplateLiteral []) -> "``"
-    (TemplateLiteral a) -> "`" <> cat (map pretty a) <> "`"
-    (Let _ _) -> error "Expected let statement to have been evaluated"
+    ExprConditionalType a -> pretty a
+    TemplateLiteral [] -> "``"
+    TemplateLiteral a -> "`" <> cat (map pretty a) <> "`"
+    Let _ _ -> error "Expected let statement to have been evaluated"
 
 data TypeParam = TypeParam
   { name :: String
