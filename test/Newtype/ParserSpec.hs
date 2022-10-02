@@ -137,12 +137,12 @@ spec =
           "`a ${T a} b ${T b} c ${T c}`"
           "`a ${T<a>} b ${T<b>} c ${T<c>}`"
 
-    describe "let ... in" $ do
-      it "subs in literal expr values" $ do
-        shouldCompile
-          pExpr
-          "let a = 1 in [a, a]"
-          "[1, 1]"
+--     describe "let ... in" $ do
+--       it "subs in literal expr values" $ do
+--         shouldCompile
+--           pExpr
+--           "let a = 1 in [a, a]"
+--           "[1, 1]"
 
     describe "expressions" $ do
       describe "if-then-else" $ do
