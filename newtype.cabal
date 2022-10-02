@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -30,8 +30,11 @@ library
       Newtype.Eval
       Newtype.Parser
       Newtype.Parser.Tokens
+      Newtype.Prettyprinter
       Newtype.Syntax
       Newtype.Syntax.Conditionals
+      Newtype.Syntax.Expr
+      Newtype.Syntax.Ident
   other-modules:
       Paths_newtype
   hs-source-dirs:
@@ -42,6 +45,7 @@ library
       RecordWildCards
       ScopedTypeVariables
       QuasiQuotes
+      LambdaCase
   build-depends:
       base >=4.7 && <5
     , containers
@@ -70,6 +74,7 @@ executable nt
       RecordWildCards
       ScopedTypeVariables
       QuasiQuotes
+      LambdaCase
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -108,6 +113,7 @@ test-suite newtype-test
       RecordWildCards
       ScopedTypeVariables
       QuasiQuotes
+      LambdaCase
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

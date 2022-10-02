@@ -27,6 +27,10 @@ type TestResult = Expr
 newtype SymbolTable = SymbolTable {symMap :: FM.Map String Symbol}
   deriving (Show)
 
+
+macroExpand :: MacroExpandable a => a -> a
+macroExpand a = a
+
 evalProgram :: Program -> Program
 evalProgram p@Program {..} =
   Program statements'

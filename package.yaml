@@ -43,6 +43,7 @@ default-extensions:
   - RecordWildCards
   - ScopedTypeVariables
   - QuasiQuotes
+  - LambdaCase
 
 executables:
   nt:

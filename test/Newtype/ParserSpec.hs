@@ -12,11 +12,11 @@ import Prettyprinter
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty
 import Test.Hspec.Megaparsec
+import Test.Hspec.Newtype
 import Text.Heredoc (str)
 import Text.Megaparsec hiding (parse)
 import Text.Nicify
 import Prelude as P hiding (lines, unlines)
-import Test.Hspec.Newtype
 
 spec :: Spec
 spec =
@@ -136,6 +136,13 @@ spec =
           pExpr
           "`a ${T a} b ${T b} c ${T c}`"
           "`a ${T<a>} b ${T<b>} c ${T<c>}`"
+
+    describe "let ... in" $ do
+      it "subs in literal expr values" $ do
+        shouldCompile
+          pExpr
+          "let a = 1 in [a, a]"
+          "[1, 1]"
 
     describe "expressions" $ do
       describe "if-then-else" $ do

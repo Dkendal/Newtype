@@ -87,9 +87,16 @@ pTypeDefinition = do
   name <- moduleIdent
   indentGuard GT pos
   params <- pFormalTypeParams
-  colon
-  body <- pExpr
-  return TypeDefinition {..}
+  choice
+    [ do
+        colon
+        body <- pExpr
+        return TypeDefinition {..}
+    , do
+        equals
+        body <- pExpr
+        return MacroDefinition {..}
+    ]
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do
@@ -338,7 +345,36 @@ pCaseStatement =
     return (CaseStatement value branches)
 
 pExpr :: Parser Expr
-pExpr = choice [pTypeOp, pTerm]
+pExpr =
+  choice
+    [ pLet
+    , pTypeOp
+    , pTerm
+    ]
+
+-- | Parse a let expression
+-- Example input:
+--
+--   let x = 1 in x
+--
+--   let x = 1
+--       y = 2
+--   in [x, y]
+pLet :: Parser Expr
+pLet =
+  do
+    keyword "let"
+    bindings <- pBinding
+    keyword "in"
+    Let [bindings] <$> pExpr
+  where
+    pBinding =
+      do
+        name <- identifier
+        symbol "="
+        expr <- pExpr
+        return Binding { name = name, value = expr }
+
 
 {- | Parse an expression with a type operator. A type operator may be a builtin
  prefix operator like `typeof` or `keyof`, or a prefix operator: like `!` for
@@ -393,8 +429,14 @@ pTuple = do
 pArray :: Parser Expr
 pArray = do
   pound
-  expr <- brackets $ pExpr
-  return . Array $ expr
+  choice
+    [ do
+        expr <- brackets pExpr
+        return . Array $ expr
+    , do
+        expr <- parens pExpr
+        return . Readonly . Array $ expr
+    ]
 
 -- Parse members of a list or tuple, e.g:
 --  [1, 2, 3]
