@@ -4,10 +4,7 @@ module Test.Hspec.Newtype where
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Debug.Trace
 import qualified Newtype.Compiler
-import qualified Newtype.Eval
-import qualified Newtype.Syntax
 import Newtype.Parser (Parser, ParserResult, runNewTypeParser)
 import Prettyprinter (Pretty, pretty)
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
@@ -53,7 +50,13 @@ shouldCompile :: (HasCallStack, Pretty a) => Parser a -> Text -> Text -> Expecta
 shouldCompile parser src expected =
   case parse parser src of
     Left e -> expectationFailure . errorBundlePretty $ e
-    Right result -> (show . pretty  $ result) `shouldBe` T.unpack expected
+    Right result -> (show . pretty $ result) `shouldBe` T.unpack expected
+
+shouldCompileT :: (HasCallStack, Pretty a) => Parser a -> (a -> String) -> Text -> Text -> Expectation
+shouldCompileT parser f src expected =
+  case parse parser src of
+    Left e -> expectationFailure . errorBundlePretty $ e
+    Right result -> f result `shouldBe` T.unpack expected
 
 shouldCompileTo :: (HasCallStack, Pretty a) => Either Newtype.Compiler.CompilerError a -> Text -> Expectation
 shouldCompileTo (Left e) actual =

@@ -33,6 +33,7 @@ dependencies:
   - here
   - heredoc
   - regex-tdfa
+  - template-haskell
 
 library:
   source-dirs: src
@@ -44,6 +45,7 @@ default-extensions:
   - ScopedTypeVariables
   - QuasiQuotes
   - LambdaCase
+  - GADTs
 
 executables:
   nt:

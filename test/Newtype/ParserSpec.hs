@@ -8,19 +8,26 @@ module Newtype.ParserSpec (spec) where
 import Data.Text
 import Newtype.Parser
 import Newtype.Syntax
-import Prettyprinter
+import Newtype.Syntax.Typescript (toTypescript)
+import qualified Newtype.Syntax.Typescript as TS
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
-import Test.Hspec.Expectations.Pretty
 import Test.Hspec.Megaparsec
 import Test.Hspec.Newtype
 import Text.Heredoc (str)
-import Text.Megaparsec hiding (parse)
-import Text.Nicify
 import Prelude as P hiding (lines, unlines)
+import Prettyprinter (pretty)
 
 spec :: Spec
 spec =
   describe "Black box tests" $ do
+    describe "typescript mapping" $ do
+      it "works" $ do
+        shouldCompileT
+          pProgram
+          (\x -> show (pretty (toTypescript x :: TS.Program)))
+          "A : a"
+          "type A = a;"
+
     describe "test statements" $ do
       it "parses a test statement" $ do
         parse pProgram
@@ -137,12 +144,12 @@ spec =
           "`a ${T a} b ${T b} c ${T c}`"
           "`a ${T<a>} b ${T<b>} c ${T<c>}`"
 
---     describe "let ... in" $ do
---       it "subs in literal expr values" $ do
---         shouldCompile
---           pExpr
---           "let a = 1 in [a, a]"
---           "[1, 1]"
+    --     describe "let ... in" $ do
+    --       it "subs in literal expr values" $ do
+    --         shouldCompile
+    --           pExpr
+    --           "let a = 1 in [a, a]"
+    --           "[1, 1]"
 
     describe "expressions" $ do
       describe "if-then-else" $ do

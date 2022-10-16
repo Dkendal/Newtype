@@ -216,6 +216,3 @@ program' t = evalProgram <$> program t
 
 program :: ParserHelper Program
 program = parse pProgram
-
-unlines' :: [Text] -> Text
-unlines' = stripEnd . unlines

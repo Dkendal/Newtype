@@ -232,7 +232,7 @@ pFunctionLiteral =
     rparen
     keyword "=>"
     returnType <- pExpr <?> "function return type"
-    return $ Literal FunctionLiteral {..}
+    return $ Literal LFunction {..}
   where
     pParams = sepEndBy pParam comma
     pRest = optional $ do
@@ -410,16 +410,16 @@ pInferIdent =
       Just constraint -> ExprInferIdentConstraint ident constraint
 
 pNumberIntegerLiteral :: Parser Expr
-pNumberIntegerLiteral = Literal . NumberIntegerLiteral <$> integer
+pNumberIntegerLiteral = Literal . LNumberInteger <$> integer
 
 pNumberDoubleLiteral :: Parser Expr
-pNumberDoubleLiteral = Literal . NumberDoubleLiteral <$> float
+pNumberDoubleLiteral = Literal . LNumberDouble <$> float
 
 pBooleanLiteral :: Parser Expr
-pBooleanLiteral = Literal . BooleanLiteral <$> choice [True <$ keyword "true", False <$ keyword "false"]
+pBooleanLiteral = Literal . LBoolean <$> choice [True <$ keyword "true", False <$ keyword "false"]
 
 pStringLiteral :: Parser Expr
-pStringLiteral = Literal . StringLiteral <$> stringLiteral
+pStringLiteral = Literal . LString <$> stringLiteral
 
 pTuple :: Parser Expr
 pTuple = do
@@ -473,7 +473,7 @@ pIdent' = ExprIdent <$> pIdent <?> "identifier"
 
 pObjectLiteral :: Parser Expr
 pObjectLiteral =
-  Literal . ObjectLiteral <$> braces (pProperty `sepBy` comma)
+  Literal . LObject <$> braces (pProperty `sepBy` comma)
 
 pGenericApplication :: Parser GenericApplication
 pGenericApplication = do

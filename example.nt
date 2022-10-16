@@ -1,0 +1,71 @@
+import "ts-toolbelt" (A, F, L)
+
+import "." ( __ )
+
+import "./const.js"
+  ( __capture__
+  , __kind__
+  , any_
+  , bigint_
+  , boolean_
+  , function_
+  , number_
+  , object_
+  , rest_
+  , string_
+  , symbol_
+  )
+
+True : 1
+
+ExtractSubcapture t :
+  if not t <: M.Primitive | M.BuiltIn and t <: object
+    then t ! (Exclude (keyof t) (keyof [] | keyof {}))
+
+PartialAssignment key value :
+  if not value <: never and key <: string
+    then { value : k <- key }
+
+EmptyToNever t :
+  case t of
+    {} -> never
+    _ -> t
+
+Kind
+  : typeof any_
+  | typeof rest_
+  | typeof string_
+  | typeof number_
+  | typeof boolean_
+  | typeof function_
+  | typeof symbol_
+  | typeof bigint_
+  | typeof object_
+
+interface Hole (type_ = any) (label = any) where
+  readonly index __kind__ : Label
+  T : Type
+
+HoleInnerType t :
+  case t of
+    Hole ?u -> u
+    _ -> t
+
+interface Capture (name <: string = any) (pattern = any) where
+  readonly index __capture__ : name
+  readonly pattern : pattern
+
+RecursiveExpandCapture t :
+  -- Guard against any as mapping it will cause an infite descent
+  if t == any
+    then t
+    else
+      case t of
+        Hole | Capture -> ExpandCapture T
+        Record string any -> { ExpandCapture T!K  : k <- keyof T }
+        _ -> t
+
+PatternHandler pattern : (arg : VariableCapture pattern) => unknown
+
+GenericFunctionLiteral : forall t, u . (arg : t) => u
+

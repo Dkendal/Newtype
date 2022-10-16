@@ -10,6 +10,6 @@ spec = do
     describe "addImplicitExport" $ do
       it "adds an export statement with all top level defs" $ do
         let e = ExportStatement [Ident "A"]
-        let t = TypeDefinition "A" [] (Literal (NumberIntegerLiteral 1))
+        let t = TypeDefinition "A" [] (Literal (LNumberInteger 1))
         let prog = Program [t]
         addImplicitExport prog `shouldBe` Program [e, t]

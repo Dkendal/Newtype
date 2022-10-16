@@ -18,18 +18,14 @@ import Data.String.Here.Interpolated
 import Debug
 import Debug.Trace
 import Newtype.Syntax
+import Prettyprinter (pretty)
 import Text.Nicify
 import Prelude hiding (any)
-import Prettyprinter (pretty)
 
 type TestResult = Expr
 
 newtype SymbolTable = SymbolTable {symMap :: FM.Map String Symbol}
   deriving (Show)
-
-
-macroExpand :: MacroExpandable a => a -> a
-macroExpand a = a
 
 evalProgram :: Program -> Program
 evalProgram p@Program {..} =
@@ -51,13 +47,13 @@ evalSymbols scope expr = f
         (TemplateLiteral list) ->
           -- Replace the template literal with a string literal if possible
           case foldr red [] list of
-            [] -> Literal . StringLiteral $ ""
-            [TemplateRaw x] -> Literal . StringLiteral $ x
+            [] -> Literal . LString $ ""
+            [TemplateRaw x] -> Literal . LString $ x
             xs -> TemplateLiteral xs
           where
-            red (TemplateSubstitution (Literal (StringLiteral s))) ((TemplateRaw hd) : tl) =
+            red (TemplateSubstitution (Literal (LString s))) ((TemplateRaw hd) : tl) =
               red' s hd tl
-            red (TemplateRaw s) ((TemplateSubstitution (Literal (StringLiteral hd))) : tl) =
+            red (TemplateRaw s) ((TemplateSubstitution (Literal (LString hd))) : tl) =
               red' s hd tl
             red (TemplateRaw s) ((TemplateRaw hd) : tl) =
               red' s hd tl
@@ -71,19 +67,19 @@ evalSymbols scope expr = f
         -- https://github.com/microsoft/TypeScript/issues/40049
         (ExprConditionalType ConditionalType {..})
           | lhs == any ->
-            union [thenExpr, elseExpr]
+              union [thenExpr, elseExpr]
         (ExprConditionalType ConditionalType {..}) ->
           if lhs `isAssignable` rhs
             then evalSymbols scope thenExpr
             else evalSymbols scope elseExpr
-        (Keyof (Literal (ObjectLiteral props))) ->
+        (Keyof (Literal (LObject props))) ->
           -- Convert each property to a string literal, pack them into a union
           union [mkString key | DataProperty {key} <- props]
         -- Special case for builtin string functions
         ( ExprGenericApplication
             ( GenericApplication
                 (Ident id)
-                [Literal (StringLiteral str)]
+                [Literal (LString str)]
               )
           )
             | id == "Uppercase" -> f Data.Char.toUpper str
@@ -92,7 +88,7 @@ evalSymbols scope expr = f
             | id == "Uncapitalize" -> mapFirstChar Data.Char.toLower str
             where
               f ab = string . map ab
-              string = Literal . StringLiteral
+              string = Literal . LString
               empty = string ""
               mapFirstChar f (x : xs) = string $ f x : xs
               mapFirstChar _ [] = string []
@@ -119,15 +115,15 @@ evalSymbols scope expr = f
                         Nothing -> item
                         Just as ->
                           let s = transform scope' as
-                          in case s of
-                            Literal (StringLiteral x) -> x
-                            _ -> error [i|Expected string literal, got #{s}|]
+                           in case s of
+                                Literal (LString x) -> x
+                                _ -> error [i|Expected string literal, got #{s}|]
                     , value = transform scope' value
                     }
         x -> x
     get id = getSym id scope
-    literal = Literal . ObjectLiteral
-    string = Literal . StringLiteral
+    literal = Literal . LObject
+    string = Literal . LString
 
 -- | Bottom-up traveral, replace all symbols with their values
 transform :: SymbolTable -> Expr -> Expr
@@ -154,8 +150,8 @@ applyFunction parentScope args sym =
 
 toList :: Expr -> [String]
 toList (Union a b) = concatMap toList [a, b]
-toList (Literal (StringLiteral a)) = [a]
-toList (Literal (NumberIntegerLiteral a)) = [show a]
+toList (Literal (LString a)) = [a]
+toList (Literal (LNumberInteger a)) = [show a]
 toList other = error $ "RuntimeError: " <> nicify (show other) <> " must extend `string | number | symbol`"
 
 data Symbol
@@ -205,7 +201,7 @@ evalExpr :: Expr -> Expr
 evalExpr
   (ExprConditionalType ConditionalType {..})
     | lhs == any =
-      union [thenExpr, elseExpr]
+        union [thenExpr, elseExpr]
 evalExpr
   (ExprConditionalType ConditionalType {..}) =
     if lhs `isAssignable` rhs
@@ -252,8 +248,8 @@ isAssignable left (PrimitiveType PrimitiveNumber) | isNumberLike left = True
 isAssignable _ _ = False
 
 isNumberLike :: Expr -> Bool
-isNumberLike (Literal (NumberIntegerLiteral _)) = True
-isNumberLike (Literal (NumberDoubleLiteral _)) = True
+isNumberLike (Literal (LNumberInteger _)) = True
+isNumberLike (Literal (LNumberDouble _)) = True
 isNumberLike (PrimitiveType PrimitiveNumber) = True
 isNumberLike _ = False
 

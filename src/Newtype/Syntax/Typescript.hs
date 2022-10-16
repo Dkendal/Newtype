@@ -1,47 +1,124 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
-module Newtype.Syntax.Expr (
-  module Newtype.Syntax.Expr,
-  module Newtype.Syntax.Expr.Primitive,
+module Newtype.Syntax.Typescript (
+  module Newtype.Syntax.Typescript,
 ) where
 
 import qualified Data.Generics as Generics
-import qualified Data.List as List
-import Language.Haskell.TH
 import Newtype.Prettyprinter
-import Newtype.Syntax.Expr.Primitive
-import Newtype.Syntax.Ident
-import Newtype.Syntax.Typescript (Typescript, toTypescript)
-import qualified Newtype.Syntax.Typescript as TS
 import Prettyprinter
+
+class Typescript a b where
+  toTypescript :: a -> b
+
+newtype Program = Program [Statement]
+  deriving (Eq, Show)
+
+instance Pretty Program where
+  pretty (Program statements) = prettyList statements
+
+data Statement
+  = SExport [String]
+  | SType Type
+  | SInterface Interface
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty Statement where
+  pretty s = case s of
+    SType s -> pretty s
+    SInterface s -> pretty s
+    SExport s ->
+      "export" <+> (braces . hsep . punctuate comma . map pretty) s <> semi
+
+  prettyList statements = vsep (punctuate line (map pretty statements))
+
+data Type = Type
+  { name :: String
+  , params :: [TypeParam]
+  , body :: Expr
+  }
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty Type where
+  pretty Type {..} =
+    group head <> group (nest 2 body') <> semi
+    where
+      head = "type" <+> pretty name <> prettyList params
+      body' = line <> "=" <+> pretty body
+
+data Interface = Interface
+  { name :: String
+  , params :: [TypeParam]
+  , extends :: Maybe Extend
+  , props :: [Property]
+  }
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty Interface where
+  pretty Interface {..} =
+    head <+> vsep [lbrace, body, rbrace]
+    where
+      head = group "interface" <+> pretty name <> prettyList params
+      body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
+
+data Extend
+  = ExtendIdent String
+  | ExtendGeneric GenericApplication
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+data ImportClause
+  = ICDefault String
+  | ICNamespace String
+  | ICNamed [ImportSpecifier]
+  | ICDefaultAndNamespace
+      { defaultBinding :: String
+      , namespaceBinding :: String
+      }
+  | ICDefaultAndNamed
+      { defaultBinding :: String
+      , namedBindings :: [ImportSpecifier]
+      }
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty ImportClause where
+  pretty expr = case expr of
+    ICDefault binding -> pretty binding
+    ICNamespace binding -> "* as " <> pretty binding
+    ICNamed namedBindings -> prettyList namedBindings
+    ICDefaultAndNamespace {..} -> pretty defaultBinding <+> pretty namespaceBinding
+    ICDefaultAndNamed {..} -> pretty defaultBinding <+> prettyList namedBindings
+
+data ImportSpecifier
+  = ImportedBinding String
+  | ImportedAlias {from :: String, to :: String}
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty ImportSpecifier where
+  prettyList = braces . hsep . punctuate comma . map pretty
+  pretty expr = case expr of
+    ImportedBinding binding -> pretty binding
+    ImportedAlias {..} -> pretty from <+> "as" <+> pretty to
 
 data Expr
   = Access Expr Expr
   | Array Expr
   | DotAccess Expr Expr
-  | ExprConditionalType ConditionalType
-  | ExprGenericApplication GenericApplication
-  | ExprIdent Ident
-  | ExprInferIdent Ident
-  | ExprInferIdentConstraint Ident Expr
-  | Hole
+  | EConditionalType ConditionalType
+  | EGenericApplication GenericApplication
+  | EInferConstraint String Expr
+  | ELiteral Literal
+  | EMappedType MappedType
+  | EPrimitiveType PrimitiveType
+  | ETemplate [TemplateString]
+  | Ident String
+  | Infer String
   | Intersection Expr Expr
   | Keyof Expr
   | Let [Binding] Expr
-  | Literal Literal
-  | MappedType
-      { value :: Expr
-      , key :: String
-      , source :: Expr
-      , asExpr :: Maybe Expr
-      , isReadonly :: Maybe Bool
-      , isOptional :: Maybe Bool
-      }
-  | PrimitiveType PrimitiveType
   | Readonly Expr
-  | TemplateLiteral [TemplateString]
   | Tuple [ListValue]
   | Typeof Expr
   | Union Expr Expr
@@ -49,34 +126,22 @@ data Expr
 
 instance Pretty Expr where
   pretty e = case e of
-    Literal x -> pretty x
-    Hole -> "_"
-    PrimitiveType t -> pretty t
-    -- If asExpr and key are equal
-    MappedType {asExpr = Just (Literal (LString as)), key, ..}
-      | as == key ->
-          pretty MappedType {asExpr = Nothing, ..}
-    MappedType {..} ->
-      braces (lhs <+> pretty value)
-      where
-        as = case asExpr of
-          Nothing -> emptyDoc
-          (Just expr) -> space <> "as" <+> pretty expr
-        index = pretty key <+> "in" <+> pretty source <> as
-        lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
+    EMappedType a -> pretty a
+    ELiteral x -> pretty x
+    EPrimitiveType t -> pretty t
     Keyof a -> group ("keyof" <+> pretty a)
     Readonly a -> group ("readonly" <+> pretty a)
     Typeof a -> group ("typeof" <+> pretty a)
     Access a b -> pretty a <> "[" <> pretty b <> "]"
     DotAccess a b -> pretty a <> "." <> pretty b
-    ExprGenericApplication a -> pretty a
-    ExprIdent id -> pretty id
-    ExprInferIdent (Ident id) -> group "infer" <+> pretty id
-    ExprInferIdentConstraint (Ident id) constraint -> group "infer" <+> pretty id <+> "extends" <+> pretty constraint
+    EGenericApplication a -> pretty a
+    Ident id -> pretty id
+    Infer id -> group "infer" <+> pretty id
+    EInferConstraint id constraint -> group "infer" <+> pretty id <+> "extends" <+> pretty constraint
     Array expr ->
       case expr of
-        ExprInferIdent {} -> p
-        ExprInferIdentConstraint {} -> p
+        Infer {} -> p
+        EInferConstraint {} -> p
         _ -> pretty expr <> "[]"
       where
         p = (parens . pretty $ expr) <> "[]"
@@ -92,33 +157,33 @@ instance Pretty Expr where
       where
         fmt (Intersection a b) = prettyOpList . pretty $ Intersection a b
         fmt a = pretty a
-    ExprConditionalType a -> pretty a
-    TemplateLiteral [] -> "``"
-    TemplateLiteral a -> "`" <> cat (map pretty a) <> "`"
+    EConditionalType a -> pretty a
+    ETemplate [] -> "``"
+    ETemplate a -> "`" <> cat (map pretty a) <> "`"
     Let _ _ -> error "Expected let statement to have been evaluated"
 
-instance Typescript Expr TS.Expr where
-  toTypescript = \case
-    Access lhs rhs -> TS.Access (TS.toTypescript lhs) (TS.toTypescript rhs)
-    Array a -> TS.Array . TS.toTypescript $ a
-    DotAccess lhs rhs -> TS.DotAccess (TS.toTypescript lhs) (TS.toTypescript rhs)
-    ExprConditionalType ct -> TS.EConditionalType $ TS.toTypescript ct
-    ExprGenericApplication ga -> TS.EGenericApplication $ TS.toTypescript ga
-    ExprIdent id -> TS.Ident $ TS.toTypescript id
-    ExprInferIdent id -> TS.Infer $ TS.toTypescript id
-    ExprInferIdentConstraint id ex -> TS.EInferConstraint (TS.toTypescript id) (TS.toTypescript ex)
-    Hole -> error "Hole"
-    Intersection lhs rhs -> TS.Intersection (TS.toTypescript lhs) (TS.toTypescript rhs)
-    Keyof ex -> TS.Keyof $ TS.toTypescript ex
-    Let binds ex -> error "Let"
-    Literal lit -> TS.ELiteral $ TS.toTypescript lit
-    MappedType {..} -> TS.EMappedType $ TS.MappedType (TS.toTypescript value) key (TS.toTypescript source) (TS.toTypescript <$> asExpr) isReadonly isOptional
-    PrimitiveType pt -> TS.EPrimitiveType $ TS.toTypescript pt
-    Readonly ex -> TS.Readonly $ TS.toTypescript ex
-    TemplateLiteral tss -> TS.ETemplate $ map TS.toTypescript tss
-    Tuple lvs -> TS.Tuple $ map TS.toTypescript lvs
-    Typeof ex -> TS.Typeof $ TS.toTypescript ex
-    Union lhs rhs -> TS.Union (TS.toTypescript lhs) (TS.toTypescript rhs)
+data MappedType = MappedType
+  { value :: Expr
+  , key :: String
+  , source :: Expr
+  , asExpr :: Maybe Expr
+  , isReadonly :: Maybe Bool
+  , isOptional :: Maybe Bool
+  }
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty MappedType where
+  pretty MappedType {asExpr = Just (ELiteral (LString as)), key, ..}
+    | as == key =
+        pretty MappedType {asExpr = Nothing, ..}
+  pretty MappedType {..} =
+    braces (lhs <+> pretty value)
+    where
+      as = case asExpr of
+        Nothing -> emptyDoc
+        (Just expr) -> space <> "as" <+> pretty expr
+      index = pretty key <+> "in" <+> pretty source <> as
+      lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
 
 data TypeParam = TypeParam
   { name :: String
@@ -153,10 +218,6 @@ instance Pretty ListValue where
   pretty (ListRest Nothing a) = "..." <> pretty a
   pretty (ListValue (Just l) a) = pretty l <> ":" <+> pretty a
   pretty (ListRest (Just l) a) = pretty l <> ": ..." <> pretty a
-
-instance Typescript ListValue TS.ListValue where
-  toTypescript (ListValue a b) = TS.ListValue a (TS.toTypescript b)
-  toTypescript (ListRest a b) = TS.ListRest a (TS.toTypescript b)
 
 data Literal
   = LString String
@@ -197,15 +258,6 @@ instance Pretty Literal where
           (map pretty props)
       )
 
-instance Typescript Literal TS.Literal where
-  toTypescript = \case
-    LBoolean b -> TS.LBoolean b
-    LNumberInteger n -> TS.LNumberInteger n
-    LNumberDouble n -> TS.LNumberDouble n
-    LString s -> TS.LString s
-    LFunction {} -> error "Cannot convert function to typescript"
-    LObject {} -> error "Cannot convert object to typescript"
-
 data TemplateString
   = TemplateRaw String
   | TemplateSubstitution Expr
@@ -215,22 +267,14 @@ instance Pretty TemplateString where
   pretty (TemplateRaw s) = pretty s
   pretty (TemplateSubstitution e) = "${" <> pretty e <> "}"
 
-instance Typescript TemplateString TS.TemplateString where
-  toTypescript (TemplateRaw s) = TS.TemplateRaw s
-  toTypescript (TemplateSubstitution e) = TS.TemplateSubstitution $ TS.toTypescript e
-
 data GenericApplication
-  = GenericApplication Ident [Expr]
+  = GenericApplication String [Expr]
   deriving (Eq, Show, Generics.Data, Generics.Typeable)
 
 instance Pretty GenericApplication where
   pretty (GenericApplication ident []) = pretty ident
   pretty (GenericApplication typeName params) =
     pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
-
-instance Typescript GenericApplication TS.GenericApplication where
-  toTypescript (GenericApplication ident params) =
-    TS.GenericApplication (TS.toTypescript ident) (map TS.toTypescript params)
 
 data ConditionalType = ConditionalType
   { lhs :: Expr
@@ -253,15 +297,6 @@ instance Pretty ConditionalType where
       thenDoc = line <> "?" <+> pretty then'
 
       elseDoc = line <> ":" <+> pretty else'
-
-instance Typescript ConditionalType TS.ConditionalType where
-  toTypescript (ConditionalType lhs rhs then' else') =
-    TS.ConditionalType
-      { lhs = TS.toTypescript lhs
-      , rhs = TS.toTypescript rhs
-      , thenExpr = TS.toTypescript then'
-      , elseExpr = TS.toTypescript else'
-      }
 
 data Property
   = DataProperty
@@ -298,39 +333,32 @@ instance Pretty Property where
           <> optional
           <> ":"
 
--------------------------------------------------------------------------------
--- Smart constructors                                                        --
--------------------------------------------------------------------------------
+data PrimitiveType
+  = PrimitiveNever
+  | PrimitiveAny
+  | PrimitiveUnknown
+  | PrimitiveNumber
+  | PrimitiveBigInt
+  | PrimitiveString
+  | PrimitiveBoolean
+  | PrimitiveNull
+  | PrimitiveUndefined
+  | PrimitiveVoid
+  | PrimitiveObject
+  | PrimitiveSymbol
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
 
-mkIdent :: String -> Expr
-mkIdent = ExprIdent . Ident
-
-mkString :: String -> Expr
-mkString = Literal . LString
-
-lv :: Expr -> ListValue
-lv = ListValue Nothing
-
-mkTuple :: [Expr] -> Expr
-mkTuple l = Tuple (map lv l)
-
-genericAp :: Ident -> [Expr] -> Expr
-genericAp = (ExprGenericApplication .) . GenericApplication
-
-ctExpr :: Expr -> Expr -> Expr -> Expr -> Expr
-ctExpr lhs rhs then' else' = ExprConditionalType (ConditionalType lhs rhs then' else')
-
-never :: Expr
-never = PrimitiveType PrimitiveNever
-
-any = PrimitiveType PrimitiveAny
-
-union :: [Expr] -> Expr
-union [] = never
-union [h] = h
-union (h : t) = List.foldl Union h t
-
-intersection :: [Expr] -> Expr
-intersection [] = never
-intersection [h] = h
-intersection (h : t) = List.foldl Intersection h t
+instance Pretty PrimitiveType where
+  pretty a = case a of
+    PrimitiveNever -> "never"
+    PrimitiveAny -> "any"
+    PrimitiveUnknown -> "unknown"
+    PrimitiveNumber -> "number"
+    PrimitiveString -> "string"
+    PrimitiveBoolean -> "boolean"
+    PrimitiveNull -> "null"
+    PrimitiveUndefined -> "undefined"
+    PrimitiveVoid -> "void"
+    PrimitiveBigInt -> "bigint"
+    PrimitiveSymbol -> "symbol"
+    PrimitiveObject -> "object"
