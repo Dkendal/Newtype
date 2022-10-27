@@ -1,0 +1,81 @@
+ParamValue : string | number
+
+ResultValue : string | URL
+
+ReqOrUrl : URL | Request
+
+Params (keys <: string) : Record keys ParamValue
+
+QueryStringOpts : ConstructorParameters (typeof URLSearchParams) ! 0
+
+Tokens : ReadonlyArray string
+
+TokensA : ReadonlyArray Tokens
+
+HelperFunction (t <: string = never) :
+  if t == never
+    then HelperFunction2
+    else HelperFunction3 t
+
+HelperFunction2 :
+  (reqOrUrl: ReqOrURl, query: QueryStringOpts | undefined) => ResultValue
+
+HelperFunction3 (keys <: string) :
+  (reqOrUrl: ReqOrURl, params: Params keys, query: QueryStringOpts | undefined) => ResultValue
+
+HelperFunctionN : HelperFunction any
+
+Compact t : { k: t ! k for k in keyof t }
+
+RouteGen (t <: readonly #[string]) :
+  if t <: readonly [?hd <: string, ...?tl]
+    then RouteGenR tl hd never
+    else "error: expected type [string, ...any]"
+
+
+RouteGenR (t <: readonly (Array string)) (args <: string) :
+  case t of
+    [`:${?paramName}`, ...?tl] ->
+      RouteGenR tl name (paramName | args)
+
+    [?hd <: string, ...?tl] ->
+      RouteGenR tl `${name}${Capitalize hd}` (paramName | args)
+
+    _ ->
+      -- This becomes the function signature
+      [ name
+      , [args: { k: ParamValue for k in args }
+        , query: Query | undefined
+        ]
+      ]
+
+RoutePairs (t <: TokensA) :
+  if t <: readonly #[?u] and u <: readonly #[string]
+    then RouteGen u
+    else "error: expected array of arrays of strings"
+
+RouteMappedType postfix defintions =
+  {
+    `${Pair ! 0}${postfix}`:
+      if Pair[1] <: #[unknown]
+        then (...args: Pair ! 1) => URL
+        else "error: expected an array"
+    for pair in RoutePairs definitions
+  }
+
+Routes (t <: ReadonlyArray (ReadonlyArray string)) :
+  Compact
+    ({
+      `${Pair ! 0}Url`:
+        if Pair[1] <: #[unknown]
+        then (...args: Pair ! 1) => URL
+        else "error: expected an array"
+      for pair in RoutePairs t
+    }
+    & {
+    `${Pair ! 0}Path`:
+        if Pair[1] <: #[unknown]
+        then (...args: Pair ! 1) => string
+        else "error: expected an array"
+      for pair in RoutePairs t
+    })
