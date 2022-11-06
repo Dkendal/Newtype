@@ -7,7 +7,7 @@ module Newtype.ParserSpec (spec) where
 
 import Data.Text
 import Newtype.Parser
-import Newtype.Syntax
+import Newtype.Syntax.Newtype
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Megaparsec
 import Test.Hspec.Newtype
@@ -18,13 +18,16 @@ import Prelude as P hiding (lines, unlines)
 spec :: Spec
 spec =
   describe "Black box tests" $ do
-    describe "typescript mapping" $ do
-      it "works" $ do
-        shouldCompile
-          pProgram
-          "A : a"
-          "type A = a;"
-
+    it "unquote operator evaluates the expression" $ do
+      shouldCompile
+        pProgram
+        [str|A : 1
+            |B : Unquote A
+            |]
+        [str|type A = 1
+            |type B = 1
+            |]
+      
     describe "test statements" $ do
       it "parses a test statement" $ do
         parse pProgram

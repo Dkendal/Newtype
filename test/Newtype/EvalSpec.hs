@@ -6,7 +6,7 @@ import Control.Monad (forM_)
 import Data.Text (Text, stripEnd, unlines, unpack)
 import Newtype.Eval (evalExpr, evalProgram, isAssignable)
 import Newtype.Parser (ParserResult, pExpr, pProgram)
-import Newtype.Syntax (Expr, Program)
+import Newtype.Syntax.Newtype (Expr, Program)
 import qualified Prettyprinter as PP
 import Test.Hspec hiding (expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (
@@ -168,15 +168,18 @@ spec = do
   describe "evalExpr" $ do
     it "distributes over both branches when the lhs is `any`" $ do
       let src = "if any <: 1 then 2 else 3"
-      fmap evalExpr (expr src) `shouldBe` expr "2 | 3"
+      let out = "2 | 3"
+      fmap evalExpr (expr src) `shouldBe` expr out
 
     it "reduces to the lhs when literals are the same" $ do
       let src = "if 1 <: 1 then true"
-      fmap evalExpr (expr src) `shouldBe` expr "true"
+      let out = "true"
+      fmap evalExpr (expr src) `shouldBe` expr out
 
     it "different literals are not assignable" $ do
       let src = "if not 1 <: 2 then true"
-      fmap evalExpr (expr src) `shouldBe` expr "true"
+      let out = "true"
+      fmap evalExpr (expr src) `shouldBe` expr out
 
     it "bigint is not assignable to number" $ do
       -- let src = "if not 1n <: number then true"
@@ -185,11 +188,13 @@ spec = do
 
     it "a literal is assignable to `any`" $ do
       let src = "if 1 <: any then true"
-      fmap evalExpr (expr src) `shouldBe` expr "true"
+      let out = "true"
+      fmap evalExpr (expr src) `shouldBe` expr out
 
     it "reduces to the lhs when a literal extends a primitive type" $ do
       let src = "if 1 <: number then true"
-      fmap evalExpr (expr src) `shouldBe` expr "true"
+      let out = "true"
+      fmap evalExpr (expr src) `shouldBe` expr out
 
 type ParserHelper a = Text -> ParserResult a
 

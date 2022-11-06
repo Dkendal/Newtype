@@ -1,7 +1,7 @@
 module Newtype.CompilerSpec (spec) where
 
 import Newtype.Compiler
-import Newtype.Syntax
+import Newtype.Syntax.Newtype
 import Test.Hspec
 
 spec :: Spec

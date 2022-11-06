@@ -1,20 +1,287 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Newtype.Syntax.Expr (
-  module Newtype.Syntax.Expr,
-  module Newtype.Syntax.Expr.Primitive,
-) where
+module Newtype.Syntax.Newtype where
 
+import Control.Monad
+import Data.Data qualified as D
+import Data.Generics
 import Data.Generics qualified as Generics
+import Data.Generics.Uniplate.Data qualified as Uniplate
 import Data.List qualified as List
+import Data.Maybe
+import Data.Maybe qualified as Maybe
 import Language.Haskell.TH
 import Newtype.Prettyprinter
-import Newtype.Syntax.Expr.Primitive
-import Newtype.Syntax.Ident
-import Newtype.Syntax.Typescript (Typescript, toTypescript)
 import Newtype.Syntax.Typescript qualified as TS
 import Prettyprinter
+import Text.Regex.TDFA
+
+-- All types should implement the `Typescript` class.
+
+data PrimitiveType
+  = PrimitiveNever
+  | PrimitiveAny
+  | PrimitiveUnknown
+  | PrimitiveNumber
+  | PrimitiveBigInt
+  | PrimitiveString
+  | PrimitiveBoolean
+  | PrimitiveNull
+  | PrimitiveUndefined
+  | PrimitiveVoid
+  | PrimitiveObject
+  | PrimitiveSymbol
+  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty PrimitiveType where
+  pretty a = case a of
+    PrimitiveNever -> "never"
+    PrimitiveAny -> "any"
+    PrimitiveUnknown -> "unknown"
+    PrimitiveNumber -> "number"
+    PrimitiveString -> "string"
+    PrimitiveBoolean -> "boolean"
+    PrimitiveNull -> "null"
+    PrimitiveUndefined -> "undefined"
+    PrimitiveVoid -> "void"
+    PrimitiveBigInt -> "bigint"
+    PrimitiveSymbol -> "symbol"
+    PrimitiveObject -> "object"
+
+instance TS.Typescript PrimitiveType TS.PrimitiveType where
+  toTypescript a = case a of
+    PrimitiveNever -> TS.PrimitiveNever
+    PrimitiveAny -> TS.PrimitiveAny
+    PrimitiveUnknown -> TS.PrimitiveUnknown
+    PrimitiveNumber -> TS.PrimitiveNumber
+    PrimitiveString -> TS.PrimitiveString
+    PrimitiveBoolean -> TS.PrimitiveBoolean
+    PrimitiveNull -> TS.PrimitiveNull
+    PrimitiveUndefined -> TS.PrimitiveUndefined
+    PrimitiveVoid -> TS.PrimitiveVoid
+    PrimitiveBigInt -> TS.PrimitiveBigInt
+    PrimitiveSymbol -> TS.PrimitiveSymbol
+    PrimitiveObject -> TS.PrimitiveObject
+
+newtype Ident = Ident {getIdent :: String}
+  deriving (Eq, Ord, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty Ident where
+  pretty (Ident s) = pretty s
+
+instance TS.Typescript Ident String where
+  toTypescript (Ident x) = x
+
+newtype Program = Program {statements :: [Statement]}
+  deriving (Eq, Show)
+
+instance Pretty Program where
+  pretty (Program statements) = prettyList statements
+
+instance TS.Typescript Program TS.Program where
+  toTypescript (Program statements) =
+    TS.Program $ Maybe.mapMaybe TS.toTypescript statements
+
+-- Statements may be removed during compilation
+instance TS.Typescript Statement (Maybe TS.Statement) where
+  toTypescript = \case
+    ImportDeclaration _ _ -> error "TODO"
+    MacroDefinition {} -> error "TODO"
+    InterfaceDefinition {..} ->
+      Just . TS.SInterface $
+        TS.Interface
+          { name
+          , params = map TS.toTypescript params
+          , extends = fmap TS.toTypescript extends
+          , props = map TS.toTypescript props
+          }
+    TestDefinition _ _ -> error "TODO"
+    ExportStatement exports -> Just . TS.SExport $ map getIdent exports
+    TypeDefinition {..} ->
+      Just . TS.SType $
+        TS.Type
+          { name = name
+          , params = map TS.toTypescript params
+          , body = TS.toTypescript body
+          }
+
+instance TS.Typescript TypeParam TS.TypeParam where
+  toTypescript (TypeParam name defaultValue constraint) =
+    TS.TypeParam
+      name
+      (TS.toTypescript <$> defaultValue)
+      (TS.toTypescript <$> constraint)
+
+--------------------------------------------------------------------------------
+-- Conditionals
+--------------------------------------------------------------------------------
+
+data ConditionalExpr = ConditionalExpr
+  { condition :: BoolExpr
+  , thenExpr :: Expr
+  , elseExpr :: Expr
+  }
+  deriving (Show, Eq)
+
+data BoolExpr
+  = And BoolExpr BoolExpr
+  | Or BoolExpr BoolExpr
+  | Not BoolExpr
+  | ExtendsLeft Expr Expr
+  | ExtendsRight Expr Expr
+  | Equals Expr Expr
+  | NotEquals Expr Expr
+  deriving (Show, Eq)
+
+data Case
+  = Case Expr Expr
+  deriving (Eq, Show)
+
+data CaseStatement = CaseStatement Expr [Case]
+  deriving (Eq, Show)
+
+expandCaseStatement :: CaseStatement -> Expr
+expandCaseStatement (CaseStatement lhs [Case rhs then', Case Hole else']) =
+  ct' lhs rhs then' else'
+expandCaseStatement (CaseStatement lhs [Case rhs then']) =
+  ct' lhs rhs then' never
+expandCaseStatement (CaseStatement lhs (Case rhs then' : tl)) =
+  ct' lhs rhs then' (expandCaseStatement (CaseStatement lhs tl))
+expandCaseStatement (CaseStatement lhs []) = never
+
+expandConditional' :: ConditionalExpr -> Expr
+expandConditional' = ExprConditionalType . expandConditional
+
+expandConditional :: ConditionalExpr -> ConditionalType
+expandConditional (ConditionalExpr (ExtendsLeft a b) then' else') =
+  ct a b then' else'
+expandConditional (ConditionalExpr (ExtendsRight b a) then' else') =
+  ct a b then' else'
+expandConditional (ConditionalExpr (Not con) then' else') =
+  expandConditional (cx con else' then')
+expandConditional (ConditionalExpr (Equals a b) then' else') =
+  ct (t1 a) (t1 b) then' else'
+expandConditional (ConditionalExpr (NotEquals a b) then' else') =
+  expandConditional (cx (Not (Equals a b)) then' else')
+expandConditional (ConditionalExpr (And a b) then' else') =
+  let outer then'' = cx a then'' else'
+      inner = cx b then' else'
+   in expandConditional (outer (expandConditional' inner))
+expandConditional (ConditionalExpr (Or a b) then' else') =
+  let outer else'' = cx a then' else''
+      inner = cx b then' else'
+   in expandConditional (outer (expandConditional' inner))
+
+cx :: BoolExpr -> Expr -> Expr -> ConditionalExpr
+cx = ConditionalExpr
+
+ct' :: Expr -> Expr -> Expr -> Expr -> Expr
+ct' lhs rhs then' else' = ExprConditionalType $ ConditionalType lhs rhs then' else'
+
+ct :: Expr -> Expr -> Expr -> Expr -> ConditionalType
+ct = ConditionalType
+
+-- | Single element tuple
+t1 a = Tuple [ListValue Nothing a]
+
+--------------------------------------------------------------------------------
+-- Statements
+--------------------------------------------------------------------------------
+
+data Statement
+  = ImportDeclaration
+      { importClause :: ImportClause
+      , fromClause :: String
+      }
+  | ExportStatement [Ident]
+  | TypeDefinition
+      { name :: String
+      , params :: [TypeParam]
+      , body :: Expr
+      }
+  | MacroDefinition
+      { name :: String
+      , params :: [TypeParam]
+      , body :: Expr
+      }
+  | InterfaceDefinition
+      { name :: String
+      , params :: [TypeParam]
+      , extends :: Maybe Extensible
+      , props :: [Property]
+      }
+  | TestDefinition
+      { name :: String
+      , body :: Expr
+      }
+  deriving (Eq, Show, D.Data, D.Typeable)
+
+instance Pretty Statement where
+  pretty s = case s of
+    MacroDefinition {} -> emptyDoc
+    TestDefinition {} -> emptyDoc
+    ImportDeclaration {..} ->
+      "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause) <> semi
+    TypeDefinition {..} ->
+      group head <> group (nest 2 body') <> semi
+      where
+        head = "type" <+> pretty name <> prettyList params
+        body' = line <> "=" <+> pretty body
+    (ExportStatement s) ->
+      "export" <+> (braces . hsep . punctuate comma . map pretty) s <> semi
+    InterfaceDefinition {..} ->
+      head <+> vsep [lbrace, body, rbrace]
+      where
+        head = group "interface" <+> pretty name <> prettyList params
+        body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
+
+  prettyList statements = vsep (punctuate line (map pretty statements))
+
+data Extensible
+  = ExtendIdent Ident
+  | ExtendGeneric GenericApplication
+  deriving (Eq, Show, D.Data, D.Typeable)
+
+instance TS.Typescript Extensible TS.Extend where
+  toTypescript (ExtendIdent a) = TS.ExtendIdent (TS.toTypescript a)
+  toTypescript (ExtendGeneric a) = TS.ExtendGeneric (TS.toTypescript a)
+
+data ImportClause
+  = ImportClauseDefault String
+  | ImportClauseNS String
+  | ImportClauseNamed [ImportSpecifier]
+  | ImportClauseDefaultAndNS
+      { defaultBinding :: String
+      , namespaceBinding :: String
+      }
+  | ImportClauseDefaultAndNamed
+      { defaultBinding :: String
+      , namedBindings :: [ImportSpecifier]
+      }
+  deriving (Eq, Show, D.Data, D.Typeable)
+
+instance Pretty ImportClause where
+  pretty (ImportClauseDefault binding) = pretty binding
+  pretty (ImportClauseNS binding) = "* as " <> pretty binding
+  pretty (ImportClauseNamed namedBindings) = prettyList namedBindings
+  pretty ImportClauseDefaultAndNS {..} = pretty defaultBinding <+> pretty namespaceBinding
+  pretty ImportClauseDefaultAndNamed {..} = pretty defaultBinding <+> prettyList namedBindings
+
+data ImportSpecifier
+  = ImportedBinding String
+  | ImportedAlias {from :: String, to :: String}
+  deriving (Eq, Show, D.Data, D.Typeable)
+
+instance Pretty ImportSpecifier where
+  prettyList = braces . hsep . punctuate comma . map pretty
+  pretty (ImportedBinding binding) = pretty binding
+  pretty ImportedAlias {..} = pretty from <+> "as" <+> pretty to
+
+--------------------------------------------------------------------------------
+-- Expressions
+--------------------------------------------------------------------------------
 
 data Expr
   = Access Expr Expr
@@ -96,12 +363,13 @@ instance Pretty Expr where
     TemplateLiteral a -> "`" <> cat (map pretty a) <> "`"
     Let _ _ -> error "Expected let statement to have been evaluated"
 
-instance Typescript Expr TS.Expr where
+instance TS.Typescript Expr TS.Expr where
   toTypescript = \case
     Access lhs rhs -> TS.Access (TS.toTypescript lhs) (TS.toTypescript rhs)
     Array a -> TS.Array . TS.toTypescript $ a
     DotAccess lhs rhs -> TS.DotAccess (TS.toTypescript lhs) (TS.toTypescript rhs)
     ExprConditionalType ct -> TS.EConditionalType $ TS.toTypescript ct
+    -- ExprGenericApplication (GenericApplication "Unquote" [expr]) -> Eval.evalExpr expr
     ExprGenericApplication ga -> TS.EGenericApplication $ TS.toTypescript ga
     ExprIdent id -> TS.Ident $ TS.toTypescript id
     ExprInferIdent id -> TS.Infer $ TS.toTypescript id
@@ -153,7 +421,7 @@ instance Pretty ListValue where
   pretty (ListValue (Just l) a) = pretty l <> ":" <+> pretty a
   pretty (ListRest (Just l) a) = pretty l <> ": ..." <> pretty a
 
-instance Typescript ListValue TS.ListValue where
+instance TS.Typescript ListValue TS.ListValue where
   toTypescript (ListValue a b) = TS.ListValue a (TS.toTypescript b)
   toTypescript (ListRest a b) = TS.ListRest a (TS.toTypescript b)
 
@@ -196,7 +464,7 @@ instance Pretty Literal where
           (map pretty props)
       )
 
-instance Typescript Literal TS.Literal where
+instance TS.Typescript Literal TS.Literal where
   toTypescript = \case
     LBoolean b -> TS.LBoolean b
     LNumberInteger n -> TS.LNumberInteger n
@@ -214,7 +482,7 @@ instance Pretty TemplateString where
   pretty (TemplateRaw s) = pretty s
   pretty (TemplateSubstitution e) = "${" <> pretty e <> "}"
 
-instance Typescript TemplateString TS.TemplateString where
+instance TS.Typescript TemplateString TS.TemplateString where
   toTypescript (TemplateRaw s) = TS.TemplateRaw s
   toTypescript (TemplateSubstitution e) = TS.TemplateSubstitution $ TS.toTypescript e
 
@@ -227,9 +495,11 @@ instance Pretty GenericApplication where
   pretty (GenericApplication typeName params) =
     pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
 
-instance Typescript GenericApplication TS.GenericApplication where
+instance TS.Typescript GenericApplication TS.GenericApplication where
   toTypescript (GenericApplication ident params) =
-    TS.GenericApplication (TS.toTypescript ident) (map TS.toTypescript params)
+    TS.GenericApplication
+      (TS.toTypescript ident)
+      (map TS.toTypescript params)
 
 data ConditionalType = ConditionalType
   { lhs :: Expr
@@ -253,7 +523,7 @@ instance Pretty ConditionalType where
 
       elseDoc = line <> ":" <+> pretty else'
 
-instance Typescript ConditionalType TS.ConditionalType where
+instance TS.Typescript ConditionalType TS.ConditionalType where
   toTypescript (ConditionalType lhs rhs then' else') =
     TS.ConditionalType
       { lhs = TS.toTypescript lhs
@@ -277,7 +547,7 @@ data Property
       }
   deriving (Eq, Show, Generics.Data, Generics.Typeable)
 
-instance Typescript Property TS.Property where
+instance TS.Typescript Property TS.Property where
   toTypescript (DataProperty isReadonly isOptional key value) =
     TS.DataProperty
       { value = TS.toTypescript value

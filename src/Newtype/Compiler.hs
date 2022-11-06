@@ -7,7 +7,7 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Newtype.Parser (pProgram, runNewTypeParser)
 import Newtype.Parser.Tokens (Parser)
-import Newtype.Syntax (Ident (..), Program (..), Statement (..), mkIdent)
+import Newtype.Syntax.Newtype
 import Text.Megaparsec
 import Control.Monad.State (evalState)
 

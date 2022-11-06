@@ -2,8 +2,7 @@ module Debug where
 
 import Data.Text
 import Debug.Trace
-import Newtype.Syntax
-import Newtype.Syntax.Conditionals
+import Newtype.Syntax.Newtype
 import Prettyprinter
   ( LayoutOptions (..),
     PageWidth (..),

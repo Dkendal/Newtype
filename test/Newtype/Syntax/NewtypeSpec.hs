@@ -1,11 +1,10 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Newtype.SyntaxSpec (spec) where
+module Newtype.Syntax.NewtypeSpec where
 
 import Data.Text
-import Newtype.Syntax
-import Newtype.Syntax.Conditionals
+import Newtype.Syntax.Newtype
 import Prettyprinter (
   LayoutOptions (..),
   PageWidth (..),
@@ -16,24 +15,6 @@ import Prettyprinter.Render.String (renderString)
 import Test.Hspec
 import Prelude hiding (unlines, (&&), (||))
 
-(<:) :: Expr -> Expr -> BoolExpr
-a <: b = ExtendsLeft a b
-
-(>:) :: Expr -> Expr -> BoolExpr
-a >: b = ExtendsRight a b
-
-(===) :: Expr -> Expr -> BoolExpr
-a === b = Equals a b
-
-(!==) :: Expr -> Expr -> BoolExpr
-a !== b = NotEquals a b
-
-(&&) :: BoolExpr -> BoolExpr -> BoolExpr
-a && b = And a b
-
-(||) :: BoolExpr -> BoolExpr -> BoolExpr
-a || b = Or a b
-
 spec :: Spec
 spec = do
   let a = mkIdent "A"
@@ -43,6 +24,36 @@ spec = do
   let else' = mkIdent "Else"
   let fmt = unpack . stripEnd . unlines
   let prettyShort ast = renderString (layoutPretty (LayoutOptions (AvailablePerLine 1 1)) (pretty ast))
+
+  describe "Newtype.Syntax.Newtype" $ do
+    describe "expandCaseStatement" $ do
+      it "expands a case statement" $ do
+        let case' =
+              CaseStatement
+                (ExprIdent (Ident "A"))
+                [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B"))
+                , Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C"))
+                , Case Hole (ExprIdent (Ident "A"))
+                ]
+
+        expandCaseStatement case'
+          `shouldBe` ExprConditionalType
+            ( ConditionalType
+                { lhs = ExprIdent (Ident "A")
+                , rhs = ExprIdent (Ident "B")
+                , thenExpr = ExprIdent (Ident "B")
+                , elseExpr =
+                    ExprConditionalType
+                      ( ConditionalType
+                          { lhs = ExprIdent (Ident "A")
+                          , rhs = ExprIdent (Ident "C")
+                          , thenExpr = ExprIdent (Ident "C")
+                          , elseExpr = ExprIdent (Ident "A")
+                          }
+                      )
+                }
+            )
+
   describe "pretty" $ do
     describe "Statements" $ do
       describe "InterfaceDefinition" $ do
@@ -195,3 +206,21 @@ spec = do
         let expr = ConditionalExpr ((a <: b) || (b <: c)) then' else'
         let expected = ct a b then' (ct' b c then' else')
         expandConditional expr `shouldBe` expected
+
+(<:) :: Expr -> Expr -> BoolExpr
+a <: b = ExtendsLeft a b
+
+(>:) :: Expr -> Expr -> BoolExpr
+a >: b = ExtendsRight a b
+
+(===) :: Expr -> Expr -> BoolExpr
+a === b = Equals a b
+
+(!==) :: Expr -> Expr -> BoolExpr
+a !== b = NotEquals a b
+
+(&&) :: BoolExpr -> BoolExpr -> BoolExpr
+a && b = And a b
+
+(||) :: BoolExpr -> BoolExpr -> BoolExpr
+a || b = Or a b

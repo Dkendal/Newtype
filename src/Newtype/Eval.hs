@@ -17,7 +17,7 @@ import qualified Data.String
 import Data.String.Here.Interpolated
 import Debug
 import Debug.Trace
-import Newtype.Syntax
+import Newtype.Syntax.Newtype
 import Prettyprinter (pretty)
 import Text.Nicify
 import Prelude hiding (any)

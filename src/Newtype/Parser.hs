@@ -13,8 +13,7 @@ import Data.Text (Text, pack, unpack)
 import qualified Data.Text as Text
 import Data.Void (Void)
 import Newtype.Parser.Tokens
-import Newtype.Syntax
-import Newtype.Syntax.Conditionals
+import Newtype.Syntax.Newtype
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L

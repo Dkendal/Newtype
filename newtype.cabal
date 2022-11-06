@@ -31,12 +31,7 @@ library
       Newtype.Parser
       Newtype.Parser.Tokens
       Newtype.Prettyprinter
-      Newtype.Syntax
-      Newtype.Syntax.Conditionals
-      Newtype.Syntax.Expr
-      Newtype.Syntax.Expr.Primitive
-      Newtype.Syntax.Ident
-      Newtype.Syntax.Statement
+      Newtype.Syntax.Newtype
       Newtype.Syntax.Typescript
   other-modules:
       Paths_newtype
@@ -113,8 +108,7 @@ test-suite newtype-test
       Newtype.CompilerSpec
       Newtype.EvalSpec
       Newtype.ParserSpec
-      Newtype.Syntax.ConditionalsSpec
-      Newtype.SyntaxSpec
+      Newtype.Syntax.NewtypeSpec
       Test.Hspec.Newtype
       Test.Hspec.NewtypeSpec
       Paths_newtype
