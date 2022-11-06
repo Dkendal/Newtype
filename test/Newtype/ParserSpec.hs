@@ -8,23 +8,20 @@ module Newtype.ParserSpec (spec) where
 import Data.Text
 import Newtype.Parser
 import Newtype.Syntax
-import Newtype.Syntax.Typescript (toTypescript)
-import qualified Newtype.Syntax.Typescript as TS
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Megaparsec
 import Test.Hspec.Newtype
 import Text.Heredoc (str)
 import Prelude as P hiding (lines, unlines)
-import Prettyprinter (pretty)
+
 
 spec :: Spec
 spec =
   describe "Black box tests" $ do
     describe "typescript mapping" $ do
       it "works" $ do
-        shouldCompileT
+        shouldCompile
           pProgram
-          (\x -> show (pretty (toTypescript x :: TS.Program)))
           "A : a"
           "type A = a;"
 
@@ -66,7 +63,7 @@ spec =
 
     describe "interfaces" $ do
       it "can have no properties" $ do
-        shouldCompile pProgram "interface A" "interface A {\n  \n}"
+        shouldCompile pProgram "interface A" "interface A {}"
 
       it "must have properties if the where keyword is present" $ do
         parse pProgram `shouldFailOn` "interface A where"

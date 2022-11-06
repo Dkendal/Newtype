@@ -40,13 +40,15 @@ library:
 
 default-extensions:
   - DuplicateRecordFields
+  - GADTs
+  - ImportQualifiedPost
+  - LambdaCase
+  - MultiParamTypeClasses
   - NamedFieldPuns
-  - RecordWildCards
-  - ScopedTypeVariables
   - OverloadedRecordDot
   - QuasiQuotes
-  - LambdaCase
-  - GADTs
+  - RecordWildCards
+  - ScopedTypeVariables
 
 executables:
   nt:

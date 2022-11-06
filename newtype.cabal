@@ -44,13 +44,15 @@ library
       src
   default-extensions:
       DuplicateRecordFields
+      GADTs
+      ImportQualifiedPost
+      LambdaCase
+      MultiParamTypeClasses
       NamedFieldPuns
-      RecordWildCards
-      ScopedTypeVariables
       OverloadedRecordDot
       QuasiQuotes
-      LambdaCase
-      GADTs
+      RecordWildCards
+      ScopedTypeVariables
   build-depends:
       base >=4.7 && <5
     , containers
@@ -76,13 +78,15 @@ executable nt
       app
   default-extensions:
       DuplicateRecordFields
+      GADTs
+      ImportQualifiedPost
+      LambdaCase
+      MultiParamTypeClasses
       NamedFieldPuns
-      RecordWildCards
-      ScopedTypeVariables
       OverloadedRecordDot
       QuasiQuotes
-      LambdaCase
-      GADTs
+      RecordWildCards
+      ScopedTypeVariables
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -118,13 +122,15 @@ test-suite newtype-test
       test
   default-extensions:
       DuplicateRecordFields
+      GADTs
+      ImportQualifiedPost
+      LambdaCase
+      MultiParamTypeClasses
       NamedFieldPuns
-      RecordWildCards
-      ScopedTypeVariables
       OverloadedRecordDot
       QuasiQuotes
-      LambdaCase
-      GADTs
+      RecordWildCards
+      ScopedTypeVariables
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

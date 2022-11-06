@@ -12,6 +12,9 @@ import Newtype.Syntax.Expr
 import Newtype.Syntax.Ident
 import Prettyprinter
 import Text.Regex.TDFA
+import qualified Newtype.Syntax.Typescript as TS
+
+-- All types should implement the `Typescript` class.
 
 data Statement
   = ImportDeclaration
@@ -66,6 +69,10 @@ data Extensible
   = ExtendIdent Ident
   | ExtendGeneric GenericApplication
   deriving (Eq, Show, D.Data, D.Typeable)
+
+instance TS.Typescript Extensible TS.Extend where
+  toTypescript (ExtendIdent a) = TS.ExtendIdent (TS.toTypescript a)
+  toTypescript (ExtendGeneric a) = TS.ExtendGeneric (TS.toTypescript a)
 
 data ImportClause
   = ImportClauseDefault String

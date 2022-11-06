@@ -1,6 +1,4 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-
 module Newtype.Syntax (
   module Newtype.Syntax,
   module Newtype.Syntax.Ident,
@@ -14,6 +12,8 @@ import Newtype.Syntax.Ident
 import Newtype.Syntax.Statement
 import qualified Newtype.Syntax.Typescript as TS
 import Prettyprinter
+import Data.Generics
+import qualified Data.Generics.Uniplate.Data as Uniplate
 
 newtype Program = Program {statements :: [Statement]}
   deriving (Eq, Show)
@@ -28,6 +28,16 @@ instance TS.Typescript Program TS.Program where
 -- Statements may be removed during compilation
 instance TS.Typescript Statement (Maybe TS.Statement) where
   toTypescript = \case
+    ImportDeclaration _ _ -> error "TODO"
+    MacroDefinition {} -> error "TODO"
+    InterfaceDefinition {..} -> Just . TS.SInterface $
+          TS.Interface 
+            { name
+            , params = map TS.toTypescript params
+            , extends = fmap TS.toTypescript extends
+            , props = map TS.toTypescript props
+            }
+    TestDefinition _ _ -> error "TODO"
     ExportStatement exports -> Just . TS.SExport $ map getIdent exports
     TypeDefinition {..} ->
       Just . TS.SType $
@@ -36,7 +46,7 @@ instance TS.Typescript Statement (Maybe TS.Statement) where
           , params = map TS.toTypescript params
           , body = TS.toTypescript body
           }
-    _ -> Nothing
+
 
 instance TS.Typescript TypeParam TS.TypeParam where
   toTypescript (TypeParam name defaultValue constraint) =

@@ -1,18 +1,19 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Newtype.Syntax.Typescript (
   module Newtype.Syntax.Typescript,
 ) where
 
-import qualified Data.Generics as Generics
+import Data.Generics qualified as Generics
 import Newtype.Prettyprinter
 import Prettyprinter
 
-class Typescript a b where
-  toTypescript :: a -> b
+-- Typescript AST types. All Types here must implement the Typescript class, and the Pretty class.
+
+class Typescript a b | a -> b where
+  toTypescript :: (Pretty b) => a -> b
 
 newtype Program = Program [Statement]
   deriving (Eq, Show)
@@ -59,15 +60,26 @@ data Interface = Interface
 
 instance Pretty Interface where
   pretty Interface {..} =
-    head <+> vsep [lbrace, body, rbrace]
+    head <+> bodyDoc
     where
+      bodyDoc =
+        if null props
+          then "{}"
+          else vsep [lbrace, innerDoc, rbrace]
       head = group "interface" <+> pretty name <> prettyList params
-      body = indent 2 (align (vsep (map ((<> semi) . pretty) props)))
+      innerDoc = indent 2 (align propsDoc)
+      propsDoc = vsep (map f props)
+      -- Format each property with a semi-colon.
+      f = (<> semi) . pretty
 
 data Extend
   = ExtendIdent String
   | ExtendGeneric GenericApplication
   deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Pretty Extend where
+  pretty (ExtendIdent s) = "extends" <+> pretty s
+  pretty (ExtendGeneric s) = "extends" <+> pretty s
 
 data ImportClause
   = ICDefault String

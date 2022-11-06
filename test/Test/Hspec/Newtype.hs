@@ -1,3 +1,4 @@
+-- {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 
 module Test.Hspec.Newtype where
@@ -6,6 +7,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Newtype.Compiler
 import Newtype.Parser (Parser, ParserResult, runNewTypeParser)
+import Newtype.Syntax.Typescript (Typescript, toTypescript)
 import Prettyprinter (Pretty, pretty)
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (
@@ -46,11 +48,8 @@ parseAdjMatrix colSep textLines =
 parse :: Parser a -> Text -> ParserResult a
 parse parser = runNewTypeParser (parser <* eof) ""
 
-shouldCompile :: (HasCallStack, Pretty a) => Parser a -> Text -> Text -> Expectation
-shouldCompile parser src expected =
-  case parse parser src of
-    Left e -> expectationFailure . errorBundlePretty $ e
-    Right result -> (show . pretty $ result) `shouldBe` T.unpack expected
+shouldCompile :: (HasCallStack, Pretty a, Pretty b, Typescript a b) => Parser a -> Text -> Text -> Expectation
+shouldCompile parser = shouldCompileT parser (show . pretty . toTypescript)
 
 shouldCompileT :: (HasCallStack, Pretty a) => Parser a -> (a -> String) -> Text -> Text -> Expectation
 shouldCompileT parser f src expected =

@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Newtype.Syntax.Expr (
@@ -7,14 +6,14 @@ module Newtype.Syntax.Expr (
   module Newtype.Syntax.Expr.Primitive,
 ) where
 
-import qualified Data.Generics as Generics
-import qualified Data.List as List
+import Data.Generics qualified as Generics
+import Data.List qualified as List
 import Language.Haskell.TH
 import Newtype.Prettyprinter
 import Newtype.Syntax.Expr.Primitive
 import Newtype.Syntax.Ident
 import Newtype.Syntax.Typescript (Typescript, toTypescript)
-import qualified Newtype.Syntax.Typescript as TS
+import Newtype.Syntax.Typescript qualified as TS
 import Prettyprinter
 
 data Expr
@@ -277,6 +276,19 @@ data Property
       , value :: Expr
       }
   deriving (Eq, Show, Generics.Data, Generics.Typeable)
+
+instance Typescript Property TS.Property where
+  toTypescript (DataProperty isReadonly isOptional key value) =
+    TS.DataProperty
+      { value = TS.toTypescript value
+      , ..
+      }
+  toTypescript (IndexSignature isReadonly key keySource value) =
+    TS.IndexSignature
+      { keySource = TS.toTypescript keySource
+      , value = TS.toTypescript value
+      , ..
+      }
 
 instance Pretty Property where
   pretty IndexSignature {..} =
