@@ -47,6 +47,7 @@ library
       NamedFieldPuns
       RecordWildCards
       ScopedTypeVariables
+      OverloadedRecordDot
       QuasiQuotes
       LambdaCase
       GADTs
@@ -78,6 +79,7 @@ executable nt
       NamedFieldPuns
       RecordWildCards
       ScopedTypeVariables
+      OverloadedRecordDot
       QuasiQuotes
       LambdaCase
       GADTs
@@ -119,6 +121,7 @@ test-suite newtype-test
       NamedFieldPuns
       RecordWildCards
       ScopedTypeVariables
+      OverloadedRecordDot
       QuasiQuotes
       LambdaCase
       GADTs

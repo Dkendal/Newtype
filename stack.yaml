@@ -10,7 +10,9 @@
 #
 # resolver: lts-3.5
 # resolver: nightly-2015-09-21
-resolver: lts-19.25
+# resolver: lts-19.25
+resolver: nightly-2022-10-07
+
 #
 # The location of a snapshot can be provided as a file or url. Stack assumes
 # a snapshot provided as a file might change, whereas a url resource does not.
@@ -43,7 +45,8 @@ packages:
 # extra-package-dbs: []
 
 # Control whether we use the GHC we find on the path
-# system-ghc: true
+system-ghc: true
+install-ghc: false
 #
 # Require a specific version of stack, using version ranges
 # require-stack-version: -any # Default
@@ -58,4 +61,4 @@ packages:
 # extra-lib-dirs: [/path/to/dir]
 #
 # Allow a newer minor version of GHC than the snapshot specifies
-# compiler-check: newer-minor
+compiler-check: newer-minor

@@ -43,6 +43,7 @@ default-extensions:
   - NamedFieldPuns
   - RecordWildCards
   - ScopedTypeVariables
+  - OverloadedRecordDot
   - QuasiQuotes
   - LambdaCase
   - GADTs
