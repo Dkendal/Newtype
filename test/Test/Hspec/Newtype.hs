@@ -7,7 +7,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Newtype.Compiler
 import Newtype.Parser (Parser, ParserResult, runNewTypeParser)
-import Newtype.Syntax.Typescript (Typescript, toTypescript)
 import Prettyprinter (Pretty, pretty)
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (
@@ -17,6 +16,7 @@ import Test.Hspec.Expectations.Pretty (
  )
 import Text.Megaparsec (eof)
 import Text.Megaparsec.Error (errorBundlePretty)
+import Newtype.Syntax.Newtype (Typescript, toTypescript)
 
 {-
  Example input:

@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Newtype.Syntax.Typescript (
@@ -9,11 +8,6 @@ module Newtype.Syntax.Typescript (
 import Data.Generics qualified as Generics
 import Newtype.Prettyprinter
 import Prettyprinter
-
--- Typescript AST types. All Types here must implement the Typescript class, and the Pretty class.
-
-class Typescript a b | a -> b where
-  toTypescript :: (Pretty b) => a -> b
 
 newtype Program = Program [Statement]
   deriving (Eq, Show)

@@ -3,7 +3,7 @@
 module Newtype.EvalSpec (spec) where
 
 import Control.Monad (forM_)
-import Data.Text (Text, stripEnd, unlines, unpack)
+import Data.Text (Text, unpack)
 import Newtype.Eval (evalExpr, evalProgram, isAssignable)
 import Newtype.Parser (ParserResult, pExpr, pProgram)
 import Newtype.Syntax.Newtype (Expr, Program)

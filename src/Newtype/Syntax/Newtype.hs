@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module Newtype.Syntax.Newtype where
 
@@ -18,7 +19,10 @@ import Newtype.Syntax.Typescript qualified as TS
 import Prettyprinter
 import Text.Regex.TDFA
 
--- All types should implement the `Typescript` class.
+-- All types in this file should implement the `Typescript` class.
+
+class Typescript a b | a -> b where
+  toTypescript :: (Pretty b) => a -> b
 
 data PrimitiveType
   = PrimitiveNever
@@ -50,7 +54,7 @@ instance Pretty PrimitiveType where
     PrimitiveSymbol -> "symbol"
     PrimitiveObject -> "object"
 
-instance TS.Typescript PrimitiveType TS.PrimitiveType where
+instance Typescript PrimitiveType TS.PrimitiveType where
   toTypescript a = case a of
     PrimitiveNever -> TS.PrimitiveNever
     PrimitiveAny -> TS.PrimitiveAny
@@ -71,7 +75,7 @@ newtype Ident = Ident {getIdent :: String}
 instance Pretty Ident where
   pretty (Ident s) = pretty s
 
-instance TS.Typescript Ident String where
+instance Typescript Ident String where
   toTypescript (Ident x) = x
 
 newtype Program = Program {statements :: [Statement]}
@@ -80,12 +84,12 @@ newtype Program = Program {statements :: [Statement]}
 instance Pretty Program where
   pretty (Program statements) = prettyList statements
 
-instance TS.Typescript Program TS.Program where
+instance Typescript Program TS.Program where
   toTypescript (Program statements) =
-    TS.Program $ Maybe.mapMaybe TS.toTypescript statements
+    TS.Program $ Maybe.mapMaybe toTypescript statements
 
 -- Statements may be removed during compilation
-instance TS.Typescript Statement (Maybe TS.Statement) where
+instance Typescript Statement (Maybe TS.Statement) where
   toTypescript = \case
     ImportDeclaration _ _ -> error "TODO"
     MacroDefinition {} -> error "TODO"
@@ -93,9 +97,9 @@ instance TS.Typescript Statement (Maybe TS.Statement) where
       Just . TS.SInterface $
         TS.Interface
           { name
-          , params = map TS.toTypescript params
-          , extends = fmap TS.toTypescript extends
-          , props = map TS.toTypescript props
+          , params = map toTypescript params
+          , extends = fmap toTypescript extends
+          , props = map toTypescript props
           }
     TestDefinition _ _ -> error "TODO"
     ExportStatement exports -> Just . TS.SExport $ map getIdent exports
@@ -103,16 +107,16 @@ instance TS.Typescript Statement (Maybe TS.Statement) where
       Just . TS.SType $
         TS.Type
           { name = name
-          , params = map TS.toTypescript params
-          , body = TS.toTypescript body
+          , params = map toTypescript params
+          , body = toTypescript body
           }
 
-instance TS.Typescript TypeParam TS.TypeParam where
+instance Typescript TypeParam TS.TypeParam where
   toTypescript (TypeParam name defaultValue constraint) =
     TS.TypeParam
       name
-      (TS.toTypescript <$> defaultValue)
-      (TS.toTypescript <$> constraint)
+      (toTypescript <$> defaultValue)
+      (toTypescript <$> constraint)
 
 --------------------------------------------------------------------------------
 -- Conditionals
@@ -170,7 +174,7 @@ expandConditional (ConditionalExpr (And a b) then' else') =
       inner = cx b then' else'
    in expandConditional (outer (expandConditional' inner))
 expandConditional (ConditionalExpr (Or a b) then' else') =
-  let outer else'' = cx a then' else''
+  let outer  = cx a then'
       inner = cx b then' else'
    in expandConditional (outer (expandConditional' inner))
 
@@ -244,9 +248,9 @@ data Extensible
   | ExtendGeneric GenericApplication
   deriving (Eq, Show, D.Data, D.Typeable)
 
-instance TS.Typescript Extensible TS.Extend where
-  toTypescript (ExtendIdent a) = TS.ExtendIdent (TS.toTypescript a)
-  toTypescript (ExtendGeneric a) = TS.ExtendGeneric (TS.toTypescript a)
+instance Typescript Extensible TS.Extend where
+  toTypescript (ExtendIdent a) = TS.ExtendIdent (toTypescript a)
+  toTypescript (ExtendGeneric a) = TS.ExtendGeneric (toTypescript a)
 
 data ImportClause
   = ImportClauseDefault String
@@ -363,29 +367,29 @@ instance Pretty Expr where
     TemplateLiteral a -> "`" <> cat (map pretty a) <> "`"
     Let _ _ -> error "Expected let statement to have been evaluated"
 
-instance TS.Typescript Expr TS.Expr where
+instance Typescript Expr TS.Expr where
   toTypescript = \case
-    Access lhs rhs -> TS.Access (TS.toTypescript lhs) (TS.toTypescript rhs)
-    Array a -> TS.Array . TS.toTypescript $ a
-    DotAccess lhs rhs -> TS.DotAccess (TS.toTypescript lhs) (TS.toTypescript rhs)
-    ExprConditionalType ct -> TS.EConditionalType $ TS.toTypescript ct
+    Access lhs rhs -> TS.Access (toTypescript lhs) (toTypescript rhs)
+    Array a -> TS.Array . toTypescript $ a
+    DotAccess lhs rhs -> TS.DotAccess (toTypescript lhs) (toTypescript rhs)
+    ExprConditionalType ct -> TS.EConditionalType $ toTypescript ct
     -- ExprGenericApplication (GenericApplication "Unquote" [expr]) -> Eval.evalExpr expr
-    ExprGenericApplication ga -> TS.EGenericApplication $ TS.toTypescript ga
-    ExprIdent id -> TS.Ident $ TS.toTypescript id
-    ExprInferIdent id -> TS.Infer $ TS.toTypescript id
-    ExprInferIdentConstraint id ex -> TS.EInferConstraint (TS.toTypescript id) (TS.toTypescript ex)
+    ExprGenericApplication ga -> TS.EGenericApplication $ toTypescript ga
+    ExprIdent id -> TS.Ident $ toTypescript id
+    ExprInferIdent id -> TS.Infer $ toTypescript id
+    ExprInferIdentConstraint id ex -> TS.EInferConstraint (toTypescript id) (toTypescript ex)
     Hole -> error "Hole"
-    Intersection lhs rhs -> TS.Intersection (TS.toTypescript lhs) (TS.toTypescript rhs)
-    Keyof ex -> TS.Keyof $ TS.toTypescript ex
+    Intersection lhs rhs -> TS.Intersection (toTypescript lhs) (toTypescript rhs)
+    Keyof ex -> TS.Keyof $ toTypescript ex
     Let binds ex -> error "Let"
-    Literal lit -> TS.ELiteral $ TS.toTypescript lit
-    MappedType {..} -> TS.EMappedType $ TS.MappedType (TS.toTypescript value) key (TS.toTypescript source) (TS.toTypescript <$> asExpr) isReadonly isOptional
-    PrimitiveType pt -> TS.EPrimitiveType $ TS.toTypescript pt
-    Readonly ex -> TS.Readonly $ TS.toTypescript ex
-    TemplateLiteral tss -> TS.ETemplate $ map TS.toTypescript tss
-    Tuple lvs -> TS.Tuple $ map TS.toTypescript lvs
-    Typeof ex -> TS.Typeof $ TS.toTypescript ex
-    Union lhs rhs -> TS.Union (TS.toTypescript lhs) (TS.toTypescript rhs)
+    Literal lit -> TS.ELiteral $ toTypescript lit
+    MappedType {..} -> TS.EMappedType $ TS.MappedType (toTypescript value) key (toTypescript source) (toTypescript <$> asExpr) isReadonly isOptional
+    PrimitiveType pt -> TS.EPrimitiveType $ toTypescript pt
+    Readonly ex -> TS.Readonly $ toTypescript ex
+    TemplateLiteral tss -> TS.ETemplate $ map toTypescript tss
+    Tuple lvs -> TS.Tuple $ map toTypescript lvs
+    Typeof ex -> TS.Typeof $ toTypescript ex
+    Union lhs rhs -> TS.Union (toTypescript lhs) (toTypescript rhs)
 
 data TypeParam = TypeParam
   { name :: String
@@ -421,9 +425,9 @@ instance Pretty ListValue where
   pretty (ListValue (Just l) a) = pretty l <> ":" <+> pretty a
   pretty (ListRest (Just l) a) = pretty l <> ": ..." <> pretty a
 
-instance TS.Typescript ListValue TS.ListValue where
-  toTypescript (ListValue a b) = TS.ListValue a (TS.toTypescript b)
-  toTypescript (ListRest a b) = TS.ListRest a (TS.toTypescript b)
+instance Typescript ListValue TS.ListValue where
+  toTypescript (ListValue a b) = TS.ListValue a (toTypescript b)
+  toTypescript (ListRest a b) = TS.ListRest a (toTypescript b)
 
 data Literal
   = LString String
@@ -464,7 +468,7 @@ instance Pretty Literal where
           (map pretty props)
       )
 
-instance TS.Typescript Literal TS.Literal where
+instance Typescript Literal TS.Literal where
   toTypescript = \case
     LBoolean b -> TS.LBoolean b
     LNumberInteger n -> TS.LNumberInteger n
@@ -482,9 +486,9 @@ instance Pretty TemplateString where
   pretty (TemplateRaw s) = pretty s
   pretty (TemplateSubstitution e) = "${" <> pretty e <> "}"
 
-instance TS.Typescript TemplateString TS.TemplateString where
+instance Typescript TemplateString TS.TemplateString where
   toTypescript (TemplateRaw s) = TS.TemplateRaw s
-  toTypescript (TemplateSubstitution e) = TS.TemplateSubstitution $ TS.toTypescript e
+  toTypescript (TemplateSubstitution e) = TS.TemplateSubstitution $ toTypescript e
 
 data GenericApplication
   = GenericApplication Ident [Expr]
@@ -495,11 +499,11 @@ instance Pretty GenericApplication where
   pretty (GenericApplication typeName params) =
     pretty typeName <> (angles . hsep . punctuate comma . map pretty $ params)
 
-instance TS.Typescript GenericApplication TS.GenericApplication where
+instance Typescript GenericApplication TS.GenericApplication where
   toTypescript (GenericApplication ident params) =
     TS.GenericApplication
-      (TS.toTypescript ident)
-      (map TS.toTypescript params)
+      (toTypescript ident)
+      (map toTypescript params)
 
 data ConditionalType = ConditionalType
   { lhs :: Expr
@@ -523,13 +527,13 @@ instance Pretty ConditionalType where
 
       elseDoc = line <> ":" <+> pretty else'
 
-instance TS.Typescript ConditionalType TS.ConditionalType where
+instance Typescript ConditionalType TS.ConditionalType where
   toTypescript (ConditionalType lhs rhs then' else') =
     TS.ConditionalType
-      { lhs = TS.toTypescript lhs
-      , rhs = TS.toTypescript rhs
-      , thenExpr = TS.toTypescript then'
-      , elseExpr = TS.toTypescript else'
+      { lhs = toTypescript lhs
+      , rhs = toTypescript rhs
+      , thenExpr = toTypescript then'
+      , elseExpr = toTypescript else'
       }
 
 data Property
@@ -547,16 +551,16 @@ data Property
       }
   deriving (Eq, Show, Generics.Data, Generics.Typeable)
 
-instance TS.Typescript Property TS.Property where
+instance Typescript Property TS.Property where
   toTypescript (DataProperty isReadonly isOptional key value) =
     TS.DataProperty
-      { value = TS.toTypescript value
+      { value = toTypescript value
       , ..
       }
   toTypescript (IndexSignature isReadonly key keySource value) =
     TS.IndexSignature
-      { keySource = TS.toTypescript keySource
-      , value = TS.toTypescript value
+      { keySource = toTypescript keySource
+      , value = toTypescript value
       , ..
       }
 
