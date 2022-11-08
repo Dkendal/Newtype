@@ -27,7 +27,6 @@ library
   exposed-modules:
       Debug
       Newtype.Compiler
-      Newtype.Eval
       Newtype.Parser
       Newtype.Parser.Tokens
       Newtype.Prettyprinter

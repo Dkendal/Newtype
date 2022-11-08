@@ -14,207 +14,205 @@ import Test.Hspec.Newtype
 import Text.Heredoc (str)
 import Prelude as P hiding (lines, unlines)
 
-
 spec :: Spec
-spec =
-  describe "Black box tests" $ do
-    it "unquote operator evaluates the expression" $ do
+spec = do
+  it "unquote operator evaluates the expression" $ do
+    shouldCompile
+      pProgram
+      [str|A : 1
+          |B : Unquote A
+          |]
+      [str|type A = 1
+          |type B = 1
+          |]
+
+  describe "test statements" $ do
+    it "parses a test statement" $ do
+      parse pProgram
+        `shouldSucceedOn` unlines
+          [ "test \"does the thing\" where"
+          , "  AssertEqual 1 1"
+          ]
+
+  -- it "can eval the test program" $ do
+  --   let src = unlines
+  --         [ "test \"does the thing\" where"
+  --         , "  AssertEqual 1 1"
+  --         ]
+  --   fmap eval (parse pProgram src) `shouldBe` Right []
+
+  describe "types" $ do
+    it "can be a simple alias" $ do
+      shouldCompile pProgram "A : a" "type A = a;"
+
+    it "must be not be indented" $ do
+      parse pProgram `shouldFailOn` " A : a"
+
+    it "can't have a type variable that starts with an upppercase character" $ do
+      parse pProgram `shouldFailOn` " A B : B"
+
+    it "the rest of the definition can be indented though" $ do
+      shouldCompile pProgram "A\n : a" "type A = a;"
+
+    it "the rest of the definition must be indented though" $ do
+      parse pProgram `shouldFailOn` "A\n: a"
+
+    it "can have parameters" $ do
+      let src = "A (a <: string) (b = any) c : a"
+      let out = "type A<a extends string, b = any, c> = a;"
+      shouldCompile pProgram src out
+
+  describe "interfaces" $ do
+    it "can have no properties" $ do
+      shouldCompile pProgram "interface A" "interface A {}"
+
+    it "must have properties if the where keyword is present" $ do
+      parse pProgram `shouldFailOn` "interface A where"
+
+    it "can have properties" $ do
+      let src =
+            unlines
+              [ "interface A where"
+              , "  a : string"
+              ]
+      let out =
+            unlines'
+              [ "interface A {"
+              , "  a: string;"
+              , "}"
+              ]
+      shouldCompile pProgram src out
+
+    it "can apply modifiers to properties" $ do
+      let src =
+            unlines
+              [ "interface A where"
+              , "  readonly index string : string"
+              ]
+      let out =
+            unlines'
+              [ "interface A {"
+              , "  readonly [key: string]: string;"
+              , "}"
+              ]
+      shouldCompile pProgram src out
+
+  describe "union types" $ do
+    it "can parse" $ do
+      shouldCompile pProgram "A : 1 | 2" "type A = 1 | 2;"
+
+  describe "intersection types" $ do
+    it "can parse" $ do
+      shouldCompile pProgram "A : 1 & 2" "type A = 1 & 2;"
+
+  describe "template string literals" $ do
+    it "empty string" $ do
       shouldCompile
-        pProgram
-        [str|A : 1
-            |B : Unquote A
-            |]
-        [str|type A = 1
-            |type B = 1
-            |]
-      
-    describe "test statements" $ do
-      it "parses a test statement" $ do
-        parse pProgram
-          `shouldSucceedOn` unlines
-            [ "test \"does the thing\" where"
-            , "  AssertEqual 1 1"
-            ]
+        pExpr
+        "``"
+        "``"
 
-    -- it "can eval the test program" $ do
-    --   let src = unlines
-    --         [ "test \"does the thing\" where"
-    --         , "  AssertEqual 1 1"
-    --         ]
-    --   fmap eval (parse pProgram src) `shouldBe` Right []
+    it "no substitutions" $ do
+      shouldCompile
+        pExpr
+        "`hello world`"
+        "`hello world`"
 
-    describe "types" $ do
-      it "can be a simple alias" $ do
-        shouldCompile pProgram "A : a" "type A = a;"
+    it "sub in the first position" $ do
+      shouldCompile
+        pExpr
+        [str|`${T hello} world`|]
+        [str|`${T<hello>} world`|]
 
-      it "must be not be indented" $ do
-        parse pProgram `shouldFailOn` " A : a"
+    it "with a single sub" $ do
+      shouldCompile
+        pExpr
+        "`hello ${T world}`"
+        "`hello ${T<world>}`"
 
-      it "can't have a type variable that starts with an upppercase character" $ do
-        parse pProgram `shouldFailOn` " A B : B"
+    it "with trailing text" $ do
+      shouldCompile
+        pExpr
+        "`hello ${T world} how are you?`"
+        "`hello ${T<world>} how are you?`"
 
-      it "the rest of the definition can be indented though" $ do
-        shouldCompile pProgram "A\n : a" "type A = a;"
+    it "with multiple subs" $ do
+      shouldCompile
+        pExpr
+        "`a ${T a} b ${T b} c ${T c}`"
+        "`a ${T<a>} b ${T<b>} c ${T<c>}`"
 
-      it "the rest of the definition must be indented though" $ do
-        parse pProgram `shouldFailOn` "A\n: a"
+  --     describe "let ... in" $ do
+  --       it "subs in literal expr values" $ do
+  --         shouldCompile
+  --           pExpr
+  --           "let a = 1 in [a, a]"
+  --           "[1, 1]"
 
-      it "can have parameters" $ do
-        let src = "A (a <: string) (b = any) c : a"
-        let out = "type A<a extends string, b = any, c> = a;"
-        shouldCompile pProgram src out
+  describe "expressions" $ do
+    describe "if-then-else" $ do
+      it "can parse" $ do
+        shouldCompile
+          pExpr
+          "if a <: b then c else d"
+          "(a extends b ? c : d)"
 
-    describe "interfaces" $ do
-      it "can have no properties" $ do
-        shouldCompile pProgram "interface A" "interface A {}"
+      it "defaults to never for the else case if it's omitted" $ do
+        shouldCompile
+          pExpr
+          "if a <: b then c"
+          "(a extends b ? c : never)"
 
-      it "must have properties if the where keyword is present" $ do
-        parse pProgram `shouldFailOn` "interface A where"
+      it "can combine conditions with `and`" $ do
+        shouldCompile
+          pExpr
+          "if a <: b and b <: c then c"
+          "(a extends b ? (b extends c ? c : never) : never)"
 
-      it "can have properties" $ do
+      it "can combine conditions with `or`" $ do
+        shouldCompile
+          pExpr
+          "if a <: b or b <: c then c"
+          "(a extends b ? c : (b extends c ? c : never))"
+
+      it "can negate conditions with `not`" $ do
+        shouldCompile
+          pExpr
+          "if not a <: b then c"
+          "(a extends b ? never : c)"
+
+    describe "mapped types" $ do
+      it "can parse" $ do
+        shouldCompile
+          pExpr
+          "{ k: v for k in t}"
+          "{[k in t]: v}"
+
+    describe "case statements" $ do
+      it "can have one case and default to never for the else case" $ do
+        shouldCompile
+          pExpr
+          [str|case n of
+              |  string -> 1
+              |]
+          "(n extends string ? 1 : never)"
+
+      it "can't just have a fallthrough case" $ do
         let src =
               unlines
-                [ "interface A where"
-                , "  a : string"
+                [ "case n of"
+                , "  _ -> 1"
                 ]
-        let out =
-              unlines'
-                [ "interface A {"
-                , "  a: string;"
-                , "}"
-                ]
-        shouldCompile pProgram src out
+        expr `shouldFailOn` src
 
-      it "can apply modifiers to properties" $ do
-        let src =
-              unlines
-                [ "interface A where"
-                , "  readonly index string : string"
-                ]
-        let out =
-              unlines'
-                [ "interface A {"
-                , "  readonly [key: string]: string;"
-                , "}"
-                ]
-        shouldCompile pProgram src out
-
-    describe "union types" $ do
-      it "can parse" $ do
-        shouldCompile pProgram "A : 1 | 2" "type A = 1 | 2;"
-
-    describe "intersection types" $ do
-      it "can parse" $ do
-        shouldCompile pProgram "A : 1 & 2" "type A = 1 & 2;"
-
-    describe "template string literals" $ do
-      it "empty string" $ do
+      it "can have have a fallthrough case" $ do
         shouldCompile
           pExpr
-          "``"
-          "``"
-
-      it "no substitutions" $ do
-        shouldCompile
-          pExpr
-          "`hello world`"
-          "`hello world`"
-
-      it "sub in the first position" $ do
-        shouldCompile
-          pExpr
-          [str|`${T hello} world`|]
-          [str|`${T<hello>} world`|]
-
-      it "with a single sub" $ do
-        shouldCompile
-          pExpr
-          "`hello ${T world}`"
-          "`hello ${T<world>}`"
-
-      it "with trailing text" $ do
-        shouldCompile
-          pExpr
-          "`hello ${T world} how are you?`"
-          "`hello ${T<world>} how are you?`"
-
-      it "with multiple subs" $ do
-        shouldCompile
-          pExpr
-          "`a ${T a} b ${T b} c ${T c}`"
-          "`a ${T<a>} b ${T<b>} c ${T<c>}`"
-
-    --     describe "let ... in" $ do
-    --       it "subs in literal expr values" $ do
-    --         shouldCompile
-    --           pExpr
-    --           "let a = 1 in [a, a]"
-    --           "[1, 1]"
-
-    describe "expressions" $ do
-      describe "if-then-else" $ do
-        it "can parse" $ do
-          shouldCompile
-            pExpr
-            "if a <: b then c else d"
-            "(a extends b ? c : d)"
-
-        it "defaults to never for the else case if it's omitted" $ do
-          shouldCompile
-            pExpr
-            "if a <: b then c"
-            "(a extends b ? c : never)"
-
-        it "can combine conditions with `and`" $ do
-          shouldCompile
-            pExpr
-            "if a <: b and b <: c then c"
-            "(a extends b ? (b extends c ? c : never) : never)"
-
-        it "can combine conditions with `or`" $ do
-          shouldCompile
-            pExpr
-            "if a <: b or b <: c then c"
-            "(a extends b ? c : (b extends c ? c : never))"
-
-        it "can negate conditions with `not`" $ do
-          shouldCompile
-            pExpr
-            "if not a <: b then c"
-            "(a extends b ? never : c)"
-
-      describe "mapped types" $ do
-        it "can parse" $ do
-          shouldCompile
-            pExpr
-            "{ k: v for k in t}"
-            "{[k in t]: v}"
-
-      describe "case statements" $ do
-        it "can have one case and default to never for the else case" $ do
-          shouldCompile
-            pExpr
-            [str|case n of
-                |  string -> 1
-                |]
-            "(n extends string ? 1 : never)"
-
-        it "can't just have a fallthrough case" $ do
-          let src =
-                unlines
-                  [ "case n of"
-                  , "  _ -> 1"
-                  ]
-          expr `shouldFailOn` src
-
-        it "can have have a fallthrough case" $ do
-          shouldCompile
-            pExpr
-            [str|case n of
-                |  string -> 1
-                |  _ -> 2
-                |]
-            "(n extends string ? 1 : 2)"
+          [str|case n of
+              |  string -> 1
+              |  _ -> 2
+              |]
+          "(n extends string ? 1 : 2)"
 
 expr :: Text -> Either CompilerError Expr
 expr = parse pExpr

@@ -25,36 +25,78 @@ spec = do
   let fmt = unpack . stripEnd . unlines
   let prettyShort ast = renderString (layoutPretty (LayoutOptions (AvailablePerLine 1 1)) (pretty ast))
 
-  describe "Newtype.Syntax.Newtype" $ do
-    describe "expandCaseStatement" $ do
-      it "expands a case statement" $ do
-        let case' =
-              CaseStatement
-                (ExprIdent (Ident "A"))
-                [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B"))
-                , Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C"))
-                , Case Hole (ExprIdent (Ident "A"))
-                ]
+  describe "expandCaseStatement" $ do
+    it "expands a case statement" $ do
+      let case' =
+            CaseStatement
+              (ExprIdent (Ident "A"))
+              [ Case (ExprIdent (Ident "B")) (ExprIdent (Ident "B"))
+              , Case (ExprIdent (Ident "C")) (ExprIdent (Ident "C"))
+              , Case Hole (ExprIdent (Ident "A"))
+              ]
 
-        expandCaseStatement case'
-          `shouldBe` ExprConditionalType
-            ( ConditionalType
-                { lhs = ExprIdent (Ident "A")
-                , rhs = ExprIdent (Ident "B")
-                , thenExpr = ExprIdent (Ident "B")
-                , elseExpr =
-                    ExprConditionalType
-                      ( ConditionalType
-                          { lhs = ExprIdent (Ident "A")
-                          , rhs = ExprIdent (Ident "C")
-                          , thenExpr = ExprIdent (Ident "C")
-                          , elseExpr = ExprIdent (Ident "A")
-                          }
-                      )
-                }
-            )
+      expandCaseStatement case'
+        `shouldBe` ExprConditionalType
+          ( ConditionalType
+              { lhs = ExprIdent (Ident "A")
+              , rhs = ExprIdent (Ident "B")
+              , thenExpr = ExprIdent (Ident "B")
+              , elseExpr =
+                  ExprConditionalType
+                    ( ConditionalType
+                        { lhs = ExprIdent (Ident "A")
+                        , rhs = ExprIdent (Ident "C")
+                        , thenExpr = ExprIdent (Ident "C")
+                        , elseExpr = ExprIdent (Ident "A")
+                        }
+                    )
+              }
+          )
 
-  describe "pretty" $ do
+  describe "expandConditional" $ do
+    describe "extends left" $
+      it "left as is" $ do
+        let expr = ConditionalExpr (a <: b) then' else'
+        let expected = ct a b then' else'
+        expandConditional expr `shouldBe` expected
+
+    describe "negation" $
+      it "flips `then` with `else`" $ do
+        let expr = ConditionalExpr (Not (a <: b)) then' else'
+        let expected = ct a b else' then'
+        expandConditional expr `shouldBe` expected
+
+    describe "extends right" $ do
+      it "flips the conditional" $ do
+        let expr = ConditionalExpr (a >: b) then' else'
+        let expected = ct b a then' else'
+        expandConditional expr `shouldBe` expected
+
+    describe "equals" $ do
+      it "wraps args in a tuple" $ do
+        let expr = ConditionalExpr (a === b) then' else'
+        let expected = ct (mkTuple [a]) (mkTuple [b]) then' else'
+        expandConditional expr `shouldBe` expected
+
+    describe "not equals" $ do
+      it "wraps args in a tuple, flips branches" $ do
+        let expr = ConditionalExpr (a !== b) then' else'
+        let expected = ct (mkTuple [a]) (mkTuple [b]) else' then'
+        expandConditional expr `shouldBe` expected
+
+    describe "logical AND" $ do
+      it "produces a nested if statement where `then'` is used for the success cases" $ do
+        let expr = ConditionalExpr ((a <: b) && (b <: c)) then' else'
+        let expected = ct a b (ct' b c then' else') else'
+        expandConditional expr `shouldBe` expected
+
+    describe "logical OR" $ do
+      it "produces a nested if statement, chainining the then' case through the first else" $ do
+        let expr = ConditionalExpr ((a <: b) || (b <: c)) then' else'
+        let expected = ct a b then' (ct' b c then' else')
+        expandConditional expr `shouldBe` expected
+
+  describe "Pretty" $ do
     describe "Statements" $ do
       describe "InterfaceDefinition" $ do
         it "formats the statement" $ do
@@ -163,49 +205,6 @@ spec = do
                 }
         let str = "key: any"
         show (pretty ast) `shouldBe` str
-
-  describe "expandConditional" $ do
-    describe "extends left" $
-      it "left as is" $ do
-        let expr = ConditionalExpr (a <: b) then' else'
-        let expected = ct a b then' else'
-        expandConditional expr `shouldBe` expected
-
-    describe "negation" $
-      it "flips `then` with `else`" $ do
-        let expr = ConditionalExpr (Not (a <: b)) then' else'
-        let expected = ct a b else' then'
-        expandConditional expr `shouldBe` expected
-
-    describe "extends right" $ do
-      it "flips the conditional" $ do
-        let expr = ConditionalExpr (a >: b) then' else'
-        let expected = ct b a then' else'
-        expandConditional expr `shouldBe` expected
-
-    describe "equals" $ do
-      it "wraps args in a tuple" $ do
-        let expr = ConditionalExpr (a === b) then' else'
-        let expected = ct (mkTuple [a]) (mkTuple [b]) then' else'
-        expandConditional expr `shouldBe` expected
-
-    describe "not equals" $ do
-      it "wraps args in a tuple, flips branches" $ do
-        let expr = ConditionalExpr (a !== b) then' else'
-        let expected = ct (mkTuple [a]) (mkTuple [b]) else' then'
-        expandConditional expr `shouldBe` expected
-
-    describe "logical AND" $ do
-      it "produces a nested if statement where `then'` is used for the success cases" $ do
-        let expr = ConditionalExpr ((a <: b) && (b <: c)) then' else'
-        let expected = ct a b (ct' b c then' else') else'
-        expandConditional expr `shouldBe` expected
-
-    describe "logical OR" $ do
-      it "produces a nested if statement, chainining the then' case through the first else" $ do
-        let expr = ConditionalExpr ((a <: b) || (b <: c)) then' else'
-        let expected = ct a b then' (ct' b c then' else')
-        expandConditional expr `shouldBe` expected
 
 (<:) :: Expr -> Expr -> BoolExpr
 a <: b = ExtendsLeft a b

@@ -4,9 +4,8 @@ module Newtype.EvalSpec (spec) where
 
 import Control.Monad (forM_)
 import Data.Text (Text, unpack)
-import Newtype.Eval (evalExpr, evalProgram, isAssignable)
 import Newtype.Parser (ParserResult, pExpr, pProgram)
-import Newtype.Syntax.Newtype (Expr, Program)
+import Newtype.Syntax.Newtype (Expr, Program, evalExpr, evalProgram, isAssignable)
 import qualified Prettyprinter as PP
 import Test.Hspec hiding (expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (
