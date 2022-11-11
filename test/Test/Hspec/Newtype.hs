@@ -5,11 +5,8 @@ module Test.Hspec.Newtype where
 
 import Data.Text (Text)
 import Data.Text qualified as T
-import Debug
-import Debug.Trace
 import Newtype.Compiler qualified
 import Newtype.Parser (Parser, ParserResult, runNewTypeParser)
-import Newtype.Syntax.Newtype (Typescript, toTypescript, evalProgram)
 import Prettyprinter (Pretty, pretty)
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (
@@ -19,7 +16,15 @@ import Test.Hspec.Expectations.Pretty (
  )
 import Text.Megaparsec (eof)
 import Text.Megaparsec.Error (errorBundlePretty)
-import Text.Nicify (nicify)
+import Text.Heredoc (str)
+import qualified Language.Haskell.TH.Quote
+
+
+ts :: Language.Haskell.TH.Quote.QuasiQuoter
+ts = str
+
+nt :: Language.Haskell.TH.Quote.QuasiQuoter
+nt = str
 
 {-
  Example input:
@@ -51,15 +56,15 @@ parseAdjMatrix colSep textLines =
 parse :: Parser a -> Text -> ParserResult a
 parse parser = runNewTypeParser (parser <* eof) ""
 
-shouldCompile :: (HasCallStack, Pretty a, Pretty b, Typescript a b) => Parser a -> Text -> Text -> Expectation
-shouldCompile parser = shouldCompileT parser (show . pretty . toTypescript)
+shouldCompile :: (HasCallStack, Show a) => Parser a -> Text -> Text -> Expectation
+shouldCompile parser = shouldCompileT parser show
 
-shouldCompileDebug parser =
-  shouldCompileT
-    parser
-    (show . pretty . pp "\nTypescript output:" . toTypescript . pp "\nEvaluation output:" . evalProgram . pp "\nParser Output:")
+-- shouldCompileDebug parser =
+--   shouldCompileT
+--     parser
+--     (show . pretty . pp "\nTypescript output:" . toTypescript . pp "\nEvaluation output:" . evalProgram . pp "\nParser Output:")
 
-shouldCompileT :: (HasCallStack, Pretty a) => Parser a -> (a -> String) -> Text -> Text -> Expectation
+shouldCompileT :: (HasCallStack) => Parser a -> (a -> String) -> Text -> Text -> Expectation
 shouldCompileT parser f src expected =
   case parse parser src of
     Left e -> expectationFailure . errorBundlePretty $ e

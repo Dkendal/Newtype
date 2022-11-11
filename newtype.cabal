@@ -105,9 +105,7 @@ test-suite newtype-test
   main-is: Spec.hs
   other-modules:
       Newtype.CompilerSpec
-      Newtype.EvalSpec
       Newtype.ParserSpec
-      Newtype.Syntax.NewtypeSpec
       Test.Hspec.Newtype
       Test.Hspec.NewtypeSpec
       Paths_newtype

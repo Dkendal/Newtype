@@ -2,7 +2,6 @@ module Main where
 
 import Data.Text.IO (readFile)
 import Newtype.Compiler (compile)
-import Prettyprinter (pretty)
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 import Text.Megaparsec (errorBundlePretty)
@@ -23,7 +22,7 @@ compileFile :: String -> IO String
 compileFile path =
   do
     sourceCode <- readFile path
-    return (either errorBundlePretty (show . pretty) (compile path sourceCode))
+    return (either errorBundlePretty (show) (compile path sourceCode))
 
 usage :: IO ()
 usage = putStrLn "Usage: nt [-vh] <file> ..."
