@@ -155,3 +155,19 @@ spec = do
            |  [x]: any,
            |}
            |]
+
+  describe "conditional types" $ do
+    specify "if-then-else" $ do
+      shouldCompile
+        pProgram
+        [nt|A : if T <: any then 1 else 2|]
+        [ts|type A = T extends true ? 1 : 2|]
+
+    specify "case expr" $ do
+      shouldCompile
+        pProgram
+        [nt|A : case T of
+           |      true  -> 1
+           |      false -> 2
+           |]
+        [ts|type A = T extends true ? 1 : A extends false ? 2 : never|]

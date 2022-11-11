@@ -122,7 +122,7 @@ pInterfaceDefintion = do
     id = ExtendIdent <$> pIdent
 
 -- | Formal type parameters to a type or interface definition
-pFormalTypeParams :: Parser [TypeParam]
+pFormalTypeParams :: Parser [NTTypeParam]
 pFormalTypeParams = do
   many (pNakedIdent <|> pIdent)
   where
@@ -194,7 +194,7 @@ pTerm =
 
 -- Parse typescript template strings:
 -- `foo ${bar} baz`
-pTemplateStrings :: Parser [TemplateString]
+pTemplateStrings :: Parser [NTTemplateString]
 pTemplateStrings = do
   symbol "`"
   s <- manyTill p $ symbol "`"
@@ -318,7 +318,7 @@ pDictionaryComprehension = do
     symbol "in"
     source <- pExpr <?> "mapped type source"
     let asExpr = if key' == mkIdent key then Nothing else Just key'
-    return MappedType {..}
+    return (ExprMappedType (MappedType {..}))
 
 pCaseStatement :: Parser CaseStatement
 pCaseStatement =
@@ -444,7 +444,7 @@ pArray = do
 --  [a, ...b]
 --  [hd: a, tl: ...b]
 --  [a: 1, b: 2]
-pListValue :: Parser ListValue
+pListValue :: Parser NTListValue
 pListValue =
   do
     label <- optional $ try $ identifier <* colon
@@ -476,7 +476,7 @@ pObjectLiteral :: Parser Expr
 pObjectLiteral =
   Literal . LObject <$> braces (pProperty `sepBy` comma)
 
-pGenericApplication :: Parser GenericApplication
+pGenericApplication :: Parser NTGenericApplication
 pGenericApplication = do
   pos <- L.indentLevel
   id <- pModuleIdent
@@ -536,7 +536,7 @@ pOptional =
         , False <$ keyword "-?"
         ]
 
-makeParams :: [String] -> FormalParamMap -> FormalParamMap -> [TypeParam]
+makeParams :: [String] -> FormalParamMap -> FormalParamMap -> [NTTypeParam]
 makeParams paramNames constraints defaults =
   [ TypeParam
     { name = paramName

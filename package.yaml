@@ -49,6 +49,9 @@ default-extensions:
   - QuasiQuotes
   - RecordWildCards
   - ScopedTypeVariables
+  - DeriveDataTypeable
+  - FlexibleInstances
+  - FunctionalDependencies
 
 executables:
   nt:

@@ -30,7 +30,10 @@ library
       Newtype.Parser
       Newtype.Parser.Tokens
       Newtype.Prettyprinter
+      Newtype.Syntax.IntermediateRepresentation
+      Newtype.Syntax.Internal
       Newtype.Syntax.Newtype
+      Newtype.Syntax.Template
       Newtype.Syntax.Typescript
   other-modules:
       Paths_newtype
@@ -47,6 +50,9 @@ library
       QuasiQuotes
       RecordWildCards
       ScopedTypeVariables
+      DeriveDataTypeable
+      FlexibleInstances
+      FunctionalDependencies
   build-depends:
       base >=4.7 && <5
     , containers
@@ -81,6 +87,9 @@ executable nt
       QuasiQuotes
       RecordWildCards
       ScopedTypeVariables
+      DeriveDataTypeable
+      FlexibleInstances
+      FunctionalDependencies
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -122,6 +131,9 @@ test-suite newtype-test
       QuasiQuotes
       RecordWildCards
       ScopedTypeVariables
+      DeriveDataTypeable
+      FlexibleInstances
+      FunctionalDependencies
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
