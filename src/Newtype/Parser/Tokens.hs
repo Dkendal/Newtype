@@ -45,7 +45,6 @@ reservedWords =
     "implements",
     "import",
     "interface",
-    "keyof",
     "let",
     "member",
     "never",
@@ -65,7 +64,6 @@ reservedWords =
     "then",
     "true",
     "type",
-    "typeof",
     "undefined",
     "var",
     "void",
@@ -74,11 +72,11 @@ reservedWords =
     "when",
     "with",
     "yield"
-  ]
+  ] ++ builtins
 
 -- list of reserved prefix operators
-builtins :: [Text]
-builtins = ["keyof", "typeof"]
+builtins :: [String]
+builtins = ["keyof", "typeof", "unquote", "quote"]
 
 -------------------------------------------------------------------------------
 -- Lexing support                                                            --

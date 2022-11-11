@@ -4,9 +4,12 @@
 module Test.Hspec.Newtype where
 
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Newtype.Compiler
+import Data.Text qualified as T
+import Debug
+import Debug.Trace
+import Newtype.Compiler qualified
 import Newtype.Parser (Parser, ParserResult, runNewTypeParser)
+import Newtype.Syntax.Newtype (Typescript, toTypescript, evalProgram)
 import Prettyprinter (Pretty, pretty)
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (
@@ -16,7 +19,7 @@ import Test.Hspec.Expectations.Pretty (
  )
 import Text.Megaparsec (eof)
 import Text.Megaparsec.Error (errorBundlePretty)
-import Newtype.Syntax.Newtype (Typescript, toTypescript)
+import Text.Nicify (nicify)
 
 {-
  Example input:
@@ -50,6 +53,11 @@ parse parser = runNewTypeParser (parser <* eof) ""
 
 shouldCompile :: (HasCallStack, Pretty a, Pretty b, Typescript a b) => Parser a -> Text -> Text -> Expectation
 shouldCompile parser = shouldCompileT parser (show . pretty . toTypescript)
+
+shouldCompileDebug parser =
+  shouldCompileT
+    parser
+    (show . pretty . pp "\nTypescript output:" . toTypescript . pp "\nEvaluation output:" . evalProgram . pp "\nParser Output:")
 
 shouldCompileT :: (HasCallStack, Pretty a) => Parser a -> (a -> String) -> Text -> Text -> Expectation
 shouldCompileT parser f src expected =

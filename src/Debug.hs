@@ -2,7 +2,6 @@ module Debug where
 
 import Data.Text
 import Debug.Trace
-import Newtype.Syntax.Newtype
 import Prettyprinter
   ( LayoutOptions (..),
     PageWidth (..),

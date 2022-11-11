@@ -64,7 +64,7 @@ instance Pretty PrimitiveType where
     PrimitiveObject -> "object"
 
 instance Typescript PrimitiveType TS.PrimitiveType where
-  toTypescript a = case a of
+  toTypescript = \case
     PrimitiveNever -> TS.PrimitiveNever
     PrimitiveAny -> TS.PrimitiveAny
     PrimitiveUnknown -> TS.PrimitiveUnknown
@@ -97,11 +97,11 @@ instance Typescript Program TS.Program where
   toTypescript (Program statements) =
     TS.Program $ Maybe.mapMaybe toTypescript statements
 
--- Statements may be removed during compilation
+-- Statements may be removed during compilation, which is why we need a Maybe here
 instance Typescript Statement (Maybe TS.Statement) where
   toTypescript = \case
-    ImportDeclaration _ _ -> error "TODO"
-    MacroDefinition {} -> error "TODO"
+    ImportDeclaration _ _ -> undefined
+    MacroDefinition {} -> undefined
     InterfaceDefinition {..} ->
       Just . TS.SInterface $
         TS.Interface
@@ -110,7 +110,7 @@ instance Typescript Statement (Maybe TS.Statement) where
           , extends = fmap toTypescript extends
           , props = map toTypescript props
           }
-    TestDefinition _ _ -> error "TODO"
+    TestDefinition _ _ -> undefined
     ExportStatement exports -> Just . TS.SExport $ map getIdent exports
     TypeDefinition {..} ->
       Just . TS.SType $
@@ -320,6 +320,8 @@ data Expr
       }
   | PrimitiveType PrimitiveType
   | Readonly Expr
+  | Unquote Expr
+  | Quote Expr
   | TemplateLiteral [TemplateString]
   | Tuple [ListValue]
   | Typeof Expr
@@ -382,7 +384,6 @@ instance Typescript Expr TS.Expr where
     Array a -> TS.Array . toTypescript $ a
     DotAccess lhs rhs -> TS.DotAccess (toTypescript lhs) (toTypescript rhs)
     ExprConditionalType ct -> TS.EConditionalType $ toTypescript ct
-    -- ExprGenericApplication (GenericApplication "Unquote" [expr]) -> Eval.evalExpr expr
     ExprGenericApplication ga -> TS.EGenericApplication $ toTypescript ga
     ExprIdent id -> TS.Ident $ toTypescript id
     ExprInferIdent id -> TS.Infer $ toTypescript id
@@ -394,11 +395,13 @@ instance Typescript Expr TS.Expr where
     Literal lit -> TS.ELiteral $ toTypescript lit
     MappedType {..} -> TS.EMappedType $ TS.MappedType (toTypescript value) key (toTypescript source) (toTypescript <$> asExpr) isReadonly isOptional
     PrimitiveType pt -> TS.EPrimitiveType $ toTypescript pt
+    Quote ex -> error "TODO"
     Readonly ex -> TS.Readonly $ toTypescript ex
     TemplateLiteral tss -> TS.ETemplate $ map toTypescript tss
     Tuple lvs -> TS.Tuple $ map toTypescript lvs
     Typeof ex -> TS.Typeof $ toTypescript ex
     Union lhs rhs -> TS.Union (toTypescript lhs) (toTypescript rhs)
+    Unquote ex -> error "TODO"
 
 data TypeParam = TypeParam
   { name :: String
@@ -810,16 +813,15 @@ evalTest name expr = expr
 evalExpr :: Expr -> Expr
 -- Special case where `any` distributes over both branches
 -- https://stackoverflow.com/questions/68754652/why-any-extends-x-a-b-give-a-b-in-typescript
-evalExpr
+evalExpr = \case
   (ExprConditionalType ConditionalType {..})
-    | lhs == any =
+    | lhs == any ->
         union [thenExpr, elseExpr]
-evalExpr
-  (ExprConditionalType ConditionalType {..}) =
+  (ExprConditionalType ConditionalType {..}) ->
     if lhs `isAssignable` rhs
       then evalExpr thenExpr
       else evalExpr elseExpr
-evalExpr e = e
+  e -> e
 
 {-
  Note: Implementation assumes that strictNullChecks is enabled is by the end user.

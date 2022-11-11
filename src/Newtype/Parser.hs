@@ -392,6 +392,8 @@ pTypeOp =
       [ prefix "keyof" Keyof
       , prefix "readonly" Readonly
       , prefix "typeof" Typeof
+      , prefix "quote" Quote
+      , prefix "unquote" Unquote
       ]
     , [binary "&" Intersection, binary "|" Union]
     ]

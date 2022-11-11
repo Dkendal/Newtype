@@ -16,11 +16,11 @@ import Prelude as P hiding (lines, unlines)
 
 spec :: Spec
 spec = do
-  it "unquote operator evaluates the expression" $ do
-    shouldCompile
+  fit "unquote operator evaluates the expression" $ do
+    shouldCompileDebug
       pProgram
       [str|A : 1
-          |B : Unquote A
+          |B : unquote A
           |]
       [str|type A = 1
           |type B = 1
