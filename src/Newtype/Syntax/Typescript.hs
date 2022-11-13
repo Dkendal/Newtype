@@ -34,7 +34,7 @@ instance PrettyTypescript Ident where
   pp (Ident s) = pretty s
 
 instance PrettyTypescript Program where
-  pp (Program statements) = ppl statements
+  pp (Program statements) = ppl statements <> hardline
 
 instance PrettyTypescript Statement where
   pp s = case s of

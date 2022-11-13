@@ -18,7 +18,7 @@ shouldCompileProgram :: HasCallStack => Text -> Text -> Expectation
 shouldCompileProgram =
   shouldCompileT
     pProgram
-    (show . TS.fromIR . IR.fromNewtypeProgram)
+    (show . TS.fromIR . IR.fromProgram)
 
 spec :: Spec
 spec = do
@@ -26,75 +26,95 @@ spec = do
     specify "string" $ do
       shouldCompileProgram
         [nt|A : string|]
-        [ts|type A = string;|]
+        [ts|type A = string;
+           |]
 
     specify "number" $ do
       shouldCompileProgram
         [nt|A : number|]
-        [ts|type A = number;|]
+        [ts|type A = number;
+           |]
 
     specify "object" $ do
       shouldCompileProgram
         [nt|A : object|]
-        [ts|type A = object;|]
+        [ts|type A = object;
+           |]
 
     specify "boolean" $ do
       shouldCompileProgram
         [nt|A : boolean|]
-        [ts|type A = boolean;|]
+        [ts|type A = boolean;
+           |]
 
     specify "any" $ do
       shouldCompileProgram
         [nt|A : any|]
-        [ts|type A = any;|]
+        [ts|type A = any;
+           |]
 
     specify "unknown" $ do
       shouldCompileProgram
         [nt|A : unknown|]
-        [ts|type A = unknown;|]
+        [ts|type A = unknown;
+           |]
 
     specify "never" $ do
       shouldCompileProgram
         [nt|A : never|]
-        [ts|type A = never;|]
+        [ts|type A = never;
+           |]
 
   describe "objects" $ do
     specify "empty" $ do
       shouldCompileProgram
-        [nt|A : {}|]
-        [ts|type A = {};|]
+        [nt|A : {}
+           |]
+        [ts|type A = {};
+           |]
 
     specify "with properties" $ do
       shouldCompileProgram
-        [nt|A : {x: 1, y: 2}|]
-        [ts|type A = {x: 1, y: 2};|]
+        [nt|A : {x: 1, y: 2}
+           |]
+        [ts|type A = {x: 1, y: 2};
+           |]
 
     specify "with readonly properties" $ do
       shouldCompileProgram
-        [nt|A : {readonly x: 1}|]
-        [ts|type A = {readonly x: 1};|]
+        [nt|A : {readonly x: 1}
+           |]
+        [ts|type A = {readonly x: 1};
+           |]
 
     specify "with optional properties" $ do
       shouldCompileProgram
-        [nt|A : {x?: 1}|]
-        [ts|type A = {x?: 1};|]
+        [nt|A : {x?: 1}
+           |]
+        [ts|type A = {x?: 1};
+           |]
 
     specify "with readonly optional properties" $ do
       shouldCompileProgram
-        [nt|A : {readonly x?: 1}|]
-        [ts|type A = {readonly x?: 1};|]
+        [nt|A : {readonly x?: 1}
+           |]
+        [ts|type A = {readonly x?: 1};
+           |]
 
     specify "with index property" $ do
       shouldCompileProgram
-        [nt|A : {index x: any}|]
-        [ts|type A = {[key: x]: any};|]
+        [nt|A : {index x: any}
+           |]
+        [ts|type A = {[key: x]: any};
+           |]
   describe "interfaces" $ do
     specify "empty interface" $ do
       shouldCompileProgram
         [nt|interface A|]
         [ts|interface A {
            |  
-           |}|]
+           |}
+           |]
 
     specify "with properties" $ do
       shouldCompileProgram
@@ -105,7 +125,8 @@ spec = do
         [ts|interface A {
            |  x: 1;
            |  y: 2;
-           |}|]
+           |}
+           |]
 
     specify "with readonly properties" $ do
       shouldCompileProgram
@@ -114,7 +135,8 @@ spec = do
            |]
         [ts|interface A {
            |  readonly x: 1;
-           |}|]
+           |}
+           |]
 
     specify "with optional properties" $ do
       shouldCompileProgram
@@ -123,7 +145,8 @@ spec = do
            |]
         [ts|interface A {
            |  x?: 1;
-           |}|]
+           |}
+           |]
 
     specify "with readonly optional properties" $ do
       shouldCompileProgram
@@ -132,7 +155,8 @@ spec = do
            |]
         [ts|interface A {
            |  readonly x?: 1;
-           |}|]
+           |}
+           |]
 
     specify "with index property" $ do
       shouldCompileProgram
@@ -141,13 +165,15 @@ spec = do
            |]
         [ts|interface A {
            |  [key: x]: any;
-           |}|]
+           |}
+           |]
 
   describe "conditional types" $ do
     specify "if-then-else" $ do
       shouldCompileProgram
         [nt|A : if T <: any then 1 else 2|]
-        [ts|type A = (T extends any ? 1 : 2);|]
+        [ts|type A = (T extends any ? 1 : 2);
+           |]
 
     specify "case expr" $ do
       shouldCompileProgram
@@ -155,4 +181,16 @@ spec = do
            |      true  -> 1
            |      false -> 2
            |]
-        [ts|type A = (T extends true ? 1 : (T extends false ? 2 : never));|]
+        [ts|type A = (T extends true ? 1 : (T extends false ? 2 : never));
+           |]
+
+  describe "quote unquote evaluation" $ do
+    specify "simple unquote" $ do
+      shouldCompileProgram
+        [nt|A : 1
+           |B : unquote A
+           |]
+        [ts|type A = 1;
+           |
+           |type B = 1;
+           |]
