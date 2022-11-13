@@ -45,15 +45,15 @@ instance PrettyTypescript Statement where
       where
         head = "type" <+> pretty name <> ppl params
         body' = line <> "=" <+> pp body
-    (ExportStatement s) ->
+    ExportStatement s ->
       "export" <+> (braces . hsep . punctuate comma . map pp) s <> semi
     InterfaceDefinition {..} ->
-      head <+> vsep [lbrace, body, rbrace]
+      head <+> cblock body
       where
         head = group "interface" <+> pretty name <> ppl params
-        body = indent 2 (align (vsep (map ((<> semi) . pp) props)))
+        body = align . vsep . map statement $ props
 
-  ppl statements = vsep (punctuate line (map pp statements))
+  ppl = vsep . punctuate line . map pp
 
 instance PrettyTypescript ImportClause where
   pp (ImportClauseDefault binding) = pretty binding
@@ -212,6 +212,15 @@ instance PrettyTypescript IRProperty where
           <> ":"
 
 -- Helpers {{{
+vbraces :: Doc ann -> Doc ann
+vbraces a = vsep [lbrace, a, rbrace]
+
+-- | C style block
+cblock :: Doc ann -> Doc ann
+cblock = vbraces . indent 2 . align
+
+statement :: (PrettyTypescript a) => a -> Doc ann
+statement = (<> semi) . pp
 
 prettyReadonly :: Maybe Bool -> Doc ann
 prettyReadonly Nothing = emptyDoc
