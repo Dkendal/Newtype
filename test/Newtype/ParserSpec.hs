@@ -18,7 +18,7 @@ shouldCompileProgram :: HasCallStack => Text -> Text -> Expectation
 shouldCompileProgram =
   shouldCompileT
     pProgram
-    (show . TS.prettyTypescript . IR.fromNewtypeProgram)
+    (show . TS.fromIR . IR.fromNewtypeProgram)
 
 spec :: Spec
 spec = do

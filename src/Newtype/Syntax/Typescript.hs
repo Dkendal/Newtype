@@ -1,20 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Newtype.Syntax.Typescript where
+module Newtype.Syntax.Typescript (fromIR) where
 
 import Newtype.Syntax.IntermediateRepresentation
 import Newtype.Syntax.Internal
 import Prettyprinter
 import Text.Regex.TDFA ((=~))
 
--- Pretty Instances {{{
+fromIR :: Program -> Doc ann
+fromIR = pp
+
 class PrettyTypescript a where
-  prettyTypescript :: a -> Doc ann
-  prettyTypescriptList :: [a] -> Doc ann
-  prettyTypescriptList l = vcat $ prettyTypescript <$> l
+  pp :: a -> Doc ann
+  ppl :: [a] -> Doc ann
+  ppl l = vcat $ pp <$> l
 
 instance PrettyTypescript PrimitiveType where
-  prettyTypescript a = case a of
+  pp = \case
     PrimitiveNever -> "never"
     PrimitiveAny -> "any"
     PrimitiveUnknown -> "unknown"
@@ -29,110 +31,110 @@ instance PrettyTypescript PrimitiveType where
     PrimitiveObject -> "object"
 
 instance PrettyTypescript Ident where
-  prettyTypescript (Ident s) = pretty s
+  pp (Ident s) = pretty s
 
 instance PrettyTypescript Program where
-  prettyTypescript (Program statements) = prettyTypescriptList statements
+  pp (Program statements) = ppl statements
 
 instance PrettyTypescript Statement where
-  prettyTypescript s = case s of
+  pp s = case s of
     ImportDeclaration {..} ->
-      "import" <+> prettyTypescript importClause <+> "from" <+> dquotes (pretty fromClause) <> semi
+      "import" <+> pp importClause <+> "from" <+> dquotes (pretty fromClause) <> semi
     TypeDefinition {..} ->
       group head <> group (nest 2 body') <> semi
       where
-        head = "type" <+> pretty name <> prettyTypescriptList params
-        body' = line <> "=" <+> prettyTypescript body
+        head = "type" <+> pretty name <> ppl params
+        body' = line <> "=" <+> pp body
     (ExportStatement s) ->
-      "export" <+> (braces . hsep . punctuate comma . map prettyTypescript) s <> semi
+      "export" <+> (braces . hsep . punctuate comma . map pp) s <> semi
     InterfaceDefinition {..} ->
       head <+> vsep [lbrace, body, rbrace]
       where
-        head = group "interface" <+> pretty name <> prettyTypescriptList params
-        body = indent 2 (align (vsep (map ((<> semi) . prettyTypescript) props)))
+        head = group "interface" <+> pretty name <> ppl params
+        body = indent 2 (align (vsep (map ((<> semi) . pp) props)))
 
-  prettyTypescriptList statements = vsep (punctuate line (map prettyTypescript statements))
+  ppl statements = vsep (punctuate line (map pp statements))
 
 instance PrettyTypescript ImportClause where
-  prettyTypescript (ImportClauseDefault binding) = pretty binding
-  prettyTypescript (ImportClauseNS binding) = "* as " <> pretty binding
-  prettyTypescript (ImportClauseNamed namedBindings) = prettyTypescriptList namedBindings
-  prettyTypescript ImportClauseDefaultAndNS {..} = pretty defaultBinding <+> pretty namespaceBinding
-  prettyTypescript ImportClauseDefaultAndNamed {..} = pretty defaultBinding <+> prettyTypescriptList namedBindings
+  pp (ImportClauseDefault binding) = pretty binding
+  pp (ImportClauseNS binding) = "* as " <> pretty binding
+  pp (ImportClauseNamed namedBindings) = ppl namedBindings
+  pp ImportClauseDefaultAndNS {..} = pretty defaultBinding <+> pretty namespaceBinding
+  pp ImportClauseDefaultAndNamed {..} = pretty defaultBinding <+> ppl namedBindings
 
 instance PrettyTypescript ImportSpecifier where
-  prettyTypescriptList = braces . hsep . punctuate comma . map prettyTypescript
-  prettyTypescript (ImportedBinding binding) = pretty binding
-  prettyTypescript ImportedAlias {..} = pretty from <+> "as" <+> pretty to
+  ppl = braces . hsep . punctuate comma . map pp
+  pp (ImportedBinding binding) = pretty binding
+  pp ImportedAlias {..} = pretty from <+> "as" <+> pretty to
 
 instance PrettyTypescript IRMappedType where
-  prettyTypescript = \case
+  pp = \case
     MappedType {asExpr = Just (Literal (LString as)), key, ..}
       | as == key ->
-          prettyTypescript MappedType {asExpr = Nothing, ..}
+          pp MappedType {asExpr = Nothing, ..}
     MappedType {..} ->
-      braces (lhs <+> prettyTypescript value)
+      braces (lhs <+> pp value)
       where
         as = case asExpr of
           Nothing -> emptyDoc
-          (Just expr) -> space <> "as" <+> prettyTypescript expr
-        index = pretty key <+> "in" <+> prettyTypescript source <> as
+          (Just expr) -> space <> "as" <+> pp expr
+        index = pretty key <+> "in" <+> pp source <> as
         lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
 
 instance PrettyTypescript Expr where
-  prettyTypescript = \case
-    Literal a -> prettyTypescript a
-    PrimitiveType a -> prettyTypescript a
-    ExprMappedType a -> prettyTypescript a
+  pp = \case
+    Literal a -> pp a
+    PrimitiveType a -> pp a
+    ExprMappedType a -> pp a
     -- If asExpr and key are equal
-    Keyof a -> group ("keyof" <+> prettyTypescript a)
-    Readonly a -> group ("readonly" <+> prettyTypescript a)
-    Typeof a -> group ("typeof" <+> prettyTypescript a)
-    Access a b -> prettyTypescript a <> "[" <> prettyTypescript b <> "]"
-    DotAccess a b -> prettyTypescript a <> "." <> prettyTypescript b
-    ExprGenericApplication a -> prettyTypescript a
-    ExprIdent id -> prettyTypescript id
+    Keyof a -> group ("keyof" <+> pp a)
+    Readonly a -> group ("readonly" <+> pp a)
+    Typeof a -> group ("typeof" <+> pp a)
+    Access a b -> pp a <> "[" <> pp b <> "]"
+    DotAccess a b -> pp a <> "." <> pp b
+    ExprGenericApplication a -> pp a
+    ExprIdent id -> pp id
     ExprInferIdent (Ident id) -> group "infer" <+> pretty id
-    ExprInferIdentConstraint (Ident id) constraint -> group "infer" <+> pretty id <+> "extends" <+> prettyTypescript constraint
+    ExprInferIdentConstraint (Ident id) constraint -> group "infer" <+> pretty id <+> "extends" <+> pp constraint
     Array expr ->
       case expr of
         ExprInferIdent {} -> p
         ExprInferIdentConstraint {} -> p
-        _ -> prettyTypescript expr <> "[]"
+        _ -> pp expr <> "[]"
       where
-        p = (parens . prettyTypescript $ expr) <> "[]"
+        p = (parens . pp $ expr) <> "[]"
     Tuple [] -> "[]"
-    Tuple l -> (brackets . hsep) (punctuate comma (map prettyTypescript l))
+    Tuple l -> (brackets . hsep) (punctuate comma (map pp l))
     Intersection left right ->
       fmt left <> softline <> "&" <> softline <> fmt right
       where
-        fmt (Union a b) = prettyOpList . prettyTypescript $ Union a b
-        fmt a = prettyTypescript a
+        fmt (Union a b) = prettyOpList . pp $ Union a b
+        fmt a = pp a
     Union left right ->
       fmt left <> softline <> "|" <+> fmt right
       where
-        fmt (Intersection a b) = prettyOpList . prettyTypescript $ Intersection a b
-        fmt a = prettyTypescript a
-    ExprConditionalType a -> prettyTypescript a
+        fmt (Intersection a b) = prettyOpList . pp $ Intersection a b
+        fmt a = pp a
+    ExprConditionalType a -> pp a
     TemplateLiteral [] -> "``"
-    TemplateLiteral a -> "`" <> cat (map prettyTypescript a) <> "`"
+    TemplateLiteral a -> "`" <> cat (map pp a) <> "`"
 
 instance PrettyTypescript IRTypeParam where
-  prettyTypescript (TypeParam name defaultValue constraint) =
+  pp (TypeParam name defaultValue constraint) =
     pretty name
-      <> maybe emptyDoc (\d -> " extends " <> prettyTypescript d) constraint
-      <> maybe emptyDoc (\d -> " = " <> prettyTypescript d) defaultValue
-  prettyTypescriptList [] = emptyDoc
-  prettyTypescriptList l = angles . hsep . punctuate comma . map prettyTypescript $ l
+      <> maybe emptyDoc (\d -> " extends " <> pp d) constraint
+      <> maybe emptyDoc (\d -> " = " <> pp d) defaultValue
+  ppl [] = emptyDoc
+  ppl l = angles . hsep . punctuate comma . map pp $ l
 
 instance PrettyTypescript IRListValue where
-  prettyTypescript (ListValue Nothing a) = prettyTypescript a
-  prettyTypescript (ListRest Nothing a) = "..." <> prettyTypescript a
-  prettyTypescript (ListValue (Just l) a) = pretty l <> ":" <+> prettyTypescript a
-  prettyTypescript (ListRest (Just l) a) = pretty l <> ": ..." <> prettyTypescript a
+  pp (ListValue Nothing a) = pp a
+  pp (ListRest Nothing a) = "..." <> pp a
+  pp (ListValue (Just l) a) = pretty l <> ":" <+> pp a
+  pp (ListRest (Just l) a) = pretty l <> ": ..." <> pp a
 
 instance PrettyTypescript IRLiteral where
-  prettyTypescript LFunction {..} = doc
+  pp LFunction {..} = doc
     where
       doc :: Doc ann
       doc =
@@ -144,63 +146,63 @@ instance PrettyTypescript IRLiteral where
             ( prettyParams params
                 <+> prettyRest rest
                 <+> "=>"
-                <+> prettyTypescript returnType
+                <+> pp returnType
             )
       prettyTypeParams l = "<" <> hsep (punctuate comma (map pretty l)) <> ">"
       prettyParams params = hsep $ punctuate comma $ map prettyParam params
-      prettyParam (name, type') = pretty name <> ":" <+> prettyTypescript type'
+      prettyParam (name, type') = pretty name <> ":" <+> pp type'
       prettyRest Nothing = emptyDoc
       prettyRest (Just t) = "..." <> prettyParam t
-  prettyTypescript (LNumberInteger value) = pretty value
-  prettyTypescript (LNumberDouble value) = pretty value
-  prettyTypescript (LBoolean True) = "true"
-  prettyTypescript (LBoolean False) = "false"
-  prettyTypescript (LString value) = dquotes . pretty $ value
-  prettyTypescript (LObject []) = "{}"
-  prettyTypescript (LObject props) =
+  pp (LNumberInteger value) = pretty value
+  pp (LNumberDouble value) = pretty value
+  pp (LBoolean True) = "true"
+  pp (LBoolean False) = "false"
+  pp (LString value) = dquotes . pretty $ value
+  pp (LObject []) = "{}"
+  pp (LObject props) =
     group
       ( encloseSep
           (flatAlt "{ " "{")
           (flatAlt " }" "}")
           ", "
-          (map prettyTypescript props)
+          (map pp props)
       )
 
 instance PrettyTypescript IRTemplateString where
-  prettyTypescript (TemplateRaw s) = pretty s
-  prettyTypescript (TemplateSubstitution e) = "${" <> prettyTypescript e <> "}"
+  pp (TemplateRaw s) = pretty s
+  pp (TemplateSubstitution e) = "${" <> pp e <> "}"
 
 instance PrettyTypescript IRGenericApplication where
-  prettyTypescript (GenericApplication ident []) = prettyTypescript ident
-  prettyTypescript (GenericApplication typeName params) =
-    prettyTypescript typeName <> (angles . hsep . punctuate comma . map prettyTypescript $ params)
+  pp (GenericApplication ident []) = pp ident
+  pp (GenericApplication typeName params) =
+    pp typeName <> (angles . hsep . punctuate comma . map pp $ params)
 
 instance PrettyTypescript IRConditionalType where
-  prettyTypescript (ConditionalType lhs rhs then' else') =
+  pp (ConditionalType lhs rhs then' else') =
     group . parens $ doc
     where
       doc = condition <> nest 2 body
 
-      condition = prettyTypescript lhs <+> "extends" <+> prettyTypescript rhs
+      condition = pp lhs <+> "extends" <+> pp rhs
 
       body = thenDoc <> elseDoc
 
-      thenDoc = line <> "?" <+> prettyTypescript then'
+      thenDoc = line <> "?" <+> pp then'
 
-      elseDoc = line <> ":" <+> prettyTypescript else'
+      elseDoc = line <> ":" <+> pp else'
 
 instance PrettyTypescript IRProperty where
-  prettyTypescript IndexSignature {..} =
+  pp IndexSignature {..} =
     doc
     where
-      doc = lhs <+> prettyTypescript value
+      doc = lhs <+> pp value
       lhs = group readonly <> brackets keyDoc <> colon
-      keyDoc = pretty key <> colon <+> prettyTypescript keySource
+      keyDoc = pretty key <> colon <+> pp keySource
       readonly = prettyReadonly isReadonly
-  prettyTypescript DataProperty {..} =
+  pp DataProperty {..} =
     doc
     where
-      doc = lhs <+> prettyTypescript value
+      doc = lhs <+> pp value
       readonly = prettyReadonly isReadonly
       optional = prettyOptional isOptional
       lhs =
@@ -209,7 +211,7 @@ instance PrettyTypescript IRProperty where
           <> optional
           <> ":"
 
--- Pretty Instances }}}
+-- Helpers {{{
 
 prettyReadonly :: Maybe Bool -> Doc ann
 prettyReadonly Nothing = emptyDoc
@@ -228,3 +230,5 @@ prettyOpList a =
 -- Test if a string is a valid Javascript identifier name
 isIdentifierName :: String -> Bool
 isIdentifierName str = str =~ ("^[a-zA-Z_$][a-zA-Z0-9_$]*$" :: String)
+
+-- Helpers }}}
