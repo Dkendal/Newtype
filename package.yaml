@@ -52,6 +52,7 @@ default-extensions:
   - DeriveDataTypeable
   - FlexibleInstances
   - FunctionalDependencies
+  - DeriveFunctor
 
 executables:
   nt:

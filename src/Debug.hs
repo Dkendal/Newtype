@@ -11,6 +11,7 @@ import Prettyprinter
 import Prettyprinter.Render.String (renderString)
 import Text.Nicify
 
+pp :: (Show a) => [Char] -> a -> a
 pp label a = trace (label ++ ": " ++ (nicify . show) a) a
 
 ppp label ast = trace (label ++ ": " ++ prettyPrint ast) ast

@@ -53,6 +53,7 @@ library
       DeriveDataTypeable
       FlexibleInstances
       FunctionalDependencies
+      DeriveFunctor
   build-depends:
       base >=4.7 && <5
     , containers
@@ -90,6 +91,7 @@ executable nt
       DeriveDataTypeable
       FlexibleInstances
       FunctionalDependencies
+      DeriveFunctor
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -134,6 +136,7 @@ test-suite newtype-test
       DeriveDataTypeable
       FlexibleInstances
       FunctionalDependencies
+      DeriveFunctor
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

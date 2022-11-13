@@ -107,7 +107,7 @@ pInterfaceDefintion = do
   props <- fmap (fromMaybe []) (optional . whereClause $ pos)
   return InterfaceDefinition {..}
   where
-    whereClause :: Pos -> Parser [Property]
+    whereClause :: Pos -> Parser [NTProperty]
     whereClause pos = do
       keyword "where"
       some pProperty <?> "interface properties"
@@ -487,7 +487,7 @@ pGenericApplication = do
       ]
   return $ GenericApplication id params
 
-pProperty :: Parser Property
+pProperty :: Parser NTProperty
 pProperty = p
   where
     p = do

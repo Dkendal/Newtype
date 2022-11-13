@@ -5,169 +5,154 @@
 
 module Newtype.ParserSpec (spec) where
 
+import Data.Text (Text)
 import Newtype.Parser
+import Newtype.Syntax.IntermediateRepresentation qualified as IR
+import Newtype.Syntax.Typescript qualified as TS
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
+import Test.Hspec.Expectations.Pretty (Expectation)
 import Test.Hspec.Newtype
 import Prelude as P hiding (lines, unlines)
+
+shouldCompileProgram :: HasCallStack => Text -> Text -> Expectation
+shouldCompileProgram =
+  shouldCompileT
+    pProgram
+    (show . TS.prettyTypescript . IR.fromNewtypeProgram)
 
 spec :: Spec
 spec = do
   describe "primitive types" $ do
     specify "string" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : string|]
-        [ts|type A = string|]
+        [ts|type A = string;|]
 
     specify "number" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : number|]
-        [ts|type A = number|]
+        [ts|type A = number;|]
 
     specify "object" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : object|]
-        [ts|type A = object|]
+        [ts|type A = object;|]
 
     specify "boolean" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : boolean|]
-        [ts|type A = boolean|]
+        [ts|type A = boolean;|]
 
     specify "any" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : any|]
-        [ts|type A = any|]
+        [ts|type A = any;|]
 
     specify "unknown" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : unknown|]
-        [ts|type A = unknown|]
+        [ts|type A = unknown;|]
 
     specify "never" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : never|]
-        [ts|type A = never|]
+        [ts|type A = never;|]
 
   describe "objects" $ do
     specify "empty" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : {}|]
-        [ts|type A = {}|]
+        [ts|type A = {};|]
 
     specify "with properties" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : {x: 1, y: 2}|]
-        [ts|type A = {x: 1, y: 2}|]
+        [ts|type A = {x: 1, y: 2};|]
 
     specify "with readonly properties" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : {readonly x: 1}|]
-        [ts|type A = {readonly x: 1}|]
+        [ts|type A = {readonly x: 1};|]
 
     specify "with optional properties" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : {x?: 1}|]
-        [ts|type A = {x?: 1}|]
+        [ts|type A = {x?: 1};|]
 
     specify "with readonly optional properties" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : {readonly x?: 1}|]
-        [ts|type A = {readonly x?: 1}|]
+        [ts|type A = {readonly x?: 1};|]
 
     specify "with index property" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : {index x: any}|]
-        [ts|type A = {[x]: any}|] -- FIXME: this is not valid TypeScript
+        [ts|type A = {[key: x]: any};|]
   describe "interfaces" $ do
     specify "empty interface" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|interface A|]
-        [ts|interface A {}|]
+        [ts|interface A {
+           |  
+           |}|]
 
     specify "with properties" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|interface A where
            |  x : 1
            |  y : 2
            |]
         [ts|interface A {
-           |  x: 1,
-           |  y: 2,
-           |}
-           |]
+           |  x: 1;
+           |  y: 2;
+           |}|]
 
     specify "with readonly properties" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|interface A where
            |  readonly x : 1
            |]
         [ts|interface A {
-           |  readonly x: 1,
-           |}
-           |]
+           |  readonly x: 1;
+           |}|]
 
     specify "with optional properties" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|interface A where
            |  x? : 1
            |]
         [ts|interface A {
-           |  x?: 1,
-           |}
-           |]
+           |  x?: 1;
+           |}|]
 
     specify "with readonly optional properties" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|interface A where
            |  readonly x? : 1
            |]
         [ts|interface A {
-           |  readonly x?: 1,
-           |}
-           |]
+           |  readonly x?: 1;
+           |}|]
 
     specify "with index property" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|interface A where
            |  index x : any
            |]
-        -- FIXME: this is not valid TypeScript
         [ts|interface A {
-           |  [x]: any,
-           |}
-           |]
+           |  [key: x]: any;
+           |}|]
 
   describe "conditional types" $ do
     specify "if-then-else" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : if T <: any then 1 else 2|]
-        [ts|type A = T extends true ? 1 : 2|]
+        [ts|type A = (T extends any ? 1 : 2);|]
 
     specify "case expr" $ do
-      shouldCompile
-        pProgram
+      shouldCompileProgram
         [nt|A : case T of
            |      true  -> 1
            |      false -> 2
            |]
-        [ts|type A = T extends true ? 1 : A extends false ? 2 : never|]
+        [ts|type A = (T extends true ? 1 : (T extends false ? 2 : never));|]

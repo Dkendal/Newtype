@@ -1,6 +1,10 @@
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Newtype.Syntax.Newtype where
+module Newtype.Syntax.Newtype (
+  module Newtype.Syntax.Newtype,
+  module Newtype.Syntax.Internal,
+) where
 
 import Control.Applicative ((<|>))
 import Control.Monad
@@ -19,7 +23,7 @@ import Data.String.Here.Interpolated
 import Debug.Trace
 import Language.Haskell.TH
 import Newtype.Prettyprinter
-import Newtype.Syntax.Typescript qualified as TS
+import Newtype.Syntax.Internal
 import Prettyprinter
 import Text.Nicify
 import Text.Regex.TDFA
@@ -33,34 +37,17 @@ type NTListValue = ListValue Expr
 type NTLiteral = Literal Expr
 type NTTypeParam = TypeParam Expr
 type NTMappedType = MappedType Expr
-
-data PrimitiveType
-  = PrimitiveNever
-  | PrimitiveAny
-  | PrimitiveUnknown
-  | PrimitiveNumber
-  | PrimitiveBigInt
-  | PrimitiveString
-  | PrimitiveBoolean
-  | PrimitiveNull
-  | PrimitiveUndefined
-  | PrimitiveVoid
-  | PrimitiveObject
-  | PrimitiveSymbol
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-newtype Ident = Ident {getIdent :: String}
-  deriving (Eq, Ord, Show, Generics.Data, Generics.Typeable)
+type NTProperty = Property Expr
 
 newtype Program = Program {statements :: [Statement]}
-  deriving (Eq, Show)
+  deriving (Show, Eq, Data, Typeable)
 
 data ConditionalExpr = ConditionalExpr
   { condition :: BoolExpr
   , thenExpr :: Expr
   , elseExpr :: Expr
   }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
 
 data BoolExpr
   = And BoolExpr BoolExpr
@@ -70,14 +57,14 @@ data BoolExpr
   | ExtendsRight Expr Expr
   | Equals Expr Expr
   | NotEquals Expr Expr
-  deriving (Show, Eq)
+  deriving (Show, Eq, Data, Typeable)
 
 data Case
   = Case Expr Expr
-  deriving (Eq, Show)
+  deriving (Show, Eq, Data, Typeable)
 
 data CaseStatement = CaseStatement Expr [Case]
-  deriving (Eq, Show)
+  deriving (Show, Eq, Data, Typeable)
 
 data Statement
   = ImportDeclaration
@@ -99,37 +86,18 @@ data Statement
       { name :: String
       , params :: [NTTypeParam]
       , extends :: Maybe Extensible
-      , props :: [Property]
+      , props :: [NTProperty]
       }
   | TestDefinition
       { name :: String
       , body :: Expr
       }
-  deriving (Eq, Show, D.Data, D.Typeable)
+  deriving (Show, Eq, Data, Typeable)
 
 data Extensible
   = ExtendIdent Ident
   | ExtendGeneric NTGenericApplication
-  deriving (Eq, Show, D.Data, D.Typeable)
-
-data ImportClause
-  = ImportClauseDefault String
-  | ImportClauseNS String
-  | ImportClauseNamed [ImportSpecifier]
-  | ImportClauseDefaultAndNS
-      { defaultBinding :: String
-      , namespaceBinding :: String
-      }
-  | ImportClauseDefaultAndNamed
-      { defaultBinding :: String
-      , namedBindings :: [ImportSpecifier]
-      }
-  deriving (Eq, Show, D.Data, D.Typeable)
-
-data ImportSpecifier
-  = ImportedBinding String
-  | ImportedAlias {from :: String, to :: String}
-  deriving (Eq, Show, D.Data, D.Typeable)
+  deriving (Show, Eq, Data, Typeable)
 
 data Expr
   = Access Expr Expr
@@ -154,83 +122,13 @@ data Expr
   | Typeof Expr
   | Union Expr Expr
   | Unquote Expr
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-data MappedType a = MappedType
-  { value :: a
-  , key :: String
-  , source :: a
-  , asExpr :: Maybe a
-  , isReadonly :: Maybe Bool
-  , isOptional :: Maybe Bool
-  }
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-data TypeParam a = TypeParam
-  { name :: String
-  , defaultValue :: Maybe a
-  , constraint :: Maybe a
-  }
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-type FnFormalParam = (String, Expr)
+  deriving (Show, Eq, Data, Typeable)
 
 data Binding = Binding
   { name :: String
   , value :: Expr
   }
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-data ListValue a
-  = ListValue {label :: Maybe String, value :: a}
-  | ListRest {label :: Maybe String, value :: a}
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-data Literal a
-  = LString String
-  | LNumberInteger Integer
-  | LNumberDouble Double
-  | LFunction
-      { typeParams :: Maybe [String]
-      , params :: [FnFormalParam]
-      , rest :: Maybe FnFormalParam
-      , returnType :: a
-      }
-  | LBoolean Bool
-  | LObject [Property]
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-data TemplateString a
-  = TemplateRaw String
-  | TemplateSubstitution a
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-data GenericApplication a
-  = GenericApplication Ident [a]
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
-
-data ConditionalType a = ConditionalType
-  { lhs :: a
-  , rhs :: a
-  , thena :: a
-  , elsea :: a
-  }
-  deriving (Show, Eq, Generics.Data, Generics.Typeable)
-
-data Property
-  = DataProperty
-      { isReadonly :: Maybe Bool
-      , isOptional :: Maybe Bool
-      , key :: String
-      , value :: Expr
-      }
-  | IndexSignature
-      { isReadonly :: Maybe Bool
-      , key :: String
-      , keySource :: Expr
-      , value :: Expr
-      }
-  deriving (Eq, Show, Generics.Data, Generics.Typeable)
+  deriving (Show, Eq, Data, Typeable)
 
 -- Type Definitions }}}
 
@@ -888,3 +786,7 @@ intersection [h] = h
 intersection (h : t) = List.foldl Intersection h t
 
 -- Smart constructors }}}
+
+-- PrettyTypescript {{{
+
+-- PrettyTypescript }}}
