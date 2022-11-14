@@ -15,6 +15,9 @@ import Text.Nicify
 log :: (HasCallStack, Show a) => a -> a
 log a = Trace.traceStack ("\n" ++ (nicify . show $ a)) a
 
+log' :: (HasCallStack, Show a) => a -> b -> b
+log' a = Trace.traceStack ("\n" ++ (nicify . show $ a))
+
 pp :: (Show a) => [Char] -> a -> a
 pp label a = Trace.trace (label ++ ": " ++ (nicify . show) a) a
 

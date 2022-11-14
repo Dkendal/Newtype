@@ -184,8 +184,8 @@ spec = do
         [ts|type A = (T extends true ? 1 : (T extends false ? 2 : never));
            |]
 
-  describe "quote unquote evaluation" $ do
-    specify "simple unquote" $ do
+  describe "unquote quote semantics" $ do
+    specify "simple single value" $ do
       shouldCompileProgram
         [nt|A : 1
            |B : unquote A
@@ -193,4 +193,34 @@ spec = do
         [ts|type A = 1;
            |
            |type B = 1;
+           |]
+
+    specify "multiple symbols" $ do
+      shouldCompileProgram
+        [nt|A : 1
+           |B : unquote [A, A]
+           |]
+        [ts|type A = 1;
+           |
+           |type B = [1, 1];
+           |]
+
+    specify "n-depth symbols" $ do
+      shouldCompileProgram
+        [nt|A : 1
+           |B : unquote [A, [A, [A]]]
+           |]
+        [ts|type A = 1;
+           |
+           |type B = [1, [1, [1]]];
+           |]
+
+    specify "quote specifier" $ do
+      shouldCompileProgram
+        [nt|A : 1
+           |B : unquote [A, quote A]
+           |]
+        [ts|type A = 1;
+           |
+           |type B = [1, A];
            |]

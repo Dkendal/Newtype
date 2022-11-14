@@ -162,7 +162,8 @@ fromExpr tbl = \case
   -- Features that nave no mapping to typescript that need to be simlified.
   NT.Hole -> error "Hole"
   NT.Let a b -> error "Let"
-  NT.Quote a -> error "Quote"
+  NT.Quote a -> error "quoted form should exist within an unquoted form"
+  -- NT.Unquote a -> f (resolveSymbol tbl a)
   NT.Unquote a -> f (resolveSymbol tbl a)
   where
     f = fromExpr tbl
@@ -170,12 +171,16 @@ fromExpr tbl = \case
     fmapExpr' = fmapExpr tbl
 
 resolveSymbol :: SymbolTable -> NT.Expr -> NT.Expr
-resolveSymbol tbl = \case
-  NT.ExprIdent (Ident a) -> case Map.lookup a tbl of
-    Just (SymbolLit b) -> b
-    Just (SymbolFunc _ b) -> b
-    Nothing -> error $ "Symbol not found: " <> a
-  a -> a
+resolveSymbol tbl a = case a of
+  NT.Quote a -> a
+  NT.ExprIdent (Ident a) ->
+    recurse $ case Map.lookup a tbl of
+      Just (SymbolLit b) -> b
+      Just (SymbolFunc _ b) -> b
+      Nothing -> error $ "Symbol not found: " <> a
+  a -> recurse a
+  where
+    recurse = U.descend (resolveSymbol tbl)
 
 -- | Transform all Expression fields in a record.
 fmapExpr :: forall (f :: * -> *). Functor f => SymbolTable -> f NT.Expr -> f Expr
