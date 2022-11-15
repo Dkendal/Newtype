@@ -30,6 +30,7 @@ library
       Newtype.Parser
       Newtype.Parser.Tokens
       Newtype.Prettyprinter
+      Newtype.Syntax.Eval
       Newtype.Syntax.IntermediateRepresentation
       Newtype.Syntax.Internal
       Newtype.Syntax.Newtype

@@ -20,6 +20,7 @@ shouldCompileProgram =
     pProgram
     (show . TS.fromIR . IR.fromProgram)
 
+-- https://github.com/microsoft/TypeScript/blob/main/tests/cases/conformance/types/
 spec :: Spec
 spec = do
   describe "primitive types" $ do
@@ -195,6 +196,16 @@ spec = do
            |type B = 1;
            |]
 
+    specify "unknown symbols are left as is" $ do
+      shouldCompileProgram
+        [nt|A : 1
+           |B : unquote [A, C]
+           |]
+        [ts|type A = 1;
+           |
+           |type B = [1, C];
+           |]
+
     specify "multiple symbols" $ do
       shouldCompileProgram
         [nt|A : 1
@@ -204,6 +215,15 @@ spec = do
            |
            |type B = [1, 1];
            |]
+
+    xspecify "todo: unbounded recursive expansion" $ do
+      shouldCompileProgram
+        [nt|A : unquote [A]
+           |]
+        [ts|should error "unbounded recursive expansion"
+           |]
+
+    -- todo "todo: bounded recursive expansion"
 
     specify "n-depth symbols" $ do
       shouldCompileProgram
@@ -215,7 +235,7 @@ spec = do
            |type B = [1, [1, [1]]];
            |]
 
-    specify "quote specifier" $ do
+    specify "quote specifier terminates symbol resolution" $ do
       shouldCompileProgram
         [nt|A : 1
            |B : unquote [A, quote A]
@@ -224,3 +244,48 @@ spec = do
            |
            |type B = [1, A];
            |]
+
+    -- specify "generic type wrong arity" $ do
+    -- specify "generic type default arguments" $ do
+    specify "generic type resolution" $ do
+      shouldCompileProgram
+        [nt|ID a : a
+           |B : unquote ID 1
+           |]
+        [ts|type ID<a> = a;
+           |
+           |type B = 1;
+           |]
+
+    describe "keyof" $ do
+      specify "object literal" $ do
+        shouldCompileProgram
+          [nt|A : unquote (keyof {x: 1, y: 2})
+             |]
+          [ts|type A = "x" | "y";
+             |]
+
+    describe "conditional types" $ do
+      specify "trivial" $ do
+        shouldCompileProgram
+          [nt|A : unquote if 1 <: number then 1 else 2|]
+          [ts|type A = 1;
+             |]
+
+      specify "trivial multiple conditions" $ do
+        shouldCompileProgram
+          [nt|A : unquote if 1 <: number and 2 <: number then 3 else 4|]
+          [ts|type A = 3;
+             |]
+
+      specify "undecidable `any`" $ do
+        shouldCompileProgram
+          [nt|A : unquote if any <: 1 then 1 else 2|]
+          [ts|type A = 1 | 2;
+             |]
+
+      specify "decidable `any`" $ do
+        shouldCompileProgram
+          [nt|A : unquote if 1 <: any then 1 else 2|]
+          [ts|type A = 1;
+             |]
