@@ -110,7 +110,9 @@ pInterfaceDefintion = do
     whereClause :: Pos -> Parser [NTProperty]
     whereClause pos = do
       keyword "where"
-      some pProperty <?> "interface properties"
+      some $ do
+        indentGuard GT pos <|> fail "properties must be indented"
+        pProperty <?> "interface properties"
 
     -- Example input:
     --  extends Foo

@@ -60,7 +60,6 @@ simplify tbl = \case
       if lhs `isAssignable` rhs
         then then'
         else else'
-
   Keyof (Literal (LObject props)) ->
     -- Convert each property to a string literal, pack them into a union
     union [mkString key | DataProperty {key} <- props]

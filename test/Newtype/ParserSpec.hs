@@ -129,6 +129,22 @@ spec = do
            |}
            |]
 
+    specify "regression property merged following interface def" $ do
+      shouldCompileProgram
+        [nt|interface A where
+           |  x : 1
+           |  y : 2
+           |
+           |B : 1
+           |]
+        [ts|interface A {
+           |  x: 1;
+           |  y: 2;
+           |}
+           |
+           |type B = 1;
+           |]
+
     specify "with readonly properties" $ do
       shouldCompileProgram
         [nt|interface A where
