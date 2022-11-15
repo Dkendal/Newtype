@@ -104,7 +104,7 @@ pInterfaceDefintion = do
   name <- moduleIdent <?> "interface name"
   params <- pFormalTypeParams
   extends <- optional extendsClause <?> "interface extends clause"
-  props <- fmap (fromMaybe []) (optional . whereClause $ pos)
+  props <- fromMaybe [] <$> (optional . whereClause $ pos)
   return InterfaceDefinition {..}
   where
     whereClause :: Pos -> Parser [NTProperty]

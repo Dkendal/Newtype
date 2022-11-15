@@ -280,6 +280,29 @@ spec = do
              |]
           [ts|type A = "x" | "y";
              |]
+      specify "interface" $ do
+        shouldCompileProgram
+          [nt|interface A where
+             |  x : 1
+             |  y : 2
+             |
+             |B : unquote (keyof A)
+             |]
+          -- TODO: I don't know if interfaces should be supported here as
+          -- I have to make a guarantee about properties that are extended.
+          -- [ts|interface A {
+          --    |  x: 1;
+          --    |}
+          --    |
+          --    |type B = "x" | "y";
+          --    |]
+          [ts|interface A {
+             |  x: 1;
+             |  y: 2;
+             |}
+             |
+             |type B = keyof A;
+             |]
 
     describe "conditional types" $ do
       specify "trivial" $ do
