@@ -143,6 +143,7 @@ test-suite newtype-test
       QuickCheck
     , base >=4.7 && <5
     , containers
+    , deepseq
     , here
     , heredoc
     , hspec

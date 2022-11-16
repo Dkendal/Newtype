@@ -9,6 +9,7 @@ import Debug qualified
 import Newtype.Syntax.Internal
 import Newtype.Syntax.Newtype hiding (any)
 import Prelude hiding (any)
+import Control.Exception (Exception, throw)
 
 data Symbol
   = -- | A callable function that needs to have the parameters resolved
@@ -18,6 +19,31 @@ data Symbol
   deriving (Eq, Show)
 
 type SymbolTable = Map.Map String Symbol
+
+newtype TestFailureException = TestFailureException String
+  deriving (Show)
+
+instance Exception TestFailureException
+
+-- TODO: Collect all errors and report them at once rather than throwing
+execTest :: SymbolTable -> TestDefinition -> Maybe a
+execTest tbl test =
+  case test.assertion of
+    AssertAssignable expected actual ->
+      let expected' = simplify' expected
+          actual' = simplify' actual
+       in if expected' `isAssignable` actual'
+            then Nothing
+            else throw (TestFailureException (formatError expected' actual'))
+  where
+    simplify' = simplify tbl
+    formatError expected actual =
+      [i|Expected left hand side to be assignable to the right hand side
+         |Expected:
+         |  ${expected}
+         |Actual:
+         |  ${actual}
+         |]
 
 collectDefinitions :: Program -> SymbolTable
 collectDefinitions (Program stmts) =

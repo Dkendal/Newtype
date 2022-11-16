@@ -88,10 +88,17 @@ data Statement
       , extends :: Maybe Extensible
       , props :: [NTProperty]
       }
-  | TestDefinition
-      { name :: String
-      , body :: Expr
-      }
+  | STestDefinition TestDefinition
+  deriving (Show, Eq, Data, Typeable)
+
+data Assertion
+  = AssertAssignable Expr Expr
+  deriving (Show, Eq, Data, Typeable)
+
+data TestDefinition = TestDefinition
+  { name :: String
+  , assertion :: Assertion
+  }
   deriving (Show, Eq, Data, Typeable)
 
 data Extensible

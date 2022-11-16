@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
@@ -5,7 +6,11 @@
 
 module Newtype.ParserSpec (spec) where
 
+import Control.DeepSeq (force)
+import Control.Exception (evaluate, Exception)
+import Data.Functor
 import Data.Text (Text)
+import Debug qualified
 import Newtype.Parser
 import Newtype.Syntax.IntermediateRepresentation qualified as IR
 import Newtype.Syntax.Typescript qualified as TS
@@ -13,6 +18,7 @@ import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (Expectation)
 import Test.Hspec.Newtype
 import Prelude as P hiding (lines, unlines)
+import Newtype.Syntax.Eval (TestFailureException(TestFailureException))
 
 shouldCompileProgram :: HasCallStack => Text -> Text -> Expectation
 shouldCompileProgram =
@@ -108,6 +114,7 @@ spec = do
            |]
         [ts|type A = {[key: x]: any};
            |]
+
   describe "interfaces" $ do
     specify "empty interface" $ do
       shouldCompileProgram
@@ -328,3 +335,23 @@ spec = do
           [nt|A : unquote if 1 <: any then 1 else 2|]
           [ts|type A = 1;
              |]
+
+  describe "test" $ do
+    specify "simple passing case" $ do
+      shouldCompileProgram
+        [nt|test "my test" where
+           |  assertAssignable 1 number
+           |]
+        [ts|
+           |]
+    -- TODO: can't figure out how to get this expression to evaluate
+    specify "simple failing case" $ do
+      f `shouldThrow` (const True :: Selector TestFailureException)
+  where
+    src =
+      [nt|test "my test" where
+                 |  assertAssignable 1 string
+                 |]
+    f = evaluate . force $ do
+      !_ <- IR.fromProgram <$> parse pProgram src
+      return ()

@@ -93,28 +93,31 @@ data Expr
 
 fromProgram :: NT.Program -> Program
 fromProgram prgm@(NT.Program stmts) =
-  Program (fromStatment tbl <$> stmts)
+  Program (fromStatment tbl `Maybe.mapMaybe` stmts)
   where
     tbl = Eval.collectDefinitions prgm
 
-fromStatment :: Eval.SymbolTable -> NT.Statement -> Statement
+fromStatment :: Eval.SymbolTable -> NT.Statement -> Maybe Statement
 fromStatment tbl =
   \case
-    NT.ImportDeclaration {..} -> ImportDeclaration {..}
-    NT.ExportStatement a -> ExportStatement a
+    NT.ImportDeclaration {..} -> Just ImportDeclaration {..}
+    NT.ExportStatement a -> Just $ ExportStatement a
+    NT.STestDefinition a -> Eval.execTest tbl a
     NT.TypeDefinition {..} ->
-      TypeDefinition
-        { params = fmapExpr' <$> params
-        , body = fromExpr tbl body
-        , name
-        }
+      Just $
+        TypeDefinition
+          { params = fmapExpr' <$> params
+          , body = fromExpr tbl body
+          , name
+          }
     NT.InterfaceDefinition {..} ->
-      InterfaceDefinition
-        { params = fmapExpr' <$> params
-        , extends = extends
-        , props = fmapExpr' <$> props
-        , ..
-        }
+      Just $
+        InterfaceDefinition
+          { params = fmapExpr' <$> params
+          , extends = extends
+          , props = fmapExpr' <$> props
+          , ..
+          }
   where
     fmapExpr' :: forall (f :: * -> *). Functor f => f NT.Expr -> f Expr
     fmapExpr' = fmapExpr tbl

@@ -7,16 +7,16 @@ import Control.Monad
 import Control.Monad.Combinators.Expr
 import Control.Monad.State (evalState)
 import Data.Functor
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Text (Text, pack, unpack)
-import qualified Data.Text as Text
+import Data.Text qualified as Text
 import Data.Void (Void)
 import Newtype.Parser.Tokens
 import Newtype.Syntax.Newtype
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer as L
+import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Debug (dbg)
 
 type FormalParamMap = Map.Map String Expr
@@ -55,11 +55,15 @@ pStatement =
 pTestDefinition :: Parser Statement
 pTestDefinition =
   do
+    pos <- L.indentLevel
     keyword "test"
+    indentGuard GT pos
     name <- stringLiteral
+    indentGuard GT pos
     keyword "where"
-    body <- pExpr
-    return TestDefinition {..}
+    indentGuard GT pos
+    assertion <- keyword "assertAssignable" $> AssertAssignable <*> pExpr <*> pExpr
+    return $ STestDefinition TestDefinition {..}
 
 pImport :: Parser Statement
 pImport = do
@@ -353,14 +357,15 @@ pExpr =
     , pTerm
     ]
 
--- | Parse a let expression
--- Example input:
---
---   let x = 1 in x
---
---   let x = 1
---       y = 2
---   in [x, y]
+{- | Parse a let expression
+ Example input:
+
+   let x = 1 in x
+
+   let x = 1
+       y = 2
+   in [x, y]
+-}
 pLet :: Parser Expr
 pLet =
   do
@@ -374,8 +379,7 @@ pLet =
         name <- identifier
         symbol "="
         expr <- pExpr
-        return Binding { name = name, value = expr }
-
+        return Binding {name = name, value = expr}
 
 {- | Parse an expression with a type operator. A type operator may be a builtin
  prefix operator like `typeof` or `keyof`, or a prefix operator: like `!` for

@@ -1,6 +1,7 @@
-module Debug where
+module Debug (module Debug, module Debug.Trace) where
 
 import Data.Text
+import Debug.Trace
 import Debug.Trace qualified as Trace
 import GHC.Stack (HasCallStack)
 import Prettyprinter (
