@@ -18,7 +18,7 @@ type CompilerError = ParseErrorBundle Text Void
 
 compile :: String -> Text -> Either CompilerError Program
 compile filename sourceCode =
-  fmap addImplicitExport program
+  addImplicitExport <$> program
   where
     program = runNewTypeParser pProgram filename sourceCode
 

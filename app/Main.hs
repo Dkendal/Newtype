@@ -2,10 +2,12 @@ module Main where
 
 import Data.Text.IO (readFile)
 import Newtype.Compiler (compile)
+import Newtype.Syntax.IntermediateRepresentation qualified as IR
+import Newtype.Syntax.Typescript qualified as TS
 import System.Environment (getArgs)
 import System.Exit (exitSuccess)
 import Text.Megaparsec (errorBundlePretty)
-import qualified Text.Megaparsec ()
+import Text.Megaparsec qualified ()
 import Prelude hiding (readFile)
 
 main :: IO ()
@@ -22,7 +24,9 @@ compileFile :: String -> IO String
 compileFile path =
   do
     sourceCode <- readFile path
-    return (either errorBundlePretty (show) (compile path sourceCode))
+    return (either errorBundlePretty transform (compile path sourceCode))
+  where
+    transform = show . TS.fromIR . IR.fromProgram
 
 usage :: IO ()
 usage = putStrLn "Usage: nt [-vh] <file> ..."
