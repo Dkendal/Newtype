@@ -198,6 +198,20 @@ spec = do
            |}
            |]
 
+  describe "mapped types" $ do
+    specify "simple" $ do
+      shouldCompileProgram
+        [nt|A : { k : v for k in src }
+           |]
+        [ts|type A = {[k in src]: v};
+           |]
+    specify "with `as` clause" $ do
+      shouldCompileProgram
+        [nt|A : { `foo${Capitalize k}` : v for k in src }
+           |]
+        [ts|type A = {[k in src as `foo${Capitalize<k>}`]: v};
+           |]
+
   describe "conditional types" $ do
     specify "if-then-else" $ do
       shouldCompileProgram
