@@ -77,11 +77,6 @@ data Statement
       , params :: [NTTypeParam]
       , body :: Expr
       }
-  | MacroDefinition
-      { name :: String
-      , params :: [NTTypeParam]
-      , body :: Expr
-      }
   | InterfaceDefinition
       { name :: String
       , params :: [NTTypeParam]
@@ -163,7 +158,6 @@ data Binding = Binding
 
 -- instance Pretty Statement where
 --   pretty s = case s of
---     MacroDefinition {} -> emptyDoc
 --     TestDefinition {} -> emptyDoc
 --     ImportDeclaration {..} ->
 --       "import" <+> pretty importClause <+> "from" <+> dquotes (pretty fromClause) <> semi
@@ -444,7 +438,6 @@ data Binding = Binding
 -- instance Typescript Statement (Maybe TS.Statement) where
 --  toTypescript = \case
 --    ImportDeclaration _ _ -> undefined
---    MacroDefinition {} -> undefined
 --    InterfaceDefinition {..} ->
 --      Just . TS.SInterface $
 --        TS.Interface

@@ -90,16 +90,9 @@ pTypeDefinition = do
   name <- moduleIdent
   indentGuard GT pos
   params <- pFormalTypeParams
-  choice
-    [ do
-        colon
-        body <- pExpr
-        return TypeDefinition {..}
-    , do
-        equals
-        body <- pExpr
-        return MacroDefinition {..}
-    ]
+  equals
+  body <- pExpr
+  return TypeDefinition {..}
 
 pInterfaceDefintion :: Parser Statement
 pInterfaceDefintion = do

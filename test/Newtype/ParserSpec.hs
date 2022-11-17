@@ -31,92 +31,92 @@ spec = do
   describe "primitive types" $ do
     specify "string" $ do
       shouldCompileProgram
-        [nt|A : string|]
+        [nt|A = string|]
         [ts|type A = string;
            |]
 
     specify "number" $ do
       shouldCompileProgram
-        [nt|A : number|]
+        [nt|A = number|]
         [ts|type A = number;
            |]
 
     specify "object" $ do
       shouldCompileProgram
-        [nt|A : object|]
+        [nt|A = object|]
         [ts|type A = object;
            |]
 
     specify "boolean" $ do
       shouldCompileProgram
-        [nt|A : boolean|]
+        [nt|A = boolean|]
         [ts|type A = boolean;
            |]
 
     specify "any" $ do
       shouldCompileProgram
-        [nt|A : any|]
+        [nt|A = any|]
         [ts|type A = any;
            |]
 
     specify "unknown" $ do
       shouldCompileProgram
-        [nt|A : unknown|]
+        [nt|A = unknown|]
         [ts|type A = unknown;
            |]
 
     specify "never" $ do
       shouldCompileProgram
-        [nt|A : never|]
+        [nt|A = never|]
         [ts|type A = never;
            |]
 
   describe "objects" $ do
     specify "empty" $ do
       shouldCompileProgram
-        [nt|A : {}
+        [nt|A = {}
            |]
         [ts|type A = {};
            |]
 
     specify "with properties" $ do
       shouldCompileProgram
-        [nt|A : {x: 1, y: 2}
+        [nt|A = {x: 1, y: 2}
            |]
         [ts|type A = {x: 1, y: 2};
            |]
 
     specify "with computed properties" $ do
       shouldCompileProgram
-        [nt|A : {'search: 1}
+        [nt|A = {'search: 1}
            |]
         [ts|type A = {[Symbol.search]: 1};
            |]
 
     specify "with readonly properties" $ do
       shouldCompileProgram
-        [nt|A : {readonly x: 1}
+        [nt|A = {readonly x: 1}
            |]
         [ts|type A = {readonly x: 1};
            |]
 
     specify "with optional properties" $ do
       shouldCompileProgram
-        [nt|A : {x?: 1}
+        [nt|A = {x?: 1}
            |]
         [ts|type A = {x?: 1};
            |]
 
     specify "with readonly optional properties" $ do
       shouldCompileProgram
-        [nt|A : {readonly x?: 1}
+        [nt|A = {readonly x?: 1}
            |]
         [ts|type A = {readonly x?: 1};
            |]
 
     specify "with index property" $ do
       shouldCompileProgram
-        [nt|A : {index x: any}
+        [nt|A = {index x: any}
            |]
         [ts|type A = {[key: x]: any};
            |]
@@ -148,7 +148,7 @@ spec = do
            |  x : 1
            |  y : 2
            |
-           |B : 1
+           |B = 1
            |]
         [ts|interface A {
            |  x: 1;
@@ -201,13 +201,13 @@ spec = do
   describe "mapped types" $ do
     specify "simple" $ do
       shouldCompileProgram
-        [nt|A : { k : v for k in src }
+        [nt|A = { k : v for k in src }
            |]
         [ts|type A = {[k in src]: v};
            |]
     specify "with `as` clause" $ do
       shouldCompileProgram
-        [nt|A : { `foo${Capitalize k}` : v for k in src }
+        [nt|A = { `foo${Capitalize k}` : v for k in src }
            |]
         [ts|type A = {[k in src as `foo${Capitalize<k>}`]: v};
            |]
@@ -215,13 +215,13 @@ spec = do
   describe "conditional types" $ do
     specify "if-then-else" $ do
       shouldCompileProgram
-        [nt|A : if T <: any then 1 else 2|]
+        [nt|A = if T <: any then 1 else 2|]
         [ts|type A = (T extends any ? 1 : 2);
            |]
 
     specify "case expr" $ do
       shouldCompileProgram
-        [nt|A : case T of
+        [nt|A = case T of
            |      true  -> 1
            |      false -> 2
            |]
@@ -231,8 +231,8 @@ spec = do
   describe "unquote quote semantics" $ do
     specify "simple single value" $ do
       shouldCompileProgram
-        [nt|A : 1
-           |B : unquote A
+        [nt|A = 1
+           |B = unquote A
            |]
         [ts|type A = 1;
            |
@@ -241,8 +241,8 @@ spec = do
 
     specify "unknown symbols are left as is" $ do
       shouldCompileProgram
-        [nt|A : 1
-           |B : unquote [A, C]
+        [nt|A = 1
+           |B = unquote [A, C]
            |]
         [ts|type A = 1;
            |
@@ -251,8 +251,8 @@ spec = do
 
     specify "multiple symbols" $ do
       shouldCompileProgram
-        [nt|A : 1
-           |B : unquote [A, A]
+        [nt|A = 1
+           |B = unquote [A, A]
            |]
         [ts|type A = 1;
            |
@@ -261,7 +261,7 @@ spec = do
 
     xspecify "todo: unbounded recursive expansion" $ do
       shouldCompileProgram
-        [nt|A : unquote [A]
+        [nt|A = unquote [A]
            |]
         [ts|should error "unbounded recursive expansion"
            |]
@@ -270,8 +270,8 @@ spec = do
 
     specify "n-depth symbols" $ do
       shouldCompileProgram
-        [nt|A : 1
-           |B : unquote [A, [A, [A]]]
+        [nt|A = 1
+           |B = unquote [A, [A, [A]]]
            |]
         [ts|type A = 1;
            |
@@ -280,8 +280,8 @@ spec = do
 
     specify "quote specifier terminates symbol resolution" $ do
       shouldCompileProgram
-        [nt|A : 1
-           |B : unquote [A, quote A]
+        [nt|A = 1
+           |B = unquote [A, quote A]
            |]
         [ts|type A = 1;
            |
@@ -292,8 +292,8 @@ spec = do
     -- specify "generic type default arguments" $ do
     specify "generic type resolution" $ do
       shouldCompileProgram
-        [nt|ID a : a
-           |B : unquote ID 1
+        [nt|ID a = a
+           |B = unquote ID 1
            |]
         [ts|type ID<a> = a;
            |
@@ -303,7 +303,7 @@ spec = do
     describe "keyof" $ do
       specify "object literal" $ do
         shouldCompileProgram
-          [nt|A : unquote (keyof {x: 1, y: 2})
+          [nt|A = unquote (keyof {x: 1, y: 2})
              |]
           [ts|type A = "x" | "y";
              |]
@@ -313,7 +313,7 @@ spec = do
              |  x : 1
              |  y : 2
              |
-             |B : unquote (keyof A)
+             |B = unquote (keyof A)
              |]
           -- TODO: I don't know if interfaces should be supported here as
           -- I have to make a guarantee about properties that are extended.
@@ -334,25 +334,25 @@ spec = do
     describe "conditional types" $ do
       specify "trivial" $ do
         shouldCompileProgram
-          [nt|A : unquote if 1 <: number then 1 else 2|]
+          [nt|A = unquote if 1 <: number then 1 else 2|]
           [ts|type A = 1;
              |]
 
       specify "trivial multiple conditions" $ do
         shouldCompileProgram
-          [nt|A : unquote if 1 <: number and 2 <: number then 3 else 4|]
+          [nt|A = unquote if 1 <: number and 2 <: number then 3 else 4|]
           [ts|type A = 3;
              |]
 
       specify "undecidable `any`" $ do
         shouldCompileProgram
-          [nt|A : unquote if any <: 1 then 1 else 2|]
+          [nt|A = unquote if any <: 1 then 1 else 2|]
           [ts|type A = 1 | 2;
              |]
 
       specify "decidable `any`" $ do
         shouldCompileProgram
-          [nt|A : unquote if 1 <: any then 1 else 2|]
+          [nt|A = unquote if 1 <: any then 1 else 2|]
           [ts|type A = 1;
              |]
 

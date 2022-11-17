@@ -38,6 +38,5 @@ addImplicitExport (Program statements) =
     identifier :: Statement -> Maybe Ident
     identifier ImportDeclaration {} = Nothing
     identifier ExportStatement {} = Nothing
-    identifier MacroDefinition {} = Nothing
     identifier TypeDefinition {name} = Just (Ident name)
     identifier InterfaceDefinition {name} = Just (Ident name)
