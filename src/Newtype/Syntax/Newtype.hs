@@ -480,6 +480,7 @@ expandConditional (ConditionalExpr condition then' else') = case condition of
     ct a b then' else'
   Not con ->
     expandConditional (cx con else' then')
+  -- Convert a == b to [a] <: [b]
   Equals a b ->
     ct (t1 a) (t1 b) then' else'
   NotEquals a b ->
