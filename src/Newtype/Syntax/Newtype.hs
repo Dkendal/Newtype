@@ -460,13 +460,14 @@ data Binding = Binding
 --
 -- Conditional Eval {{{
 expandCaseStatement :: CaseStatement -> Expr
-expandCaseStatement (CaseStatement lhs [Case rhs then', Case Hole else']) =
-  ct' lhs rhs then' else'
-expandCaseStatement (CaseStatement lhs [Case rhs then']) =
-  ct' lhs rhs then' never
-expandCaseStatement (CaseStatement lhs (Case rhs then' : tl)) =
-  ct' lhs rhs then' (expandCaseStatement (CaseStatement lhs tl))
-expandCaseStatement (CaseStatement lhs []) = never
+expandCaseStatement (CaseStatement lhs branches) = case branches of
+  [Case rhs then', Case Hole else'] ->
+    ct' lhs rhs then' else'
+  [Case rhs then'] ->
+    ct' lhs rhs then' never
+  (Case rhs then' : tl) ->
+    ct' lhs rhs then' (expandCaseStatement (CaseStatement lhs tl))
+  [] -> never
 
 expandConditional' :: ConditionalExpr -> Expr
 expandConditional' = ExprConditionalType . expandConditional
