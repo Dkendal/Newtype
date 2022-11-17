@@ -473,24 +473,25 @@ expandConditional' :: ConditionalExpr -> Expr
 expandConditional' = ExprConditionalType . expandConditional
 
 expandConditional :: ConditionalExpr -> NTConditionalType
-expandConditional (ConditionalExpr (ExtendsLeft a b) then' else') =
-  ct a b then' else'
-expandConditional (ConditionalExpr (ExtendsRight b a) then' else') =
-  ct a b then' else'
-expandConditional (ConditionalExpr (Not con) then' else') =
-  expandConditional (cx con else' then')
-expandConditional (ConditionalExpr (Equals a b) then' else') =
-  ct (t1 a) (t1 b) then' else'
-expandConditional (ConditionalExpr (NotEquals a b) then' else') =
-  expandConditional (cx (Not (Equals a b)) then' else')
-expandConditional (ConditionalExpr (And a b) then' else') =
-  let outer then'' = cx a then'' else'
-      inner = cx b then' else'
-   in expandConditional (outer (expandConditional' inner))
-expandConditional (ConditionalExpr (Or a b) then' else') =
-  let outer = cx a then'
-      inner = cx b then' else'
-   in expandConditional (outer (expandConditional' inner))
+expandConditional (ConditionalExpr condition then' else') = case condition of
+  ExtendsLeft a b ->
+    ct a b then' else'
+  ExtendsRight b a ->
+    ct a b then' else'
+  Not con ->
+    expandConditional (cx con else' then')
+  Equals a b ->
+    ct (t1 a) (t1 b) then' else'
+  NotEquals a b ->
+    expandConditional (cx (Not (Equals a b)) then' else')
+  And a b ->
+    let outer then'' = cx a then'' else'
+        inner = cx b then' else'
+     in expandConditional (outer (expandConditional' inner))
+  Or a b ->
+    let outer = cx a then'
+        inner = cx b then' else'
+     in expandConditional (outer (expandConditional' inner))
 
 -- Conditional Eval }}}
 
