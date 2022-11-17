@@ -7,10 +7,9 @@
 module Newtype.ParserSpec (spec) where
 
 import Control.DeepSeq (force)
-import Control.Exception (evaluate, Exception)
+import Control.Exception (evaluate)
 import Data.Functor
 import Data.Text (Text)
-import Debug qualified
 import Newtype.Parser
 import Newtype.Syntax.IntermediateRepresentation qualified as IR
 import Newtype.Syntax.Typescript qualified as TS
@@ -18,7 +17,7 @@ import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (Expectation)
 import Test.Hspec.Newtype
 import Prelude as P hiding (lines, unlines)
-import Newtype.Syntax.Eval (TestFailureException(TestFailureException))
+import Newtype.Syntax.Eval
 
 shouldCompileProgram :: HasCallStack => Text -> Text -> Expectation
 shouldCompileProgram =
@@ -85,6 +84,13 @@ spec = do
         [nt|A : {x: 1, y: 2}
            |]
         [ts|type A = {x: 1, y: 2};
+           |]
+
+    specify "with computed properties" $ do
+      shouldCompileProgram
+        [nt|A : {'search: 1}
+           |]
+        [ts|type A = {[Symbol.search]: 1};
            |]
 
     specify "with readonly properties" $ do

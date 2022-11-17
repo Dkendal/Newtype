@@ -192,24 +192,34 @@ instance PrettyTypescript IRConditionalType where
       elseDoc = line <> ":" <+> pp else'
 
 instance PrettyTypescript IRProperty where
-  pp IndexSignature {..} =
-    doc
-    where
-      doc = lhs <+> pp value
-      lhs = group readonly <> brackets keyDoc <> colon
-      keyDoc = pretty key <> colon <+> pp keySource
-      readonly = prettyReadonly isReadonly
-  pp DataProperty {..} =
-    doc
-    where
-      doc = lhs <+> pp value
-      readonly = prettyReadonly isReadonly
-      optional = prettyOptional isOptional
-      lhs =
-        group readonly
-          <> pretty key
-          <> optional
-          <> ":"
+  pp = \case
+    IndexSignature {..} -> doc
+      where
+        doc = lhs <+> pp value
+        lhs = group readonly <> brackets keyDoc <> colon
+        keyDoc = pretty key <> colon <+> pp keySource
+        readonly = prettyReadonly isReadonly
+    DataProperty {..} -> doc
+      where
+        doc = lhs <+> pp value
+        readonly = prettyReadonly isReadonly
+        optional = prettyOptional isOptional
+        lhs =
+          group readonly
+            <> pretty key
+            <> optional
+            <> ":"
+    ComputedProperty {..} -> doc
+      where
+        doc = lhs <+> pp value
+        readonly = prettyReadonly isReadonly
+        optional = prettyOptional isOptional
+        lhs =
+          group readonly
+            <> keyDoc
+            <> optional
+            <> ":"
+        keyDoc = brackets ("Symbol." <> pretty key)
 
 -- Helpers {{{
 vbraces :: Doc ann -> Doc ann

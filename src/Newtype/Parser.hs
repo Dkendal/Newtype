@@ -508,12 +508,45 @@ pProperty = p
             let key = "key"
             return (IndexSignature {..})
         Nothing ->
-          do
-            key <- identifier
-            isOptional <- pOptional
-            colon
-            value <- pExpr
-            return (DataProperty {..})
+          choice
+            [ do
+                keyT <- knownSymbols
+                let key = keyT
+                isOptional <- pOptional
+                colon
+                value <- pExpr
+                return (ComputedProperty {..})
+            , do
+                key <- identifier
+                isOptional <- pOptional
+                colon
+                value <- pExpr
+                return (DataProperty {..})
+            ]
+
+    -- This could be changed to return a Data type instead, but it's more convenient
+    -- to just return the string values of the computed type and sort it out later.
+    -- This is no real need for the extra type safety because they are all treated
+    -- the same way.
+    knownSymbols :: Parser String
+    knownSymbols =
+      stripPrefix . unpack =<< choice (keyword . pack . addPrefix <$> names)
+      where
+        stripPrefix ('\'':xs) = return xs
+        addPrefix xs = "'" ++ xs
+        names =
+          [ "hasInstance"
+          , "isConcatSpreadable"
+          , "iterator"
+          , "match"
+          , "replace"
+          , "search"
+          , "species"
+          , "split"
+          , "toPrimitive"
+          , "toStringTag"
+          , "unscopables"
+          ]
 
 {- | readonly keyword of an object literal property
 

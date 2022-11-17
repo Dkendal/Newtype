@@ -44,6 +44,12 @@ data Property a
       , key :: String
       , value :: a
       }
+  | ComputedProperty
+      { isReadonly :: Maybe Bool
+      , isOptional :: Maybe Bool
+      , key :: String
+      , value :: a
+      }
   | IndexSignature
       { isReadonly :: Maybe Bool
       , key :: String
