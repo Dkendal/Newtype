@@ -5,7 +5,7 @@ module Newtype.Parser (module Newtype.Parser, module Newtype.Parser.Tokens) wher
 import Control.Applicative hiding (many, some)
 import Control.Monad
 import Control.Monad.Combinators.Expr
-import Control.Monad.State (evalState)
+import Control.Monad.State (evalState, get, put)
 import Data.Functor
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes, fromMaybe, isJust)
@@ -475,10 +475,13 @@ pObjectLiteral :: Parser Expr
 pObjectLiteral =
   Literal . LObject <$> braces (pProperty `sepBy` comma)
 
+pTypeIdent = makeExprParser (NIIdent <$> pIdent) [[binary "." NIMemberAccess]]
+
 pGenericApplication :: Parser NTGenericApplication
 pGenericApplication = do
   pos <- L.indentLevel
-  id <- pModuleIdent
+  put pos
+  id <- pTypeIdent
   params <-
     some . choice $
       [ indentGuard GT pos *> pIdent'

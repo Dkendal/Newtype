@@ -34,7 +34,13 @@ data TemplateString a
   | TemplateSubstitution a
   deriving (Show, Eq, Data, Typeable, Functor)
 
-data GenericApplication a = GenericApplication {name :: Ident, args :: [a]}
+data NamespaceIdent
+  = NIMemberAccess NamespaceIdent NamespaceIdent
+  | NIIdent Ident
+  deriving (Show, Eq, Data, Typeable)
+
+data GenericApplication a = GenericApplication
+  {name :: NamespaceIdent, args :: [a]}
   deriving (Show, Eq, Data, Typeable, Functor)
 
 data Property a

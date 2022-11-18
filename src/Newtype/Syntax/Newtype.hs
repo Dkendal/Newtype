@@ -522,7 +522,7 @@ lv = ListValue Nothing
 mkTuple :: [Expr] -> Expr
 mkTuple l = Tuple (map lv l)
 
-genericAp :: Ident -> [Expr] -> Expr
+genericAp :: NamespaceIdent -> [Expr] -> Expr
 genericAp = (ExprGenericApplication .) . GenericApplication
 
 ctExpr :: Expr -> Expr -> Expr -> Expr -> Expr

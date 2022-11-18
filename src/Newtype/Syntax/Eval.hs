@@ -58,12 +58,12 @@ collectDefinitions (Program stmts) =
 simplify :: SymbolTable -> Expr -> Expr
 simplify tbl = \case
   Quote a -> a
-  expr@(ExprGenericApplication a) ->
+  expr@(ExprGenericApplication (GenericApplication {name = (NIIdent ident), ..})) ->
     -- If the symbol table has a definition for this type, then expand it
     -- Otherwise, just leave it as is
     Maybe.fromMaybe
       expr
-      (callSymbol <$> Map.lookup a.name.getIdent tbl <*> pure a.args)
+      (callSymbol <$> Map.lookup ident.getIdent tbl <*> pure args)
   expr@(ExprIdent (Ident id)) ->
     case id `Map.lookup` tbl of
       -- Inline the literal value

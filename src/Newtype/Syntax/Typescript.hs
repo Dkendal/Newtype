@@ -2,6 +2,8 @@
 
 module Newtype.Syntax.Typescript (fromIR) where
 
+import Data.Maybe (catMaybes)
+import Debug qualified
 import Newtype.Syntax.IntermediateRepresentation
 import Newtype.Syntax.Internal
 import Prettyprinter
@@ -81,6 +83,11 @@ instance PrettyTypescript IRMappedType where
         index = pretty key <+> "in" <+> pp source <> as
         lhs = prettyReadonly isReadonly <> (brackets index <> prettyOptional isOptional <> colon)
 
+instance PrettyTypescript NamespaceIdent where
+  pp = \case
+    NIMemberAccess lhs rhs -> pp lhs <> "." <> pp rhs
+    NIIdent ident -> pp ident
+
 instance PrettyTypescript Expr where
   pp = \case
     Literal a -> pp a
@@ -142,17 +149,21 @@ instance PrettyTypescript IRLiteral where
           emptyDoc
           prettyTypeParams
           typeParams
-          <> parens
-            ( prettyParams params
-                <+> prettyRest rest
+          <> ( ( parens
+                  . hsep
+                  . punctuate comma
+                  . catMaybes
+                  $ [prettyParams params, prettyRest rest]
+               )
                 <+> "=>"
                 <+> pp returnType
-            )
+             )
       prettyTypeParams l = "<" <> hsep (punctuate comma (map pretty l)) <> ">"
-      prettyParams params = hsep $ punctuate comma $ map prettyParam params
+      prettyParams [] = Nothing
+      prettyParams a = Just $ hsep . punctuate comma . map prettyParam $ a
       prettyParam (name, type') = pretty name <> ":" <+> pp type'
-      prettyRest Nothing = emptyDoc
-      prettyRest (Just t) = "..." <> prettyParam t
+      prettyRest Nothing = Nothing
+      prettyRest (Just t) = Just $ "..." <> prettyParam t
   pp (LNumberInteger value) = pretty value
   pp (LNumberDouble value) = pretty value
   pp (LBoolean True) = "true"

@@ -101,11 +101,13 @@ spec = do
         [ts|type A = B<1, 2>;
            |]
 
-    fspecify "regression: line break args with dot access identifier and parenthesized arg" $ do
+    specify "regression: line break args with dot access identifier and parenthesized arg" $ do
       shouldCompileProgramD
-        [nt|A = B.C (D 1)
+        [nt|A = B.C.D.E.F
+           |     (B 1)
+           |     (B 1)
            |]
-        [ts|type A = C<D<1>>
+        [ts|type A = B.C.D.E.F<B<1>, B<1>>;
            |]
 
   describe "objects" $ do
@@ -235,6 +237,33 @@ spec = do
            |}
            |]
 
+
+  describe "function types" $ do
+    specify "1 arg" $ do
+      shouldCompileProgram
+        [nt|A t = (arg1: t) => t
+           |]
+        [ts|type A<t> = (arg1: t) => t;
+           |]
+    specify "2 args" $ do
+      shouldCompileProgram
+        [nt|A t = (arg1: t, arg2: t) => t
+           |]
+        [ts|type A<t> = (arg1: t, arg2: t) => t;
+           |]
+    specify "rest args" $ do
+      shouldCompileProgram
+        [nt|A t = (...args: #[t]) => t
+           |]
+        [ts|type A<t> = (...args: t[]) => t;
+           |]
+    specify "rest args and positional args" $ do
+      shouldCompileProgram
+        [nt|A t = (arg1: t, ...args: #[t]) => t
+           |]
+        [ts|type A<t> = (arg1: t, ...args: t[]) => t;
+           |]
+
   describe "mapped types" $ do
     specify "simple" $ do
       shouldCompileProgram
@@ -242,6 +271,7 @@ spec = do
            |]
         [ts|type A = {[k in src]: v};
            |]
+
     specify "with `as` clause" $ do
       shouldCompileProgram
         [nt|A = { `foo${Capitalize k}` : v for k in src }
