@@ -25,6 +25,12 @@ shouldCompileProgram =
     pProgram
     (show . TS.fromIR . IR.fromProgram)
 
+shouldCompileProgramD :: HasCallStack => Text -> Text -> Expectation
+shouldCompileProgramD =
+  shouldCompileT
+    pProgram
+    (show . TS.fromIR . IR.fromProgram . Debug.log)
+
 -- https://github.com/microsoft/TypeScript/blob/main/tests/cases/conformance/types/
 spec :: Spec
 spec = do
@@ -69,6 +75,36 @@ spec = do
       shouldCompileProgram
         [nt|A = never|]
         [ts|type A = never;
+           |]
+
+  describe "generic types" $ do
+    specify "one arg" $ do
+      shouldCompileProgram
+        [nt|A = B 1
+           |]
+        [ts|type A = B<1>;
+           |]
+    specify "multiple args" $ do
+      shouldCompileProgram
+        [nt|A = B 1 2 3 4
+           |]
+        [ts|type A = B<1, 2, 3, 4>;
+           |]
+    specify "may be line broken" $ do
+      shouldCompileProgram
+        [nt|A =
+           |  B
+           |    1
+           |    2
+           |]
+        [ts|type A = B<1, 2>;
+           |]
+
+    fspecify "regression: line break args with dot access identifier and parenthesized arg" $ do
+      shouldCompileProgramD
+        [nt|A = B.C (D 1)
+           |]
+        [ts|type A = C<D<1>>
            |]
 
   describe "objects" $ do

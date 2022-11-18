@@ -525,7 +525,7 @@ pProperty = p
     knownSymbols =
       stripPrefix . unpack =<< choice (keyword . pack . addPrefix <$> names)
       where
-        stripPrefix ('\'':xs) = return xs
+        stripPrefix ('\'' : xs) = return xs
         addPrefix xs = "'" ++ xs
         names =
           [ "hasInstance"
