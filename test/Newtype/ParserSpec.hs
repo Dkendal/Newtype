@@ -13,6 +13,7 @@ import Data.Text (Text)
 import Newtype.Parser
 import Newtype.Syntax.IntermediateRepresentation qualified as IR
 import Newtype.Syntax.Typescript qualified as TS
+import Debug qualified
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (Expectation)
 import Test.Hspec.Newtype
