@@ -19,6 +19,7 @@ import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Debug (dbg)
+import GHC.IO (unsafePerformIO)
 
 type FormalParamMap = Map.Map String Expr
 
@@ -176,6 +177,7 @@ pTerm =
     , try pTuple <?> "tuple"
     , try pArray <?> "array"
     , try pDictionaryComprehension <?> "mapped type"
+    , pLet <?> "let expression"
     , pExprConditionalType <?> "conditional type"
     , (expandCaseStatement <$> pCaseStatement) <?> "case statement"
     , try pFunctionLiteral <?> "function literal"
@@ -346,8 +348,7 @@ pCaseStatement =
 pExpr :: Parser Expr
 pExpr =
   choice
-    [ pLet
-    , pTypeOp
+    [ pTypeOp
     , pTerm
     ]
 
@@ -365,19 +366,13 @@ pLet =
   do
     keyword "let"
     pos <- L.indentLevel
-    -- Subtract one from the indent level so that the first binding
-    -- can is valid, otherwise the error effectively says that it must greater
-    -- than itself.
-    let pos = mkPos (unPos pos - 1)
-    put pos
-    bindings <- some pBinding
+    bindings <- many $ pBinding pos
     keyword "in"
     ExprLet . Let bindings <$> pExpr
   where
-    pBinding =
+    pBinding pos =
       do
-        pos <- get
-        indentGuard GT pos <|> fail "let binding must be indented"
+        indentGuard EQ pos <|> indentGuard GT pos <|> fail "binding must be indented"
         name <- identifier
         symbol "="
         LetBinding name . SymbolLit <$> pExpr
@@ -488,7 +483,6 @@ pTypeIdent = makeExprParser (NIIdent <$> pIdent) [[binary "." NIMemberAccess]]
 pGenericApplication :: Parser NTGenericApplication
 pGenericApplication = do
   pos <- L.indentLevel
-  put pos
   id <- pTypeIdent
   params <-
     some . choice $
