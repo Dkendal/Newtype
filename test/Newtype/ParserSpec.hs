@@ -256,6 +256,26 @@ spec = do
         [ts|type A = [1, 2];
            |]
 
+    specify "dependent bindings asc" $ do
+      shouldCompileProgram
+        [nt|A =
+           |  let a = 1
+           |      b = a
+           |   in [a, b]
+           |]
+        [ts|type A = [1, 1];
+           |]
+
+    specify "dependent bindings desc" $ do
+      shouldCompileProgram
+        [nt|A =
+           |  let a = b
+           |      b = 1
+           |   in [a, b]
+           |]
+        [ts|type A = [1, 1];
+           |]
+
     specify "let statements are indentation sensitive" $ do
       shouldFailOn
         (parse pProgram)

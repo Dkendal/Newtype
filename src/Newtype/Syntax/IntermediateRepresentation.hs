@@ -147,7 +147,7 @@ fromExpr tbl = \case
   -- FIXME: this will have issues with shadowing I think?
   -- Maybe it won't though as this should be bottom up
   -- FIXME: ignore quoted forms
-  NT.ExprLet (NT.Let bindings body) -> f (U.transform t body)
+  NT.ExprLet (NT.Let bindings body) -> f (U.rewrite t body)
     where
       tbl :: Eval.SymbolTable
       tbl = Map.fromList [(k, v) | LetBinding k v <- bindings]
@@ -157,11 +157,11 @@ fromExpr tbl = \case
         name <- getIdentName a
         Map.lookup name tbl
 
-      t :: NT.Expr -> NT.Expr
+      t :: NT.Expr -> Maybe NT.Expr
       t expr = case get expr of
-        Just (NT.SymbolLit a) -> a
+        Just (NT.SymbolLit a) -> Just a
         Just (NT.SymbolFunc params body) -> error "not implemented"
-        Nothing -> expr
+        Nothing -> Nothing
   NT.Quote a -> error "quoted form should exist within an unquoted form"
   NT.Unquote a -> f . simplify' $ a
   where
