@@ -31,6 +31,7 @@ import Data.Generics.Uniplate.Data qualified as U
 import Debug qualified
 import Newtype.Syntax.Eval qualified as Eval
 import Newtype.Syntax.Internal
+import Newtype.Syntax.Newtype (LetBinding (LetBinding))
 import Newtype.Syntax.Newtype qualified as NT
 
 -- Type Definitions {{{
@@ -117,7 +118,6 @@ fromStatment tbl = \case
         , props = fmapExpr' <$> props
         , ..
         }
-  a -> error $ show a
   where
     fmapExpr' :: forall (f :: * -> *). Functor f => f NT.Expr -> f Expr
     fmapExpr' = fmapExpr tbl
@@ -143,16 +143,42 @@ fromExpr tbl = \case
   NT.Typeof a -> Typeof (f a)
   NT.Union a b -> Union (f a) (f b)
   -- Features that nave no mapping to typescript that need to be simlified.
-  NT.Hole -> error "Hole"
-  NT.Let a b -> error "Let"
+  NT.Hole -> error "'holes' should only appear as the last branch of a case statement"
+  -- FIXME: this will have issues with shadowing I think?
+  -- Maybe it won't though as this should be bottom up
+  -- FIXME: ignore quoted forms
+  NT.ExprLet (NT.Let bindings body) -> f (U.transform t body)
+    where
+      tbl :: Eval.SymbolTable
+      tbl = Map.fromList [(k, v) | LetBinding k v <- bindings]
+
+      -- | Retrieve current expr from the let binding, if it's an ident.
+      get a = do
+        name <- getIdentName a
+        Map.lookup name tbl
+
+      t :: NT.Expr -> NT.Expr
+      t expr = case get expr of
+        Just (NT.SymbolLit a) -> a
+        Just (NT.SymbolFunc params body) -> error "not implemented"
+        Nothing -> expr
   NT.Quote a -> error "quoted form should exist within an unquoted form"
-  -- NT.Unquote a -> f (simplify tbl a)
   NT.Unquote a -> f . simplify' $ a
   where
     f = fromExpr tbl
     simplify' = Eval.simplify tbl
     fmapExpr' :: forall (f :: * -> *). Functor f => f NT.Expr -> f Expr
     fmapExpr' = fmapExpr tbl
+
+-- | Is an ident with the matching name
+isMatchIdent :: String -> NT.Expr -> Bool
+isMatchIdent name expr =
+  getIdentName expr == Just name
+
+getIdentName :: NT.Expr -> Maybe String
+getIdentName = \case
+  NT.ExprIdent (NT.Ident name) -> Just name
+  _ -> Nothing
 
 -- | Transform all Expression fields in a record.
 fmapExpr :: forall (f :: * -> *). Functor f => Eval.SymbolTable -> f NT.Expr -> f Expr

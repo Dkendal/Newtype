@@ -11,13 +11,6 @@ import Newtype.Syntax.Newtype hiding (any)
 import Prelude hiding (any)
 import Control.Exception (Exception, throw)
 
-data Symbol
-  = -- | A callable function that needs to have the parameters resolved
-    SymbolFunc {params :: [NTTypeParam], expr :: Expr}
-  | -- | A literal expression that can be inlined
-    SymbolLit {expr :: Expr}
-  deriving (Eq, Show)
-
 type SymbolTable = Map.Map String Symbol
 
 newtype TestFailureException = TestFailureException String
@@ -45,6 +38,7 @@ execTest tbl test =
          |  ${actual}
          |]
 
+
 collectDefinitions :: Program -> SymbolTable
 collectDefinitions (Program stmts) =
   Map.fromList (Maybe.mapMaybe f stmts)
@@ -55,6 +49,7 @@ collectDefinitions (Program stmts) =
       Just (name, SymbolFunc params body)
     f _ = Nothing
 
+-- | Reduce an expression to its simplest form
 simplify :: SymbolTable -> Expr -> Expr
 simplify tbl = \case
   Quote a -> a

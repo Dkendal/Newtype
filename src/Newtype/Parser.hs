@@ -12,6 +12,7 @@ import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Text (Text, pack, unpack)
 import Data.Text qualified as Text
 import Data.Void (Void)
+import Debug qualified
 import Newtype.Parser.Tokens
 import Newtype.Syntax.Newtype
 import Text.Megaparsec hiding (State)
@@ -363,16 +364,23 @@ pLet :: Parser Expr
 pLet =
   do
     keyword "let"
-    bindings <- pBinding
+    pos <- L.indentLevel
+    -- Subtract one from the indent level so that the first binding
+    -- can is valid, otherwise the error effectively says that it must greater
+    -- than itself.
+    let pos = mkPos (unPos pos - 1)
+    put pos
+    bindings <- some pBinding
     keyword "in"
-    Let [bindings] <$> pExpr
+    ExprLet . Let bindings <$> pExpr
   where
     pBinding =
       do
+        pos <- get
+        indentGuard GT pos <|> fail "let binding must be indented"
         name <- identifier
         symbol "="
-        expr <- pExpr
-        return Binding {name = name, value = expr}
+        LetBinding name . SymbolLit <$> pExpr
 
 {- | Parse an expression with a type operator. A type operator may be a builtin
  prefix operator like `typeof` or `keyof`, or a prefix operator: like `!` for

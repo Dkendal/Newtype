@@ -42,6 +42,7 @@ reservedWords =
     "get",
     "goto",
     "if",
+    "in",
     "implements",
     "import",
     "interface",

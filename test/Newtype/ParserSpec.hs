@@ -10,15 +10,16 @@ import Control.DeepSeq (force)
 import Control.Exception (evaluate)
 import Data.Functor
 import Data.Text (Text)
+import Debug qualified
 import Newtype.Parser
+import Newtype.Syntax.Eval
 import Newtype.Syntax.IntermediateRepresentation qualified as IR
 import Newtype.Syntax.Typescript qualified as TS
-import Debug qualified
 import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (Expectation)
+import Test.Hspec.Megaparsec
 import Test.Hspec.Newtype
 import Prelude as P hiding (lines, unlines)
-import Newtype.Syntax.Eval
 
 shouldCompileProgram :: HasCallStack => Text -> Text -> Expectation
 shouldCompileProgram =
@@ -102,7 +103,7 @@ spec = do
            |]
 
     specify "regression: line break args with dot access identifier and parenthesized arg" $ do
-      shouldCompileProgramD
+      shouldCompileProgram
         [nt|A = B.C.D.E.F
            |     (B 1)
            |     (B 1)
@@ -237,6 +238,32 @@ spec = do
            |}
            |]
 
+  describe "let-in expr" $ do
+    specify "single line" $ do
+      shouldCompileProgram
+        [nt|A = let b = 1 in [b, b]
+           |]
+        [ts|type A = [1, 1];
+           |]
+
+    specify "multiple bindings" $ do
+      shouldCompileProgram
+        [nt|A =
+           |  let b = 1
+           |      c = 2
+           |   in [b, c]
+           |]
+        [ts|type A = [1, 2];
+           |]
+
+    specify "let statements are indentation sensitive" $ do
+      shouldFailOn
+        (parse pProgram)
+        [nt|A =
+           |  let b = 1
+           |     c = 2
+           |   in [b, c]
+           |]
 
   describe "function types" $ do
     specify "1 arg" $ do

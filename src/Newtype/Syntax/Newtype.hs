@@ -111,10 +111,10 @@ data Expr
   | ExprInferIdent Ident
   | ExprInferIdentConstraint Ident Expr
   | ExprMappedType NTMappedType
+  | ExprLet Let
   | Hole
   | Intersection Expr Expr
   | Keyof Expr
-  | Let [Binding] Expr
   | Literal NTLiteral
   | PrimitiveType PrimitiveType
   | Quote Expr
@@ -126,10 +126,17 @@ data Expr
   | Unquote Expr
   deriving (Show, Eq, Data, Typeable)
 
-data Binding = Binding
-  { name :: String
-  , value :: Expr
-  }
+data Let = Let [LetBinding] Expr
+  deriving (Show, Eq, Data, Typeable)
+
+data LetBinding = LetBinding String Symbol
+  deriving (Show, Eq, Data, Typeable)
+
+data Symbol
+  = -- | A callable function that needs to have the parameters resolved
+    SymbolFunc {params :: [NTTypeParam], expr :: Expr}
+  | -- | A literal expression that can be inlined
+    SymbolLit {expr :: Expr}
   deriving (Show, Eq, Data, Typeable)
 
 -- Type Definitions }}}
