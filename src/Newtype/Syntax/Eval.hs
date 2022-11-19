@@ -1,5 +1,6 @@
 module Newtype.Syntax.Eval where
 
+import Control.Exception (Exception, throw)
 import Data.Char qualified as Char
 import Data.Generics.Uniplate.Data qualified as U
 import Data.Map.Strict qualified as Map
@@ -9,7 +10,6 @@ import Debug qualified
 import Newtype.Syntax.Internal
 import Newtype.Syntax.Newtype hiding (any)
 import Prelude hiding (any)
-import Control.Exception (Exception, throw)
 
 type SymbolTable = Map.Map String Symbol
 
@@ -38,7 +38,6 @@ execTest tbl test =
          |  ${actual}
          |]
 
-
 collectDefinitions :: Program -> SymbolTable
 collectDefinitions (Program stmts) =
   Map.fromList (Maybe.mapMaybe f stmts)
@@ -59,7 +58,7 @@ simplify tbl = \case
     Maybe.fromMaybe
       expr
       (callSymbol <$> Map.lookup ident.getIdent tbl <*> pure args)
-  expr@(ExprIdent (Ident id)) ->
+  expr@(ExprNamespaceIdent (NIIdent (Ident id))) ->
     case id `Map.lookup` tbl of
       -- Inline the literal value
       Just (SymbolLit b) -> simplify' b
@@ -99,6 +98,7 @@ callSymbol sym args =
   where
     -- TODO make sure a variable isn't used if it's shadowed via infer
     f = \case
+      ExprNamespaceIdent (NIIdent (Ident id)) | Map.member id argMap -> argMap Map.! id
       ExprIdent (Ident id) | Map.member id argMap -> argMap Map.! id
       a -> a
     argMap =

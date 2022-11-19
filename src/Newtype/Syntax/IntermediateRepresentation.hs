@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ParallelListComp #-}
 
 module Newtype.Syntax.IntermediateRepresentation where
 
@@ -14,7 +15,6 @@ import Data.Dynamic
 import Data.Functor
 import Data.Generics
 import Data.Generics qualified as Generics
-import Data.Generics.Uniplate.Data qualified as Uniplate
 import Data.List qualified as List
 import Data.Map.Strict qualified as Map
 import Data.Maybe qualified as Maybe
@@ -77,6 +77,7 @@ data Expr
   | ExprGenericApplication IRGenericApplication
   | ExprIdent NT.Ident
   | ExprInferIdent NT.Ident
+  | ExprNamespaceIdent NT.NamespaceIdent
   | ExprInferIdentConstraint NT.Ident Expr
   | Intersection Expr Expr
   | Keyof Expr
@@ -122,6 +123,12 @@ fromStatment tbl = \case
     fmapExpr' :: forall (f :: * -> *). Functor f => f NT.Expr -> f Expr
     fmapExpr' = fmapExpr tbl
 
+-- | Remove the .as field if it's the same as the key
+removeUnusedMappedTypeAlias :: NT.NTMappedType -> NT.NTMappedType
+removeUnusedMappedTypeAlias a@MappedType {key, asExpr = Just (NT.ExprNamespaceIdent (NIIdent (Ident key'))), ..}
+  | key == key' = MappedType {key, asExpr = Nothing, ..}
+removeUnusedMappedTypeAlias a = a
+
 fromExpr :: Eval.SymbolTable -> NT.Expr -> Expr
 fromExpr tbl = \case
   NT.Access a b -> Access (f a) (f b)
@@ -130,9 +137,10 @@ fromExpr tbl = \case
   NT.ExprConditionalType a -> ExprConditionalType $ fmapExpr' a
   NT.ExprGenericApplication a -> ExprGenericApplication $ fmapExpr' a
   NT.ExprIdent a -> ExprIdent a
+  NT.ExprNamespaceIdent a -> ExprNamespaceIdent a
   NT.ExprInferIdent a -> ExprInferIdent a
   NT.ExprInferIdentConstraint a b -> ExprInferIdentConstraint a (f b)
-  NT.ExprMappedType a -> ExprMappedType $ fmapExpr' a
+  NT.ExprMappedType a -> ExprMappedType . fmapExpr' . removeUnusedMappedTypeAlias $ a
   NT.Intersection a b -> Intersection (f a) (f b)
   NT.Keyof a -> Keyof (f a)
   NT.Literal a -> Literal $ fmapExpr' a
@@ -150,18 +158,25 @@ fromExpr tbl = \case
   NT.ExprLet (NT.Let bindings body) -> f (U.rewrite t body)
     where
       tbl :: Eval.SymbolTable
+      -- TODO: generalize symbol replacement logic
       tbl = Map.fromList [(k, v) | LetBinding k v <- bindings]
 
-      -- | Retrieve current expr from the let binding, if it's an ident.
+      -- \| Retrieve current expr from the let binding, if it's an ident.
       get a = do
-        name <- getIdentName a
+        -- TODO: generalize symbol replacement logic
+        name <- getIdentNameFromExpr a
         Map.lookup name tbl
 
       t :: NT.Expr -> Maybe NT.Expr
-      t expr = case get expr of
-        Just (NT.SymbolLit a) -> Just a
-        Just (NT.SymbolFunc params body) -> error "not implemented"
-        Nothing -> Nothing
+      t expr = case (get expr, expr) of
+        (Just (NT.SymbolFunc [] body), _) -> Just body
+        (Just (NT.SymbolFunc params body), NT.ExprGenericApplication f) ->
+          Just (U.transform t body)
+          where
+            -- TODO: generalize symbol replacement logic
+            tbl = Map.fromList [(Just t.name, p) | (t, p) <- zip params f.args]
+            t a = Maybe.fromMaybe a (Map.lookup (getIdentNameFromExpr a) tbl)
+        (Nothing, _) -> Nothing
   NT.Quote a -> error "quoted form should exist within an unquoted form"
   NT.Unquote a -> f . simplify' $ a
   where
@@ -173,11 +188,20 @@ fromExpr tbl = \case
 -- | Is an ident with the matching name
 isMatchIdent :: String -> NT.Expr -> Bool
 isMatchIdent name expr =
-  getIdentName expr == Just name
+  getIdentNameFromExpr expr == Just name
 
-getIdentName :: NT.Expr -> Maybe String
+-- NOTE: I don't know if this actually work for all cases
+getIdentNameFromExpr :: NT.Expr -> Maybe String
+getIdentNameFromExpr expr = takeOne [a | (NIIdent (Ident a)) <- U.universeBi expr]
+  where
+    takeOne :: [String] -> Maybe String
+    takeOne [a] = Just a
+    takeOne _ = Nothing
+
+-- | Return the name of the identifier, if it's a simple non-namespaced ident.
+getIdentName :: NT.NamespaceIdent -> Maybe String
 getIdentName = \case
-  NT.ExprIdent (NT.Ident name) -> Just name
+  (NIIdent (Ident name)) -> Just name
   _ -> Nothing
 
 -- | Transform all Expression fields in a record.

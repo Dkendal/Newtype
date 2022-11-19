@@ -107,7 +107,8 @@ data Expr
   | DotAccess Expr Expr
   | ExprConditionalType NTConditionalType
   | ExprGenericApplication NTGenericApplication
-  | ExprIdent Ident
+  | ExprNamespaceIdent NamespaceIdent
+  | ExprIdent Ident -- deprecated
   | ExprInferIdent Ident
   | ExprInferIdentConstraint Ident Expr
   | ExprMappedType NTMappedType
@@ -136,6 +137,7 @@ data Symbol
   = -- | A callable function that needs to have the parameters resolved
     SymbolFunc {params :: [NTTypeParam], expr :: Expr}
   | -- | A literal expression that can be inlined
+    -- TODO: remove this in favor of SymbolFunc with no params
     SymbolLit {expr :: Expr}
   deriving (Show, Eq, Data, Typeable)
 
@@ -516,6 +518,9 @@ ct = ConditionalType
 -- | Single element tuple
 t1 :: Expr -> Expr
 t1 a = Tuple [ListValue Nothing a]
+
+mkTypeParam :: String -> TypeParam a
+mkTypeParam name = TypeParam name Nothing Nothing
 
 mkIdent :: String -> Expr
 mkIdent = ExprIdent . Ident

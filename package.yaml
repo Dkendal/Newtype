@@ -75,6 +75,8 @@ tests:
       - -threaded
       - -rtsopts
       - -with-rtsopts=-N
+      # - -fprof-auto-calls
+      # - -prof
     dependencies:
       - newtype
       - deepseq

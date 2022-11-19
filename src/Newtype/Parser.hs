@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-typed-holes #-}
 
 module Newtype.Parser (module Newtype.Parser, module Newtype.Parser.Tokens) where
 
@@ -13,13 +14,13 @@ import Data.Text (Text, pack, unpack)
 import Data.Text qualified as Text
 import Data.Void (Void)
 import Debug qualified
+import GHC.IO (unsafePerformIO)
 import Newtype.Parser.Tokens
 import Newtype.Syntax.Newtype
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Megaparsec.Debug (dbg)
-import GHC.IO (unsafePerformIO)
 
 type FormalParamMap = Map.Map String Expr
 
@@ -186,7 +187,8 @@ pTerm =
     , pBooleanLiteral <?> "boolean literal"
     , (TemplateLiteral <$> pTemplateStrings) <?> "template literal"
     , pStringLiteral <?> "string literal"
-    , pIdent' <?> "identifier"
+    , -- , pIdent' <?> "identifier"
+      ExprNamespaceIdent <$> pNamespaceIdent <?> "identifier"
     , -- Not actually valid outside of the extends expression
       -- but make my life a lot easier
       hidden pInferIdent
@@ -374,8 +376,16 @@ pLet =
       do
         indentGuard EQ pos <|> indentGuard GT pos <|> fail "binding must be indented"
         name <- identifier
-        symbol "="
-        LetBinding name . SymbolLit <$> pExpr
+        choice
+          [ do
+              paramsIds <- many identifier
+              let params = map mkTypeParam paramsIds
+              symbol "="
+              LetBinding name . SymbolFunc params <$> pExpr
+          , do
+              symbol "="
+              LetBinding name . SymbolLit <$> pExpr
+          ]
 
 {- | Parse an expression with a type operator. A type operator may be a builtin
  prefix operator like `typeof` or `keyof`, or a prefix operator: like `!` for
@@ -386,10 +396,7 @@ pTypeOp :: Parser Expr
 pTypeOp =
   makeExprParser
     pTerm
-    [
-      [ InfixL $ DotAccess <$ (period <?> "dot access")
-      , InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy (string "="))
-      ]
+    [ [InfixL $ Access <$ (lexeme . try) (string "!" <* notFollowedBy (string "="))]
     ,
       [ prefix "keyof" Keyof
       , prefix "readonly" Readonly
@@ -397,7 +404,10 @@ pTypeOp =
       , prefix "quote" Quote
       , prefix "unquote" Unquote
       ]
-    , [binary "&" Intersection, binary "|" Union]
+    ,
+      [ binary "&" Intersection
+      , binary "|" Union
+      ]
     ]
 
 pInferIdent :: Parser Expr
@@ -478,15 +488,16 @@ pObjectLiteral :: Parser Expr
 pObjectLiteral =
   Literal . LObject <$> braces (pProperty `sepBy` comma)
 
-pTypeIdent = makeExprParser (NIIdent <$> pIdent) [[binary "." NIMemberAccess]]
+pNamespaceIdent :: Parser NamespaceIdent
+pNamespaceIdent = makeExprParser (NIIdent <$> pIdent) [[binary "." NIMemberAccess]]
 
 pGenericApplication :: Parser NTGenericApplication
 pGenericApplication = do
   pos <- L.indentLevel
-  id <- pTypeIdent
+  id <- pNamespaceIdent
   params <-
     some . choice $
-      [ indentGuard GT pos *> pIdent'
+      [ indentGuard GT pos *> (ExprNamespaceIdent <$> pNamespaceIdent)
       , indentGuard GT pos *> try pTerm
       ]
   return $ GenericApplication id params

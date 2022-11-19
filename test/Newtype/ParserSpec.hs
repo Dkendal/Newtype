@@ -19,6 +19,7 @@ import Test.Hspec hiding (Expectation, expectationFailure, shouldBe)
 import Test.Hspec.Expectations.Pretty (Expectation)
 import Test.Hspec.Megaparsec
 import Test.Hspec.Newtype
+
 import Prelude as P hiding (lines, unlines)
 
 shouldCompileProgram :: HasCallStack => Text -> Text -> Expectation
@@ -79,6 +80,35 @@ spec = do
         [ts|type A = never;
            |]
 
+  describe "dot property access" $ do
+    specify "simple" $ do
+      shouldCompileProgram
+        [nt|A = a.b
+           |]
+        [ts|type A = a.b;
+           |]
+
+    specify "higher precedence than &" $ do
+      shouldCompileProgram
+        [nt|A = a.b & a.b
+           |]
+        [ts|type A = a.b & a.b;
+           |]
+
+    specify "higher precedence than |" $ do
+      shouldCompileProgram
+        [nt|A = a.b | a.b
+           |]
+        [ts|type A = a.b | a.b;
+           |]
+
+    specify "higher precedence than call" $ do
+      shouldCompileProgram
+        [nt|A = a.b a.b a.b
+           |]
+        [ts|type A = a.b<a.b, a.b>;
+           |]
+    
   describe "generic types" $ do
     specify "one arg" $ do
       shouldCompileProgram
@@ -274,6 +304,25 @@ spec = do
            |   in [a, b]
            |]
         [ts|type A = [1, 1];
+           |]
+
+    specify "bindings can take arguments" $ do
+      shouldCompileProgram
+        [nt|A =
+           |  let f a b = [a, b]
+           |   in f 1 2
+           |]
+        [ts|type A = [1, 2];
+           |]
+
+    specify "bindings with args can also refernce binding" $ do
+      shouldCompileProgram
+        [nt|A =
+           |  let f a b = [a, b, c]
+           |      c = 3
+           |   in f 1 2
+           |]
+        [ts|type A = [1, 2, 3];
            |]
 
     specify "let statements are indentation sensitive" $ do

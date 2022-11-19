@@ -71,9 +71,6 @@ instance PrettyTypescript ImportSpecifier where
 
 instance PrettyTypescript IRMappedType where
   pp = \case
-    MappedType {asExpr = Just (Literal (LString as)), key, ..}
-      | as == key ->
-          pp MappedType {asExpr = Nothing, ..}
     MappedType {..} ->
       braces (lhs <+> pp value)
       where
@@ -101,6 +98,7 @@ instance PrettyTypescript Expr where
     DotAccess a b -> pp a <> "." <> pp b
     ExprGenericApplication a -> pp a
     ExprIdent id -> pp id
+    ExprNamespaceIdent id -> pp id
     ExprInferIdent (Ident id) -> group "infer" <+> pretty id
     ExprInferIdentConstraint (Ident id) constraint -> group "infer" <+> pretty id <+> "extends" <+> pp constraint
     Array expr ->
