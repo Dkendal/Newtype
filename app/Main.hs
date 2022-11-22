@@ -26,7 +26,7 @@ compileFile path =
     sourceCode <- readFile path
     return (either errorBundlePretty transform (compile path sourceCode))
   where
-    transform = show . TS.fromIR . IR.fromProgram
+    transform = show . TS.fromIR . IR.getProgram . IR.fromProgram
 
 usage :: IO ()
 usage = putStrLn "Usage: nt [-vh] <file> ..."

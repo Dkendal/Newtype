@@ -27,6 +27,7 @@ import Text.Nicify
 import Text.Regex.TDFA
 import Prelude hiding (any)
 
+import Data.Either qualified as Either
 import Data.Generics.Uniplate.Data qualified as U
 import Debug qualified
 import Newtype.Syntax.Eval qualified as Eval
@@ -92,27 +93,33 @@ data Expr
   deriving (Eq, Show, Generics.Data, Generics.Typeable)
 
 -- Type Definitions }}}
+--
+data ProgramWithTestResults = ProgramWithTestResults
+  {getProgram :: Program, getTestResults :: [Eval.TestResult]}
+  deriving (Eq, Show)
 
-fromProgram :: NT.Program -> Program
-fromProgram prgm@(NT.Program stmts) =
-  Program (fromStatment tbl `Maybe.mapMaybe` stmts)
+fromProgram :: NT.Program -> ProgramWithTestResults
+fromProgram prgm@(NT.Program statements) =
+  ProgramWithTestResults (Program statements') testResults
   where
+    (testResults, statementsM) = Either.partitionEithers (fromStatement tbl <$> statements)
+    statements' = Maybe.catMaybes statementsM
     tbl = Eval.collectDefinitions prgm
 
-fromStatment :: Eval.SymbolTable -> NT.Statement -> Maybe Statement
-fromStatment tbl = \case
-  NT.ImportDeclaration {..} -> Just ImportDeclaration {..}
-  NT.ExportStatement a -> Just $ ExportStatement a
-  NT.STestDefinition a -> Eval.execTest tbl a
+fromStatement :: Eval.SymbolTable -> NT.Statement -> Either Eval.TestResult (Maybe Statement)
+fromStatement tbl = \case
+  NT.ImportDeclaration {..} -> Right . Just $ ImportDeclaration {..}
+  NT.ExportStatement a -> Right . Just $ ExportStatement a
+  NT.STestDefinition a -> Left $ Eval.execTest tbl a
   NT.TypeDefinition {..} ->
-    Just $
+    Right . Just $
       TypeDefinition
         { params = fmapExpr' <$> params
         , body = fromExpr tbl body
         , name
         }
   NT.InterfaceDefinition {..} ->
-    Just $
+    Right . Just $
       InterfaceDefinition
         { params = fmapExpr' <$> params
         , extends = extends

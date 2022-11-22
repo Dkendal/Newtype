@@ -2,6 +2,7 @@ module Newtype.Compiler where
 
 import Control.Monad (join)
 import Control.Monad.Identity
+import Control.Monad.State (evalState)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -9,7 +10,6 @@ import Newtype.Parser (pProgram, runNewTypeParser)
 import Newtype.Parser.Tokens (Parser)
 import Newtype.Syntax.Newtype
 import Text.Megaparsec
-import Control.Monad.State (evalState)
 
 -- Loose outline of compilation:
 -- read file -> parse -> post processing -> pretty printing
@@ -36,7 +36,7 @@ addImplicitExport (Program statements) =
     exports s = ExportStatement (mapMaybe identifier s)
 
     identifier :: Statement -> Maybe Ident
-    identifier ImportDeclaration {} = Nothing
-    identifier ExportStatement {} = Nothing
-    identifier TypeDefinition {name} = Just (Ident name)
-    identifier InterfaceDefinition {name} = Just (Ident name)
+    identifier = \case
+      TypeDefinition {name} -> Just (Ident name)
+      InterfaceDefinition {name} -> Just (Ident name)
+      _ -> Nothing

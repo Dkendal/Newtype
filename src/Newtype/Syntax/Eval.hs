@@ -13,21 +13,24 @@ import Prelude hiding (any)
 
 type SymbolTable = Map.Map String Symbol
 
-newtype TestFailureException = TestFailureException String
-  deriving (Show)
+type TestResult = Either TestFailure TestSuccess
 
-instance Exception TestFailureException
+data TestFailure = TestFailure String Expr Expr
+  deriving (Show, Eq)
+
+data TestSuccess = TestSuccess String
+  deriving (Show, Eq)
 
 -- TODO: Collect all errors and report them at once rather than throwing
-execTest :: SymbolTable -> TestDefinition -> Maybe a
+execTest :: SymbolTable -> TestDefinition -> TestResult
 execTest tbl test =
   case test.assertion of
     AssertAssignable expected actual ->
       let expected' = simplify' expected
           actual' = simplify' actual
        in if expected' `isAssignable` actual'
-            then Nothing
-            else throw (TestFailureException (formatError expected' actual'))
+            then Right (TestSuccess (test.name))
+            else Left (TestFailure (test.name) expected' actual')
   where
     simplify' = simplify tbl
     formatError expected actual =
