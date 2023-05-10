@@ -1,0 +1,137 @@
+program = {
+  SOI ~ 
+  NEWLINE* ~
+  statement* ~
+  NEWLINE* ~
+  EOI
+}
+
+statement =  _{ type_alias }
+
+type_alias = {
+  "type" ~
+  ident ~
+  "=" ~
+  expr
+}
+
+expr = _{
+  prefix* ~ primary ~
+  ( infix ~ prefix* ~ primary )*
+}
+
+primary = _{ term | "(" ~ expr ~ ")" }
+
+prefix = _{ infer }
+
+infer = { "?" }
+
+infix = _{ union | intersection }
+
+neg = _{ "-" }
+
+union = { "|" }
+
+intersection = { "&" }
+
+term = _{
+  if_expr
+  | ident
+  | number
+  | string
+  | template_string
+}
+
+if_expr = {
+  "if" ~
+  extends_condition ~
+  "then" ~
+  (
+    expr ~
+    "else" ~
+    expr
+  )?
+}
+
+extends_condition = { extends_expr }
+
+extends_expr = _{
+  extends_prefix* ~
+  extends_primary ~
+  (
+    extends_prefix* ~
+    extends_infix ~
+    extends_primary
+  )*
+}
+
+extends_primary = _{
+  expr | "(" ~ extends_expr ~ ")"
+}
+
+extends_prefix = _{
+  not
+}
+
+extends_infix = _{
+  extends
+  | not_extends
+  | equals
+  | strict_equals
+  | strict_not_equals
+  | and
+  | or
+}
+
+not = { "!" }
+
+extends = { "<:" }
+
+not_extends = { "!<:" }
+
+equals = { "=" }
+
+not_equals = { "!=" }
+
+strict_equals = { "==" }
+
+strict_not_equals = { "!==" }
+
+and = { "&&" }
+
+or = { "||" }
+
+string = @{
+  "\"" ~
+  ( !"\"" ~ ANY )* ~
+  "\""
+}
+
+template_string = @{
+  "`" ~
+  ( !"`" ~ ANY )* ~
+  "`"
+}
+
+ident = @{
+  !( ASCII_DIGIT ) ~
+  ( ASCII_ALPHANUMERIC | "$" | "_" )+
+}
+
+number = @{
+  !"_" ~
+  ( ASCII_DIGIT | "_" )+ ~
+  ( "." ~ !"_"  ~ ( ASCII_DIGIT ~ "_" )* )?
+}
+
+// NewBlock = _{
+//     // The first line in the block
+//     PEEK_ALL ~ PUSH("  "+ | "\t"+) ~ statement ~
+//     // Subsequent lines in the block
+//     (PEEK_ALL ~ statement)* ~
+//     // Remove the last layer of indentation from the stack when exiting the block
+//     DROP
+// }
+
+WHITESPACE = _{ NEWLINE | " " | "\t" }
+

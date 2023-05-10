@@ -12,5 +12,6 @@ tasks:
     silent: true
     sources:
       - ./src/**/*.rs
+      - ./src/**/*.pest
       - ./Cargo.lock
       - ./Cargo.toml

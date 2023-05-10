@@ -1,5 +1,10 @@
 #![feature(never_type)]
 
+extern crate pest;
+
+#[macro_use]
+extern crate pest_derive;
+
 #[cfg(test)]
 extern crate quickcheck;
 
@@ -7,11 +12,12 @@ extern crate quickcheck;
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
 
-use std::io::Read;
-
-mod ast;
+mod parser;
 
 use clap::Parser;
+use std::io::Read;
+// use parser::ToTypescript;
+
 
 #[derive(Debug, Parser)]
 #[clap(name = "newtype compiler")]
@@ -22,7 +28,6 @@ struct Args {
     output: Option<String>,
 }
 
-use ast::ToTypescript;
 fn main() {
     let args = Args::parse();
 
@@ -34,14 +39,14 @@ fn main() {
         input
     };
 
-    let (_, program) = ast::program(&input_source).unwrap();
-
-    // Generate TypeScript code
-    let ts_code = program.to_ts();
-
-    if let Some(output_filename) = args.output {
-        std::fs::write(output_filename, ts_code).unwrap();
-    } else {
-        println!("{}", ts_code);
-    }
+    // let (_, program) = ast::program(&input_source).unwrap();
+    //
+    // // Generate TypeScript code
+    // let ts_code = program.to_ts();
+    //
+    // if let Some(output_filename) = args.output {
+    //     std::fs::write(output_filename, ts_code).unwrap();
+    // } else {
+    //     println!("{}", ts_code);
+    // }
 }
