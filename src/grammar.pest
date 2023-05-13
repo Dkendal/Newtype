@@ -1,24 +1,12 @@
-program = {
-  SOI ~ 
-  NEWLINE* ~
-  statement* ~
-  NEWLINE* ~
-  EOI
-}
+program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 
-statement =  _{ type_alias }
+statement = _{ type_alias }
 
-type_alias = {
-  "type" ~
-  ident ~
-  "=" ~
-  expr
-}
+type_alias = { "type" ~ ident ~ type_parameters ~ "=" ~ expr }
 
-expr = _{
-  prefix* ~ primary ~
-  ( infix ~ prefix* ~ primary )*
-}
+type_parameters = { ident * }
+
+expr = _{ prefix* ~ primary ~ (infix ~ prefix* ~ primary)* }
 
 primary = _{ term | "(" ~ expr ~ ")" }
 
@@ -35,46 +23,58 @@ union = { "|" }
 intersection = { "&" }
 
 term = _{
-  if_expr
-  | ident
+    if_expr
+  | top_type
+  | bottom_type
+  | object_literal
   | number
   | string
   | template_string
+  | generic_call
+  | ident
+}
+
+top_type = _{ any | unknown }
+
+bottom_type = _{ never }
+
+primitive = {
+    type_string
+  | type_boolean
+  | type_number
+}
+
+generic_call = { ident ~ generic_call_arguments }
+
+generic_call_arguments = { expr+ }
+
+object_literal = {
+    "{" ~ ((object_property ~ ",")* ~ object_property ~ ","?)? ~ "}"
+}
+
+object_property = {
+    ident ~ ":" ~ expr
 }
 
 if_expr = {
-  "if" ~
-  extends_condition ~
-  "then" ~
-  (
-    expr ~
-    "else" ~
-    expr
-  )?
+    "if" ~ extends_condition ~ "then" ~ (expr ~ "else" ~ expr)?
 }
 
 extends_condition = { extends_expr }
 
 extends_expr = _{
-  extends_prefix* ~
-  extends_primary ~
-  (
-    extends_prefix* ~
-    extends_infix ~
-    extends_primary
-  )*
+    extends_prefix* ~ extends_primary ~ (extends_prefix* ~ extends_infix ~ extends_primary)*
 }
 
 extends_primary = _{
-  expr | "(" ~ extends_expr ~ ")"
+    expr
+  | "(" ~ extends_expr ~ ")"
 }
 
-extends_prefix = _{
-  not
-}
+extends_prefix = _{ not }
 
 extends_infix = _{
-  extends
+    extends
   | not_extends
   | equals
   | strict_equals
@@ -101,37 +101,39 @@ and = { "&&" }
 
 or = { "||" }
 
-string = @{
-  "\"" ~
-  ( !"\"" ~ ANY )* ~
-  "\""
-}
+any = { "any" }
 
-template_string = @{
-  "`" ~
-  ( !"`" ~ ANY )* ~
-  "`"
-}
+unknown = { "unknown" }
 
-ident = @{
-  !( ASCII_DIGIT ) ~
-  ( ASCII_ALPHANUMERIC | "$" | "_" )+
-}
+never = { "never" }
+
+type_string = { "string" }
+
+type_boolean = { "boolean" }
+
+type_number = { "number" }
+
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+template_string = @{ "`" ~ (!"`" ~ ANY)* ~ "`" }
+
+ident = @{ !(ASCII_DIGIT) ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
 
 number = @{
-  !"_" ~
-  ( ASCII_DIGIT | "_" )+ ~
-  ( "." ~ !"_"  ~ ( ASCII_DIGIT ~ "_" )* )?
+    !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT ~ "_")*)?
 }
 
 // NewBlock = _{
-//     // The first line in the block
-//     PEEK_ALL ~ PUSH("  "+ | "\t"+) ~ statement ~
-//     // Subsequent lines in the block
-//     (PEEK_ALL ~ statement)* ~
-//     // Remove the last layer of indentation from the stack when exiting the block
-//     DROP
+// // The first line in the block
+// PEEK_ALL ~ PUSH("  "+ | "\t"+) ~ statement ~
+// // Subsequent lines in the block
+// (PEEK_ALL ~ statement)* ~
+// // Remove the last layer of indentation from the stack when
+// exiting the block DROP
 // }
 
-WHITESPACE = _{ NEWLINE | " " | "\t" }
-
+WHITESPACE = _{
+    NEWLINE
+  | " "
+  | "\t"
+}
