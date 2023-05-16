@@ -631,6 +631,10 @@ mod tests {
         assert_typescript!("type A = '1';\n", "type A = '1'");
     }
 
+    fn test_parse_template_string_literals() {
+        assert_typescript!("type A = `1`;\n", "type A = `1`");
+    }
+
     #[test]
     fn test_parse_literals() {
         assert_typescript!("type A = true;\n", "type A = true");
