@@ -171,7 +171,7 @@ impl ToTypescript for Node {
                 Primitive::Number => "number",
                 Primitive::String => "string",
             }),
-            Node::String(string) => RcDoc::text("\"").append(RcDoc::text(string)).append("\""),
+            Node::String(string) => RcDoc::text(string),
             Node::TemplateString(_) => todo!(),
             Node::IfExpr(cond, then, els) => (**cond)
                 .to_ts()
@@ -472,15 +472,10 @@ fn node(pair: Pair<Rule>) -> Node {
             };
             Node::Primitive(primitive)
         }
-        Rule::number => Node::Number(pair.as_str().to_string()),
-        Rule::string => {
-            let s = pair.as_str();
-            let s = &s[1..s.len() - 1];
-            let s = s.replace("\\\"", "\"");
-            Node::String(s)
-        }
-        Rule::template_string => Node::TemplateString(pair.as_str().to_string()),
-        Rule::ident => Node::Ident(pair.as_str().to_string()),
+        Rule::number => Node::Number(text(pair)),
+        Rule::string => Node::String(text(pair)),
+        Rule::template_string => Node::TemplateString(text(pair)),
+        Rule::ident => Node::Ident(text(pair)),
         Rule::never => Node::Never,
         Rule::any => Node::Any,
         Rule::unknown => Node::Unknown,
@@ -492,7 +487,7 @@ fn node(pair: Pair<Rule>) -> Node {
         Rule::application => {
             let mut inner = pair.into_inner();
 
-            let ident = inner.next().unwrap().as_str().to_string();
+            let ident = inner.next().map(text).unwrap();
 
             let arguments = inner.map(node).collect();
 
@@ -537,7 +532,7 @@ fn object_literal(pair: Pair<Rule>) -> Node {
     while let Some(property) = inner_rules.next() {
         let inner = property.into_inner();
         let readonly = inner.find_first_tagged("readonly").is_some();
-        let key = inner.find_first_tagged("key").map(keyword).unwrap();
+        let key = inner.find_first_tagged("key").map(text).unwrap();
         let optional = inner.find_first_tagged("optional").is_some();
         let value = inner.find_first_tagged("value").map(node).unwrap();
 
@@ -568,7 +563,7 @@ fn type_alias(pair: Pair<Rule>) -> Node {
     Node::TypeAlias(name, type_parameters, body)
 }
 
-fn keyword(pair: Pair<Rule>) -> String {
+fn text(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
 }
 
@@ -613,16 +608,31 @@ mod tests {
         assert_typescript!("type A = string;\n", "type A = string");
         assert_typescript!("type A = number;\n", "type A = number");
         assert_typescript!("type A = boolean;\n", "type A = boolean");
-        assert_typescript!("type A = undefined;\n", "type A = undefined");
         assert_typescript!("type A = never;\n", "type A = never");
         assert_typescript!("type A = any;\n", "type A = any");
         assert_typescript!("type A = unknown;\n", "type A = unknown");
     }
 
     #[test]
-    fn test_parse_literals() {
+    fn test_parse_number_literals() {
         assert_typescript!("type A = 1;\n", "type A = 1");
+        assert_typescript!("type A = -1;\n", "type A = -1");
+        assert_typescript!("type A = - 1;\n", "type A = - 1");
+        assert_typescript!("type A = 100;\n", "type A = 100");
+        assert_typescript!("type A = 1_000;\n", "type A = 1_000");
+        assert_typescript!("type A = 100.;\n", "type A = 100.");
+        assert_typescript!("type A = 100.0;\n", "type A = 100.0");
+        assert_typescript!("type A = 100.000_000;\n", "type A = 100.000_000");
+    }
+
+    #[test]
+    fn test_parse_string_literals() {
         assert_typescript!("type A = \"1\";\n", "type A = \"1\"");
+        assert_typescript!("type A = '1';\n", "type A = '1'");
+    }
+
+    #[test]
+    fn test_parse_literals() {
         assert_typescript!("type A = true;\n", "type A = true");
         assert_typescript!("type A = false;\n", "type A = false");
         assert_typescript!("type A = null;\n", "type A = null");

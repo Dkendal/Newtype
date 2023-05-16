@@ -212,7 +212,13 @@ keyword = _{
 
 
 number = @{
-    !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT ~ "_")*)?
+    (neg ~ s)? ~
+    !"_" ~
+    (ASCII_DIGIT | "_")+ ~
+    (
+      "." ~
+      !"_" ~
+      (ASCII_DIGIT | "_")*)?
 }
 
 // NewBlock = _{
