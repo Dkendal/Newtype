@@ -4,35 +4,43 @@ statement = _{ type_alias }
 
 type_alias = { "type" ~ ident ~ type_parameters ~ "=" ~ expr }
 
-type_parameters = { ident * }
+type_parameters = { ident* }
 
-expr = _{ prefix* ~ primary ~ (infix ~ prefix* ~ primary)* }
+expr = _{ expr1 ~ ( infix ~ expr1 )* }
+
+expr1 = _{ prefix* ~ primary }
 
 primary = _{ term | "(" ~ expr ~ ")" }
 
 prefix = _{ infer }
 
-infer = { "?" }
+infer = @{ "?" }
 
 infix = _{ union | intersection }
 
 neg = _{ "-" }
 
-union = { "|" }
+union = @{ "|" }
 
-intersection = { "&" }
+intersection = @{ "&" }
 
 term = _{
     if_expr
   | top_type
   | bottom_type
-  | object_literal
   | number
   | string
   | template_string
-  | generic_call
   | ident
+  | tuple
+  | object_literal
 }
+
+application = { ident ~ arguments }
+
+arguments = { expr* }
+
+tuple = { "[" ~ ( expr ~ ( "," ~ expr )* ) ? ~ "]" }
 
 top_type = _{ any | unknown }
 
@@ -44,16 +52,16 @@ primitive = {
   | type_number
 }
 
-generic_call = { ident ~ generic_call_arguments }
-
-generic_call_arguments = { expr+ }
-
 object_literal = {
     "{" ~ ((object_property ~ ",")* ~ object_property ~ ","?)? ~ "}"
 }
 
 object_property = {
-    ident ~ ":" ~ expr
+    (#readonly = readonly_modifier)? ~
+    #key = ident ~
+    (#optional = optional_modifier)? ~
+    ":" ~
+    #value = expr
 }
 
 if_expr = {
@@ -83,35 +91,39 @@ extends_infix = _{
   | or
 }
 
-not = { "!" }
+not = @{ "!" }
 
-extends = { "<:" }
+extends = @{ "<:" }
 
-not_extends = { "!<:" }
+not_extends = @{ "!<:" }
 
-equals = { "=" }
+equals = @{ "=" }
 
-not_equals = { "!=" }
+not_equals = @{ "!=" }
 
-strict_equals = { "==" }
+strict_equals = @{ "==" }
 
-strict_not_equals = { "!==" }
+strict_not_equals = @{ "!==" }
 
-and = { "&&" }
+and = @{ "&&" }
 
-or = { "||" }
+or = @{ "||" }
 
-any = { "any" }
+any = @{ "any" }
 
-unknown = { "unknown" }
+unknown = @{ "unknown" }
 
-never = { "never" }
+never = @{ "never" }
 
-type_string = { "string" }
+type_string = @{ "string" }
 
-type_boolean = { "boolean" }
+type_boolean = @{ "boolean" }
 
-type_number = { "number" }
+type_number = @{ "number" }
+
+readonly_modifier = @{ "readonly" }
+
+optional_modifier = @{ "?" }
 
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 

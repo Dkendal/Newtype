@@ -1,5 +1,7 @@
 #![feature(never_type)]
+#![allow(dead_code)]
 
+extern crate alloc;
 extern crate pest;
 
 #[macro_use]
