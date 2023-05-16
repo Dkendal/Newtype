@@ -11,15 +11,16 @@ pub struct NewtypeParser;
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Node {
     Program(Vec<Node>),
-    TypeAlias(String, Vec<Node>, Box<Expr>),
+    TypeAlias(String, Vec<Node>, Box<Node>),
+    Expr(Expr),
     Ident(String),
     Number(String),
     Primitive(Primitive),
     String(String),
     TemplateString(String),
     IfExpr(
-        Box<Node>,         // then
         Box<ExtendsExpr>,  // condition
+        Box<Node>,         // then
         Option<Box<Node>>, // else
     ),
     None,
@@ -31,6 +32,19 @@ pub enum Node {
     Unknown,
     Tuple(Vec<Node>),
     Array(Box<Node>),
+    Null,
+    Undefined,
+    False,
+    True,
+}
+
+impl Node {
+    fn is_bin_op(&self) -> bool {
+        match self {
+            Node::Expr(Expr::BinOp { .. }) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -92,6 +106,17 @@ pub enum ExtendsInfixOp {
     Or,
 }
 
+fn surround<'a, T>(doc: RcDoc<'a, ()>, left: T, right: T) -> RcDoc<()>
+where
+    T: Into<std::borrow::Cow<'a, str>>,
+{
+    RcDoc::text(left).append(doc).append(RcDoc::text(right))
+}
+
+fn parens(doc: RcDoc<()>) -> RcDoc<()> {
+    surround(doc, "(", ")")
+}
+
 trait ToTypescript {
     fn to_pretty_ts(&self, width: usize) -> String {
         let mut w = Vec::new();
@@ -101,8 +126,6 @@ trait ToTypescript {
 
     fn to_ts(&self) -> RcDoc<()>;
 }
-
-mod doc {}
 
 impl ToTypescript for Node {
     fn to_ts(&self) -> RcDoc<()> {
@@ -117,24 +140,30 @@ impl ToTypescript for Node {
                 }
                 doc
             }
-            Node::TypeAlias(name, params, body) => RcDoc::text("type")
-                .append(RcDoc::space())
-                .append(name)
-                .append(match params {
-                    list if list.len() == 0 => RcDoc::nil(),
-                    list => {
-                        let seperator = RcDoc::text(",").append(RcDoc::space());
+            Node::TypeAlias(name, params, body) => {
+                let body = (*body).to_ts();
 
-                        let body =
-                            RcDoc::intersperse(list.iter().map(|param| param.to_ts()), seperator);
+                RcDoc::text("type")
+                    .append(RcDoc::space())
+                    .append(name)
+                    .append(match params {
+                        list if list.len() == 0 => RcDoc::nil(),
+                        list => {
+                            let seperator = RcDoc::text(",").append(RcDoc::space());
 
-                        RcDoc::text("<").append(body).append(RcDoc::text(">"))
-                    }
-                })
-                .append(RcDoc::space())
-                .append("=")
-                .append(RcDoc::space())
-                .append((**body).to_ts()),
+                            let body = RcDoc::intersperse(
+                                list.iter().map(|param| param.to_ts()),
+                                seperator,
+                            );
+
+                            RcDoc::text("<").append(body).append(RcDoc::text(">"))
+                        }
+                    })
+                    .append(RcDoc::space())
+                    .append("=")
+                    .append(RcDoc::space())
+                    .append(body)
+            }
             Node::Ident(ident) => RcDoc::text(ident),
             Node::Number(number) => RcDoc::text(number),
             Node::Primitive(primitive) => RcDoc::text(match primitive {
@@ -144,7 +173,19 @@ impl ToTypescript for Node {
             }),
             Node::String(string) => RcDoc::text("\"").append(RcDoc::text(string)).append("\""),
             Node::TemplateString(_) => todo!(),
-            Node::IfExpr(_, _, _) => todo!(),
+            Node::IfExpr(cond, then, els) => (**cond)
+                .to_ts()
+                .append(RcDoc::space())
+                .append("?")
+                .append(RcDoc::space())
+                .append(then.to_ts())
+                .append(RcDoc::space())
+                .append(":")
+                .append(RcDoc::space())
+                .append(match els {
+                    Some(els) => els.to_ts(),
+                    None => RcDoc::text("never"),
+                }),
             Node::None => todo!(),
             Node::Error(_) => todo!(),
             Node::ObjectLiteral(props) => {
@@ -161,9 +202,6 @@ impl ToTypescript for Node {
 
                 RcDoc::text(ident).append(RcDoc::text("<").append(params).append(RcDoc::text(">")))
             }
-            Node::Never => RcDoc::text("never"),
-            Node::Any => RcDoc::text("any"),
-            Node::Unknown => RcDoc::text("unknown"),
             Node::Tuple(items) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
@@ -172,8 +210,22 @@ impl ToTypescript for Node {
                 RcDoc::text("[").append(items).append(RcDoc::text("]"))
             }
             Node::Array(value) => {
-                value.to_ts().append(RcDoc::text("[]"))
+                let doc = if value.is_bin_op() {
+                    parens(value.to_ts())
+                } else {
+                    value.to_ts()
+                };
+
+                doc.append(RcDoc::text("[]"))
             }
+            Node::Null => RcDoc::text("null"),
+            Node::Undefined => RcDoc::text("undefined"),
+            Node::Never => RcDoc::text("never"),
+            Node::Any => RcDoc::text("any"),
+            Node::Unknown => RcDoc::text("unknown"),
+            Node::True => RcDoc::text("true"),
+            Node::False => RcDoc::text("false"),
+            Node::Expr(body) => (*body).to_ts(),
         }
     }
 }
@@ -207,15 +259,57 @@ impl ToTypescript for Expr {
     fn to_ts(&self) -> RcDoc<()> {
         match self {
             Expr::Value(node) => node.to_ts(),
-            Expr::BinOp { lhs, op, rhs } => lhs
-                .to_ts()
-                .append(RcDoc::space())
-                .append(match op {
+
+            Expr::BinOp { lhs, op, rhs } => {
+                fn fmt(v: &Expr) -> RcDoc<()> {
+                    match v {
+                        Expr::Value(value) => match **value {
+                            Node::Expr(_) => parens(v.to_ts()),
+                            _ => value.to_ts(),
+                        },
+                        Expr::BinOp { .. } => parens(v.to_ts()),
+                    }
+                }
+
+                let lhs = fmt(lhs);
+                let rhs = fmt(rhs);
+
+                let op = match op {
                     Op::Union => RcDoc::text("|"),
                     Op::Intersection => RcDoc::text("&"),
-                })
-                .append(RcDoc::space())
-                .append(rhs.to_ts()),
+                };
+
+                RcDoc::nil()
+                    .append(lhs)
+                    .append(RcDoc::space())
+                    .append(op)
+                    .append(RcDoc::space())
+                    .append(rhs)
+            }
+        }
+    }
+}
+
+impl ToTypescript for ExtendsExpr {
+    fn to_ts(&self) -> RcDoc {
+        match self {
+            ExtendsExpr::Value(value) => value.to_ts(),
+            ExtendsExpr::Infer(ident) => RcDoc::text("infer").append(RcDoc::space()).append(ident),
+            ExtendsExpr::BinOp { lhs, op, rhs } => match op {
+                ExtendsInfixOp::Extends => lhs
+                    .to_ts()
+                    .append(RcDoc::space())
+                    .append(RcDoc::text("extends"))
+                    .append(RcDoc::space())
+                    .append(rhs.to_ts()),
+                ExtendsInfixOp::NotExtends => todo!(),
+                ExtendsInfixOp::Equals => todo!(),
+                ExtendsInfixOp::NotEquals => todo!(),
+                ExtendsInfixOp::StrictEquals => todo!(),
+                ExtendsInfixOp::StrictNotEquals => todo!(),
+                ExtendsInfixOp::And => todo!(),
+                ExtendsInfixOp::Or => todo!(),
+            },
         }
     }
 }
@@ -227,7 +321,7 @@ lazy_static::lazy_static! {
 
         // Precedence is defined lowest to highest
         PrattParser::new()
-            .op(Op::infix(union, Left) | Op::infix(intersection, Left))
+            .op(Op::infix(union, Right) | Op::infix(intersection, Right))
     };
 
     static ref EXTENDS_PARSER: PrattParser<Rule> = {
@@ -272,6 +366,8 @@ pub fn expr(pairs: Pairs<Rule>) -> Expr {
 
 fn parse_newtype(source: &str) -> Result<Node, Error<Rule>> {
     let pair = NewtypeParser::parse(Rule::program, source)?.next().unwrap();
+
+    println!("{:#?}", pair);
 
     Ok(node(pair))
 }
@@ -359,39 +455,65 @@ fn node(pair: Pair<Rule>) -> Node {
 
             let then = inner_rules.next().map(node).map(Box::new).unwrap();
             let else_ = inner_rules.next().map(node).map(Box::new);
-            Node::IfExpr(then, condition, else_)
+            Node::IfExpr(condition, then, else_)
         }
         Rule::object_literal => object_literal(pair),
         Rule::primitive => {
-            let primitive = match pair.as_rule() {
+            println!("{:#?}", pair);
+            let value = pair.into_inner().next().unwrap();
+            let primitive = match value.as_rule() {
                 Rule::type_string => Primitive::String,
                 Rule::type_number => Primitive::Number,
                 Rule::type_boolean => Primitive::Boolean,
                 _ => unreachable!(
                     "unexpected rule while parsing primitive: {:?}",
-                    pair.as_rule()
+                    value.as_rule()
                 ),
             };
             Node::Primitive(primitive)
         }
         Rule::number => Node::Number(pair.as_str().to_string()),
-        Rule::string => Node::String(pair.as_str().to_string()),
+        Rule::string => {
+            let s = pair.as_str();
+            let s = &s[1..s.len() - 1];
+            let s = s.replace("\\\"", "\"");
+            Node::String(s)
+        }
         Rule::template_string => Node::TemplateString(pair.as_str().to_string()),
         Rule::ident => Node::Ident(pair.as_str().to_string()),
         Rule::never => Node::Never,
         Rule::any => Node::Any,
         Rule::unknown => Node::Unknown,
+        Rule::literal_true => Node::True,
+        Rule::literal_false => Node::False,
+        Rule::null => Node::Null,
+        Rule::undefined => Node::Undefined,
         Rule::tuple => tuple(pair),
         Rule::application => {
             let mut inner = pair.into_inner();
 
             let ident = inner.next().unwrap().as_str().to_string();
 
-            let arguments = inner.next().unwrap().into_inner().map(node).collect();
+            let arguments = inner.map(node).collect();
 
             Node::Application(ident, arguments)
         }
         Rule::EOI => unreachable!("unexpected end of input"),
+        Rule::expr => Node::Expr(expr(pair.into_inner())),
+        Rule::array => {
+            println!("{:#?}", pair);
+            let mut inner = pair.into_inner();
+            let mut value = inner.next().map(node).unwrap();
+
+            // To avoid a left hand recursive rule in the grammar
+            // The rule allows for one or more array modifiers to be applied,
+            // which we nest here.
+            while let Some(_) = inner.next() {
+                value = Node::Array(Box::new(value));
+            }
+
+            value
+        }
         Rule::infer => new_error(
             "Infer operator must be used in an extends expression".to_string(),
             pair,
@@ -441,7 +563,7 @@ fn type_alias(pair: Pair<Rule>) -> Node {
     assert_eq!(Rule::type_parameters, pair.as_rule());
     let type_parameters = pair.into_inner().map(node).collect();
 
-    let body = Box::new(expr(inner));
+    let body = Box::new(inner.next().map(node).unwrap());
 
     Node::TypeAlias(name, type_parameters, body)
 }
@@ -500,6 +622,28 @@ mod tests {
     #[test]
     fn test_parse_literals() {
         assert_typescript!("type A = 1;\n", "type A = 1");
+        assert_typescript!("type A = \"1\";\n", "type A = \"1\"");
+        assert_typescript!("type A = true;\n", "type A = true");
+        assert_typescript!("type A = false;\n", "type A = false");
+        assert_typescript!("type A = null;\n", "type A = null");
+        assert_typescript!("type A = undefined;\n", "type A = undefined");
+    }
+
+    #[test]
+    fn test_parse_bin_ops() {
+        assert_typescript!("type A = 1 | 2;\n", "type A = 1 | 2");
+        assert_typescript!("type A = 1 & 2;\n", "type A = 1 & 2");
+        assert_typescript!("type A = 1 | (2 & 3);\n", "type A = 1 | 2 & 3");
+        assert_typescript!("type A = 1 & (2 | 3);\n", "type A = 1 & 2 | 3");
+        assert_typescript!("type A = (1 | 2) & 3;\n", "type A = (1 | 2) & 3");
+    }
+
+    #[test]
+    fn test_parse_if_expr() {
+        assert_typescript!(
+            "type A = 1 extends number ? 1 : 0;\n",
+            "type A = if 1 <: number then 1 else 0"
+        );
     }
 
     #[test]
@@ -517,9 +661,22 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_tuples() {
+        assert_typescript!("type A = [];\n", "type A = []");
+        assert_typescript!("type A = [1];\n", "type A = [1]");
+        assert_typescript!("type A = [1, 2, 3];\n", "type A = [1, 2, 3]");
+        assert_typescript!("type A = [\"sup\"];\n", "type A = [\"sup\"]");
+    }
+
+    #[test]
     fn test_parse_arrays() {
         assert_typescript!("type A = number[];\n", "type A = number[]");
-        // assert_typescript!("type A = number[][];\n", "type A = number[][]");
+        assert_typescript!("type A = number[];\n", "type A = (number)[]");
+        assert_typescript!("type A = number[][][];\n", "type A = number[][][]");
+        assert_typescript!(
+            "type A = (number | string)[];\n",
+            "type A = (number | string)[]"
+        );
     }
 
     #[test]
@@ -537,8 +694,6 @@ mod tests {
         assert_typescript!("type B = A<B<1>>;\n", "type B = A (B 1)");
         assert_typescript!("type B = A<B, 1>;\n", "type B = A B 1");
     }
-
-
 
     //
     //     #[quickcheck]

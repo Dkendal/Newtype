@@ -2,15 +2,34 @@ program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 
 statement = _{ type_alias }
 
-type_alias = { "type" ~ ident ~ type_parameters ~ "=" ~ expr }
+type_alias = {
+  "type" ~ s ~
+  ident ~ s ~
+  type_parameters ~ s ~
+  "=" ~ s ~
+  expr
+}
 
-type_parameters = { ident* }
+type_parameters = { (ident ~ s)* }
 
-expr = _{ expr1 ~ ( infix ~ expr1 )* }
+expr = { expr1 ~ ( s ~ infix ~ s ~ expr1 )* }
 
-expr1 = _{ prefix* ~ primary }
+expr1 = _{ prefix* ~ s ~ primary }
 
-primary = _{ term | "(" ~ expr ~ ")" }
+primary = _{
+    if_expr
+  | array
+  | application
+  | sub_expr
+}
+
+array = { sub_expr ~ (array_modifier)+ }
+
+array_modifier = @{ "[]" }
+
+application = { ident ~ (s ~ sub_expr)+ }
+
+sub_expr = _{ term | "(" ~ expr ~ ")" }
 
 prefix = _{ infer }
 
@@ -25,20 +44,20 @@ union = @{ "|" }
 intersection = @{ "&" }
 
 term = _{
-    if_expr
-  | top_type
+    top_type
   | bottom_type
   | number
-  | string
+  | undefined
+  | primitive
+  | null
+  | literal_true
+  | literal_false
   | template_string
+  | string
   | ident
   | tuple
   | object_literal
 }
-
-application = { ident ~ arguments }
-
-arguments = { expr* }
 
 tuple = { "[" ~ ( expr ~ ( "," ~ expr )* ) ? ~ "]" }
 
@@ -53,25 +72,46 @@ primitive = {
 }
 
 object_literal = {
-    "{" ~ ((object_property ~ ",")* ~ object_property ~ ","?)? ~ "}"
+  "{" ~ s ~
+  (
+    (
+      object_property ~ s ~
+      "," ~ s
+      )* ~
+    object_property ~ s ~ ","?
+  )? ~ s ~
+  "}"
 }
 
 object_property = {
-    (#readonly = readonly_modifier)? ~
-    #key = ident ~
-    (#optional = optional_modifier)? ~
-    ":" ~
+    (#readonly = readonly_modifier)? ~ s ~
+    #key = ident ~ s ~
+    (#optional = optional_modifier)? ~ s ~
+    ":" ~ s ~
     #value = expr
 }
 
 if_expr = {
-    "if" ~ extends_condition ~ "then" ~ (expr ~ "else" ~ expr)?
+    "if" ~ s ~
+    extends_condition ~ s ~
+    "then" ~ s ~
+    (
+      expr ~ s ~
+      "else" ~ s ~
+      expr
+    )?
 }
 
 extends_condition = { extends_expr }
 
 extends_expr = _{
-    extends_prefix* ~ extends_primary ~ (extends_prefix* ~ extends_infix ~ extends_primary)*
+    extends_prefix* ~ s ~
+    extends_primary ~ s ~
+    (
+      extends_prefix* ~ s ~
+      extends_infix ~ s ~
+      extends_primary ~ s
+    )*
 }
 
 extends_primary = _{
@@ -121,15 +161,55 @@ type_boolean = @{ "boolean" }
 
 type_number = @{ "number" }
 
+undefined = @{ "undefined" }
+
+null = @{ "null" }
+
+literal_true = @{ "true" }
+
+literal_false = @{ "false" }
+
 readonly_modifier = @{ "readonly" }
 
 optional_modifier = @{ "?" }
 
-string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+string = { double_quote_string | single_quote_string }
+
+double_quote_string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+single_quote_string = @{ "'" ~ (!"'" ~ ANY)* ~ "'" }
 
 template_string = @{ "`" ~ (!"`" ~ ANY)* ~ "`" }
 
-ident = @{ !(ASCII_DIGIT) ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
+ident = @{ !keyword ~ !(ASCII_DIGIT) ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
+
+keyword = _{
+    "any"
+  | "class"
+  | "else"
+  | "extends"
+  | "extends"
+  | "false"
+  | "function"
+  | "infer"
+  | "interface"
+  | "never"
+  | "null"
+  | "then"
+  | "true"
+  | "type"
+  | "undefined"
+  | "unknown"
+  | "void"
+  | "number"
+  | "string"
+  | "boolean"
+  | "symbol"
+  | "keyof"
+  | "typeof"
+  | "in"
+}
+
 
 number = @{
     !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT ~ "_")*)?
@@ -144,8 +224,12 @@ number = @{
 // exiting the block DROP
 // }
 
-WHITESPACE = _{
+s = _{ (ws | comment)* }
+
+ws = _{
     NEWLINE
   | " "
   | "\t"
 }
+
+comment = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
