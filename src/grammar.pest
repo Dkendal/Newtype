@@ -93,12 +93,12 @@ object_property = {
 
 if_expr = {
     "if" ~ s ~
-    extends_condition ~ s ~
+    #condition=extends_condition ~ s ~
     "then" ~ s ~
+    #then=expr ~ s ~
     (
-      expr ~ s ~
       "else" ~ s ~
-      expr
+      #else=expr
     )?
 }
 

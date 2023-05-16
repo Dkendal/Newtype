@@ -1,4 +1,5 @@
 #![feature(never_type)]
+#![feature(assert_matches)]
 #![allow(dead_code)]
 
 extern crate alloc;
@@ -20,7 +21,6 @@ use clap::Parser;
 use std::io::Read;
 // use parser::ToTypescript;
 
-
 #[derive(Debug, Parser)]
 #[clap(name = "newtype compiler")]
 struct Args {
@@ -41,14 +41,21 @@ fn main() {
         input
     };
 
-    // let (_, program) = ast::program(&input_source).unwrap();
-    //
-    // // Generate TypeScript code
-    // let ts_code = program.to_ts();
-    //
-    // if let Some(output_filename) = args.output {
-    //     std::fs::write(output_filename, ts_code).unwrap();
-    // } else {
-    //     println!("{}", ts_code);
-    // }
+    let result = parser::parse_newtype(&input_source);
+
+    match result {
+        Ok(result) => {
+            use parser::ToTypescript;
+            let out = result.to_pretty_ts(120);
+
+            if let Some(output_filename) = args.output {
+                std::fs::write(output_filename, out).unwrap();
+            } else {
+                println!("{}", out);
+            }
+        }
+        Err(error) => {
+            eprintln!("{}", error);
+        }
+    }
 }

@@ -117,7 +117,7 @@ fn parens(doc: RcDoc<()>) -> RcDoc<()> {
     surround(doc, "(", ")")
 }
 
-trait ToTypescript {
+pub trait ToTypescript {
     fn to_pretty_ts(&self, width: usize) -> String {
         let mut w = Vec::new();
         self.to_ts().render(width, &mut w).unwrap();
@@ -364,10 +364,8 @@ pub fn expr(pairs: Pairs<Rule>) -> Expr {
         .parse(pairs)
 }
 
-fn parse_newtype(source: &str) -> Result<Node, Error<Rule>> {
+pub fn parse_newtype(source: &str) -> Result<Node, Error<Rule>> {
     let pair = NewtypeParser::parse(Rule::program, source)?.next().unwrap();
-
-    println!("{:#?}", pair);
 
     Ok(node(pair))
 }
@@ -444,18 +442,22 @@ fn node(pair: Pair<Rule>) -> Node {
         }
         Rule::type_alias => type_alias(pair),
         Rule::if_expr => {
-            let mut inner_rules = pair.into_inner();
+            let mut inner = pair.into_inner();
 
-            let condition = inner_rules
-                .next()
-                .map(|pair| pair.into_inner())
-                .map(parse_extends_condition)
+            let condition = inner
+                .find_first_tagged("condition")
+                .map(|p| Box::new(parse_extends_condition(p.into_inner())))
+                .unwrap();
+
+            let then = inner
+                .find_first_tagged("then")
+                .map(node)
                 .map(Box::new)
                 .unwrap();
 
-            let then = inner_rules.next().map(node).map(Box::new).unwrap();
-            let else_ = inner_rules.next().map(node).map(Box::new);
-            Node::IfExpr(condition, then, else_)
+            let els = inner.find_first_tagged("else").map(node).map(Box::new);
+            //
+            Node::IfExpr(condition, then, els)
         }
         Rule::object_literal => object_literal(pair),
         Rule::primitive => {
@@ -569,6 +571,8 @@ fn text(pair: Pair<Rule>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
+
     use pretty_assertions::{assert_eq, assert_ne};
     use quickcheck::TestResult;
 
@@ -576,7 +580,7 @@ mod tests {
 
     macro_rules! join {
         ($($e:expr),*) => {
-            vec![$($e.to_string()),*].join("\n")
+            vec![$($e.to_string()),*].join("\n").as_str()
         };
     }
 
@@ -585,6 +589,14 @@ mod tests {
             let result = parse($source.to_string());
             println!("{:#?}", result);
             assert_eq!($expected, result.to_pretty_ts(usize::MAX));
+        };
+    }
+
+    macro_rules! assert_parse_failure {
+        ($source:expr) => {
+            let result = parse_newtype($source.to_string())
+            println!("{:#?}", result);
+            assert!(result.is_err());
         };
     }
 
@@ -653,11 +665,44 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_statment_indent_sensitive() {
+        assert_matches!(parse_newtype(" type A = 1"), Err(_));
+        // assert_matches!(parse_newtype(join!("type A =", "1")), Err(_));
+    }
+
+    #[test]
     fn test_parse_if_expr() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : 0;\n",
             "type A = if 1 <: number then 1 else 0"
         );
+
+        assert_typescript!(
+            "type A = 1 extends number ? 1 : never;\n",
+            "type A = if 1 <: number then 1"
+        );
+
+        assert_typescript!(
+            "type A = 1 extends number ? 1 : 0;\n",
+            join!("type A = if 1 <: number", "then 1", "else 0")
+        );
+
+        // let result = parse_newtype("type A extends");
+        //
+        // let msg = "expected if";
+        // match result {
+        //     Ok(x) => assert!(
+        //         false,
+        //         "assertion failed: expected error, got:\n{}",
+        //         x.to_pretty_ts(usize::MAX)
+        //     ),
+        //     Err(e) => assert!(
+        //         e.to_string().contains(msg),
+        //         "assertion failed: expected {} in {}",
+        //         msg,
+        //         e
+        //     ),
+        // }
     }
 
     #[test]
