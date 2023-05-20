@@ -1,6 +1,9 @@
 #![feature(never_type)]
 #![feature(assert_matches)]
+#![feature(trait_alias)]
 #![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_macros)]
 
 extern crate alloc;
 extern crate pest;
@@ -15,11 +18,15 @@ extern crate quickcheck;
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
 
+mod ast;
 mod parser;
+mod to_typescript;
+mod simplify;
 
 use clap::Parser;
 use std::io::Read;
-// use parser::ToTypescript;
+use crate::to_typescript::ToTypescript;
+use crate::simplify::Simplify;
 
 #[derive(Debug, Parser)]
 #[clap(name = "newtype compiler")]
@@ -45,7 +52,6 @@ fn main() {
 
     match result {
         Ok(result) => {
-            use parser::ToTypescript;
             let out = result.to_pretty_ts(120);
 
             if let Some(output_filename) = args.output {
