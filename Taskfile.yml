@@ -8,7 +8,7 @@ vars:
 tasks:
   test:
     cmds:
-      - cargo test
+      - cargo test {{.CLI_ARGS}}
     silent: true
     sources:
       - ./src/**/*.rs

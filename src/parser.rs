@@ -23,6 +23,12 @@ pub enum Node {
         Box<Node>,         // then
         Option<Box<Node>>, // else
     ),
+    ExtendsExpr(
+        Box<Node>, // lhs
+        Box<Node>, // rhs
+        Box<Node>, // then
+        Box<Node>, // else
+    ),
     None,
     Error(Error<Rule>),
     ObjectLiteral(Vec<ObjectProperty>),
@@ -128,7 +134,7 @@ pub trait ToTypescript {
 }
 
 impl ToTypescript for Node {
-    fn to_ts(&self) -> RcDoc<()> {
+    fn to_ts<'a>(&self) -> RcDoc<()> {
         match self {
             Node::Program(stmnts) => {
                 let mut doc = RcDoc::nil();
@@ -173,19 +179,24 @@ impl ToTypescript for Node {
             }),
             Node::String(string) => RcDoc::text(string),
             Node::TemplateString(_) => todo!(),
-            Node::IfExpr(cond, then, els) => (**cond)
-                .to_ts()
-                .append(RcDoc::space())
-                .append("?")
-                .append(RcDoc::space())
-                .append(then.to_ts())
-                .append(RcDoc::space())
-                .append(":")
-                .append(RcDoc::space())
-                .append(match els {
-                    Some(els) => els.to_ts(),
-                    None => RcDoc::text("never"),
-                }),
+            Node::IfExpr(cond, then, els) => {
+                let node = explode_if_expr(cond, then, els);
+                let pretty = node.to_ts();
+                pretty.to_owned()
+            }
+                // (*cond)
+                // .to_ts()
+                // .append(RcDoc::space())
+                // .append("?")
+                // .append(RcDoc::space())
+                // .append(then.to_ts())
+                // .append(RcDoc::space())
+                // .append(":")
+                // .append(RcDoc::space())
+                // .append(match els {
+                //     Some(els) => els.to_ts(),
+                //     None => RcDoc::text("never"),
+                // }),
             Node::None => todo!(),
             Node::Error(_) => todo!(),
             Node::ObjectLiteral(props) => {
@@ -226,6 +237,20 @@ impl ToTypescript for Node {
             Node::True => RcDoc::text("true"),
             Node::False => RcDoc::text("false"),
             Node::Expr(body) => (*body).to_ts(),
+            Node::ExtendsExpr(lhs, rhs, then, els) => lhs
+                .to_ts()
+                .append(RcDoc::space())
+                .append("extends")
+                .append(RcDoc::space())
+                .append(rhs.to_ts())
+                .append(RcDoc::space())
+                .append("?")
+                .append(RcDoc::space())
+                .append(then.to_ts())
+                .append(RcDoc::space())
+                .append(":")
+                .append(RcDoc::space())
+                .append(els.to_ts()),
         }
     }
 }
@@ -295,21 +320,7 @@ impl ToTypescript for ExtendsExpr {
         match self {
             ExtendsExpr::Value(value) => value.to_ts(),
             ExtendsExpr::Infer(ident) => RcDoc::text("infer").append(RcDoc::space()).append(ident),
-            ExtendsExpr::BinOp { lhs, op, rhs } => match op {
-                ExtendsInfixOp::Extends => lhs
-                    .to_ts()
-                    .append(RcDoc::space())
-                    .append(RcDoc::text("extends"))
-                    .append(RcDoc::space())
-                    .append(rhs.to_ts()),
-                ExtendsInfixOp::NotExtends => todo!(),
-                ExtendsInfixOp::Equals => todo!(),
-                ExtendsInfixOp::NotEquals => todo!(),
-                ExtendsInfixOp::StrictEquals => todo!(),
-                ExtendsInfixOp::StrictNotEquals => todo!(),
-                ExtendsInfixOp::And => todo!(),
-                ExtendsInfixOp::Or => todo!(),
-            },
+            ExtendsExpr::BinOp {..} => unreachable!(),
         }
     }
 }
@@ -362,6 +373,19 @@ pub fn expr(pairs: Pairs<Rule>) -> Expr {
             }
         })
         .parse(pairs)
+}
+
+fn explode_if_expr(cond: &ExtendsExpr, then: &Node, els: &Option<Box<Node>>) -> Node {
+    Node::ExtendsExpr(
+        Box::new(Node::Number("1".to_string())),
+        Box::new(Node::Number("2".to_string())),
+        Box::new(Node::Number("3".to_string())),
+        Box::new(Node::Number("4".to_string())),
+        // Box::new(then.clone()),
+        // Box::new(els.clone()),
+        // Box::new(then.clone()),
+        // Box::new(els.clone()),
+    )
 }
 
 pub fn parse_newtype(source: &str) -> Result<Node, Error<Rule>> {
@@ -442,7 +466,7 @@ fn node(pair: Pair<Rule>) -> Node {
         }
         Rule::type_alias => type_alias(pair),
         Rule::if_expr => {
-            let mut inner = pair.into_inner();
+            let inner = pair.into_inner();
 
             let condition = inner
                 .find_first_tagged("condition")
@@ -680,6 +704,16 @@ mod tests {
         assert_typescript!(
             "type A = 1 extends number ? 1 : never;\n",
             "type A = if 1 <: number then 1"
+        );
+
+        assert_typescript!(
+            "type A = 1 extends number ? 2 extends number ? 3 : never : never;\n",
+            "type A = if 1 <: number then if 2 <: number then 3"
+        );
+
+        assert_typescript!(
+            "type A = 1 extends number ? 2 extends number ? 3 : never : never;\n",
+            "type A = if 1 <: number && 2 <:3 then 3"
         );
 
         assert_typescript!(
