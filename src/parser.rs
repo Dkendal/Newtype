@@ -149,12 +149,11 @@ fn node(pair: Pair<Rule>) -> Node {
                 .unwrap();
 
             let els = inner.find_first_tagged("else").map(node).map(Box::new);
-            //
+
             Node::IfExpr(condition, then, els)
         }
         Rule::object_literal => object_literal(pair),
         Rule::primitive => {
-            println!("{:#?}", pair);
             let value = pair.into_inner().next().unwrap();
             let primitive = match value.as_rule() {
                 Rule::type_string => Primitive::String,
@@ -191,7 +190,6 @@ fn node(pair: Pair<Rule>) -> Node {
         Rule::EOI => unreachable!("unexpected end of input"),
         Rule::expr => parse_expr(pair.into_inner()),
         Rule::array => {
-            println!("{:#?}", pair);
             let mut inner = pair.into_inner();
             let mut value = inner.next().map(node).unwrap();
 
