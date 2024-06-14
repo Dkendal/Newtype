@@ -1,6 +1,5 @@
-#![feature(never_type)]
+// #![feature(never_type)]
 #![feature(assert_matches)]
-#![feature(trait_alias)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_macros)]
