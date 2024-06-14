@@ -133,26 +133,9 @@ fn node(pair: Pair<Rule>) -> Node {
 
             Node::Program(children)
         }
-        Rule::type_alias => type_alias(pair),
-        Rule::if_expr => {
-            let inner = pair.into_inner();
-
-            let condition = inner
-                .find_first_tagged("condition")
-                .map(|p| Box::new(parse_extends_condition(p.into_inner())))
-                .unwrap();
-
-            let then = inner
-                .find_first_tagged("then")
-                .map(node)
-                .map(Box::new)
-                .unwrap();
-
-            let els = inner.find_first_tagged("else").map(node).map(Box::new);
-
-            Node::IfExpr(condition, then, els)
-        }
-        Rule::object_literal => object_literal(pair),
+        Rule::type_alias => parse_type_alias(pair),
+        Rule::if_expr => parse_if_expr(pair),
+        Rule::object_literal => parse_object_literal(pair),
         Rule::primitive => {
             let value = pair.into_inner().next().unwrap();
             let primitive = match value.as_rule() {
@@ -212,13 +195,32 @@ fn node(pair: Pair<Rule>) -> Node {
     }
 }
 
+fn parse_if_expr(pair: Pair<Rule>) -> Node {
+    let inner = pair.into_inner();
+
+    let condition = inner
+        .find_first_tagged("condition")
+        .map(|p| Box::new(parse_extends_condition(p.into_inner())))
+        .unwrap();
+
+    let then = inner
+        .find_first_tagged("then")
+        .map(node)
+        .map(Box::new)
+        .unwrap();
+
+    let els = inner.find_first_tagged("else").map(node).map(Box::new);
+
+    Node::IfExpr(condition, then, els)
+}
+
 fn tuple(pair: Pair<Rule>) -> Node {
     let items = pair.into_inner().map(node).collect();
 
     Node::Tuple(items)
 }
 
-fn object_literal(pair: Pair<Rule>) -> Node {
+fn parse_object_literal(pair: Pair<Rule>) -> Node {
     let mut object_property_rules = pair.into_inner();
     let mut properties = Vec::new();
 
@@ -259,7 +261,7 @@ fn object_literal(pair: Pair<Rule>) -> Node {
     Node::ObjectLiteral(properties)
 }
 
-fn type_alias(pair: Pair<Rule>) -> Node {
+fn parse_type_alias(pair: Pair<Rule>) -> Node {
     let mut inner = pair.into_inner();
 
     let pair = inner.next().unwrap();
@@ -571,8 +573,11 @@ mod tests {
     }
 
     #[test]
-    fn generics() {
+    fn generics_one_argument() {
         assert_typescript!("type A<x> = x;\n", "type A x = x");
+    }
+
+    fn generics_many_arguments() {
         assert_typescript!("type A<x, y, z> = 1;\n", "type A x y z = 1");
     }
 
