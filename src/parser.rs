@@ -328,117 +328,191 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_primitives() {
+    fn primitive_string() {
         assert_typescript!("type A = string;\n", "type A = string");
+    }
+
+    #[test]
+    fn primitive_number() {
         assert_typescript!("type A = number;\n", "type A = number");
+    }
+
+    #[test]
+    fn primitive_boolean() {
         assert_typescript!("type A = boolean;\n", "type A = boolean");
+    }
+
+    #[test]
+    fn primitive_never() {
         assert_typescript!("type A = never;\n", "type A = never");
+    }
+
+    #[test]
+    fn primitive_any() {
         assert_typescript!("type A = any;\n", "type A = any");
+    }
+
+    #[test]
+    fn primitive_unknown() {
         assert_typescript!("type A = unknown;\n", "type A = unknown");
     }
 
     #[test]
-    fn test_parse_number_literals() {
+    fn number_literal_positive_integer() {
         assert_typescript!("type A = 1;\n", "type A = 1");
+    }
+
+    #[test]
+    fn number_literal_negative_integer() {
         assert_typescript!("type A = -1;\n", "type A = -1");
+    }
+
+    #[test]
+    fn number_literal_negative_integer_with_space() {
         assert_typescript!("type A = - 1;\n", "type A = - 1");
+    }
+
+    #[test]
+    fn number_literal_large_integer() {
         assert_typescript!("type A = 100;\n", "type A = 100");
+    }
+
+    #[test]
+    fn number_literal_integer_with_underscore() {
         assert_typescript!("type A = 1_000;\n", "type A = 1_000");
+    }
+
+    #[test]
+    fn number_literal_decimal_without_fraction() {
         assert_typescript!("type A = 100.;\n", "type A = 100.");
+    }
+
+    #[test]
+    fn number_literal_decimal_with_fraction() {
         assert_typescript!("type A = 100.0;\n", "type A = 100.0");
+    }
+
+    #[test]
+    fn number_literal_decimal_with_fraction_and_underscore() {
         assert_typescript!("type A = 100.000_000;\n", "type A = 100.000_000");
     }
 
     #[test]
-    fn test_parse_string_literals() {
+    fn string_literals() {
         assert_typescript!("type A = \"1\";\n", "type A = \"1\"");
         assert_typescript!("type A = '1';\n", "type A = '1'");
     }
 
-    fn test_parse_template_string_literals() {
+    #[test]
+    fn template_string_literals() {
         assert_typescript!("type A = `1`;\n", "type A = `1`");
     }
 
     #[test]
-    fn test_parse_literals() {
+    fn literal_true() {
         assert_typescript!("type A = true;\n", "type A = true");
+    }
+
+    #[test]
+    fn literal_false() {
         assert_typescript!("type A = false;\n", "type A = false");
+    }
+
+    #[test]
+    fn literal_null() {
         assert_typescript!("type A = null;\n", "type A = null");
+    }
+
+    #[test]
+    fn literal_undefined() {
         assert_typescript!("type A = undefined;\n", "type A = undefined");
     }
 
     #[test]
-    fn test_parse_bin_ops() {
+    fn bin_ops_union() {
         assert_typescript!("type A = 1 | 2;\n", "type A = 1 | 2");
+    }
+
+    #[test]
+    fn bin_ops_intersection() {
         assert_typescript!("type A = 1 & 2;\n", "type A = 1 & 2");
+    }
+
+    #[test]
+    fn bin_ops_union_with_intersection() {
         assert_typescript!("type A = 1 | (2 & 3);\n", "type A = 1 | 2 & 3");
+    }
+
+    #[test]
+    fn bin_ops_intersection_with_union() {
         assert_typescript!("type A = 1 & (2 | 3);\n", "type A = 1 & 2 | 3");
+    }
+
+    #[test]
+    fn bin_ops_grouped_union_and_intersection() {
         assert_typescript!("type A = (1 | 2) & 3;\n", "type A = (1 | 2) & 3");
     }
 
     #[test]
-    fn test_parse_statment_indent_sensitive() {
+    fn statment_indent_sensitive() {
         assert_matches!(parse_newtype(" type A = 1"), Err(_));
         // assert_matches!(parse_newtype(join!("type A =", "1")), Err(_));
     }
 
+    // If case
+
     #[test]
-    fn test_parse_if_expr() {
+    fn if_expr_simple_if_else() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : 0;\n",
             "type A = if 1 <: number then 1 else 0"
         );
+    }
 
+    #[test]
+    fn if_expr_if_without_else() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : never;\n",
             "type A = if 1 <: number then 1"
         );
+    }
 
+    #[test]
+    fn if_expr_nested_if() {
         assert_typescript!(
             "type A = 1 extends number ? 2 extends number ? 3 : never : never;\n",
             "type A = if 1 <: number then if 2 <: number then 3"
         );
+    }
 
+    #[test]
+    fn if_expr_if_with_and_condition() {
         assert_typescript!(
             "type A = 1 extends number ? 2 extends number ? 3 : never : never;\n",
             "type A = if 1 <: number && 2 <:3 then 3"
         );
+    }
 
+    #[test]
+    fn if_expr_joined_conditions() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : 0;\n",
             join!("type A = if 1 <: number", "then 1", "else 0")
         );
-
-        // let result = parse_newtype("type A extends");
-        //
-        // let msg = "expected if";
-        // match result {
-        //     Ok(x) => assert!(
-        //         false,
-        //         "assertion failed: expected error, got:\n{}",
-        //         x.to_pretty_ts(usize::MAX)
-        //     ),
-        //     Err(e) => assert!(
-        //         e.to_string().contains(msg),
-        //         "assertion failed: expected {} in {}",
-        //         msg,
-        //         e
-        //     ),
-        // }
     }
 
     #[test]
-    fn test_parse_object_object_literal_empty() {
+    fn object_object_literal_empty() {
         assert_typescript!("type A = {};\n", "type A = {}");
     }
 
     #[test]
-    fn test_parse_object_literal_one_key() {
+    fn object_literal_one_key() {
         assert_typescript!("type A = {x: 1};\n", "type A = {x: 1}");
     }
 
     #[test]
-    fn test_parse_object_literal_many_keys() {
+    fn object_literal_many_keys() {
         assert_typescript!(
             "type A = {x: 1, y: 2, z: 3};\n",
             "type A = {x: 1, y: 2, z: 3}"
@@ -446,28 +520,52 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_object_literal_readonly_modifier() {
+    fn object_literal_readonly_modifier() {
         assert_typescript!("type A = {readonly x: 1};\n", "type A = {readonly x: 1}");
     }
 
     #[test]
-    fn test_parse_object_literal_optional_modifier() {
+    fn object_literal_optional_modifier() {
         assert_typescript!("type A = {x?: 1};\n", "type A = {x?: 1}");
     }
 
     #[test]
-    fn test_parse_tuples() {
+    fn tuple_empty() {
         assert_typescript!("type A = [];\n", "type A = []");
+    }
+
+    #[test]
+    fn tuple_single_element() {
         assert_typescript!("type A = [1];\n", "type A = [1]");
+    }
+
+    #[test]
+    fn tuple_multiple_elements() {
         assert_typescript!("type A = [1, 2, 3];\n", "type A = [1, 2, 3]");
+    }
+
+    #[test]
+    fn tuple_single_string_element() {
         assert_typescript!("type A = [\"sup\"];\n", "type A = [\"sup\"]");
     }
 
     #[test]
-    fn test_parse_arrays() {
+    fn array_of_numbers() {
         assert_typescript!("type A = number[];\n", "type A = number[]");
+    }
+
+    #[test]
+    fn array_of_numbers_with_parentheses() {
         assert_typescript!("type A = number[];\n", "type A = (number)[]");
+    }
+
+    #[test]
+    fn multidimensional_array_of_numbers() {
         assert_typescript!("type A = number[][][];\n", "type A = number[][][]");
+    }
+
+    #[test]
+    fn array_of_union_types() {
         assert_typescript!(
             "type A = (number | string)[];\n",
             "type A = (number | string)[]"
@@ -475,18 +573,38 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_generics() {
+    fn generics() {
         assert_typescript!("type A<x> = x;\n", "type A x = x");
         assert_typescript!("type A<x, y, z> = 1;\n", "type A x y z = 1");
     }
 
     #[test]
-    fn test_parse_application() {
+    fn application_single_type_argument() {
         assert_typescript!("type B = A<1>;\n", "type B = A 1");
+    }
+
+    #[test]
+    fn application_multiple_type_arguments() {
         assert_typescript!("type B = A<1, 2, 3>;\n", "type B = A 1 2 3");
+    }
+
+    #[test]
+    fn application_type_argument_with_array() {
         assert_typescript!("type B = A<1, []>;\n", "type B = A 1 []");
+    }
+
+    #[test]
+    fn application_multiple_array_type_arguments() {
         assert_typescript!("type B = A<[], [], []>;\n", "type B = A [] [] []");
+    }
+
+    #[test]
+    fn application_nested_type_argument() {
         assert_typescript!("type B = A<B<1>>;\n", "type B = A (B 1)");
+    }
+
+    #[test]
+    fn application_mixed_type_arguments() {
         assert_typescript!("type B = A<B, 1>;\n", "type B = A B 1");
     }
 
