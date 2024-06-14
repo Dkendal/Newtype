@@ -84,9 +84,9 @@ object_literal = {
 }
 
 object_property = {
-    (#readonly = readonly_modifier)? ~ s ~
-    #key = ident ~ s ~
-    (#optional = optional_modifier)? ~ s ~
+    (#readonly=readonly_modifier)? ~ s ~
+    #key=ident ~ s ~
+    (#optional=optional_modifier)? ~ s ~
     ":" ~ s ~
     #value = expr
 }

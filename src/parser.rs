@@ -221,22 +221,41 @@ fn tuple(pair: Pair<Rule>) -> Node {
 }
 
 fn object_literal(pair: Pair<Rule>) -> Node {
-    let mut inner_rules = pair.into_inner();
+    let mut object_property_rules = pair.into_inner();
     let mut properties = Vec::new();
 
-    while let Some(property) = inner_rules.next() {
-        let inner = property.into_inner();
-        let readonly = inner.find_first_tagged("readonly").is_some();
-        let key = inner.find_first_tagged("key").map(text).unwrap();
-        let optional = inner.find_first_tagged("optional").is_some();
-        let value = inner.find_first_tagged("value").map(node).unwrap();
+    while let Some(prop_pair) = object_property_rules.next() {
+        match prop_pair.as_rule() {
+            Rule::object_property => {
+                let inner = prop_pair.into_inner();
 
-        properties.push(ObjectProperty {
-            readonly,
-            optional,
-            key,
-            value,
-        });
+                let readonly = inner.find_first_tagged("readonly").is_some();
+
+                let key = inner
+                    .find_first_tagged("key")
+                    .expect("object property missing key")
+                    .as_str()
+                    .to_string();
+
+                let optional = inner.find_first_tagged("optional").is_some();
+
+                let value = inner
+                    .find_first_tagged("value")
+                    .map(node)
+                    .expect("object property missing value");
+
+                properties.push(ObjectProperty {
+                    readonly,
+                    optional,
+                    key,
+                    value,
+                });
+            }
+            _ => unreachable!(
+                "unexpected rule while parsing object literal: {:?}",
+                prop_pair.as_rule()
+            ),
+        }
     }
 
     Node::ObjectLiteral(properties)
@@ -409,16 +428,30 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_object_literals() {
+    fn test_parse_object_object_literal_empty() {
         assert_typescript!("type A = {};\n", "type A = {}");
+    }
 
+    #[test]
+    fn test_parse_object_literal_one_key() {
+        assert_typescript!("type A = {x: 1};\n", "type A = {x: 1}");
+    }
+
+    #[test]
+    fn test_parse_object_literal_many_keys() {
         assert_typescript!(
             "type A = {x: 1, y: 2, z: 3};\n",
             "type A = {x: 1, y: 2, z: 3}"
         );
+    }
 
-        assert_typescript!("type A = {x: 1};\n", "type A = {x: 1}");
+    #[test]
+    fn test_parse_object_literal_readonly_modifier() {
         assert_typescript!("type A = {readonly x: 1};\n", "type A = {readonly x: 1}");
+    }
+
+    #[test]
+    fn test_parse_object_literal_optional_modifier() {
         assert_typescript!("type A = {x?: 1};\n", "type A = {x?: 1}");
     }
 
