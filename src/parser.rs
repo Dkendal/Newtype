@@ -44,7 +44,7 @@ lazy_static::lazy_static! {
     };
 }
 
-pub fn expr(pairs: Pairs<Rule>) -> Node {
+pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
     EXPR_PARSER
         .map_primary(node)
         .map_infix(|lhs, op, rhs| {
@@ -189,7 +189,7 @@ fn node(pair: Pair<Rule>) -> Node {
             Node::Application(ident, arguments)
         }
         Rule::EOI => unreachable!("unexpected end of input"),
-        Rule::expr => expr(pair.into_inner()),
+        Rule::expr => parse_expr(pair.into_inner()),
         Rule::array => {
             println!("{:#?}", pair);
             let mut inner = pair.into_inner();
