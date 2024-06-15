@@ -299,7 +299,7 @@ mod tests {
     macro_rules! assert_typescript {
         ($expected:expr, $source:expr) => {
             let result = parse($source.to_string());
-            println!("{:#?}", result);
+            println!("AST: {:#?}", result);
             assert_eq!($expected, result.simplify().to_pretty_ts(usize::MAX));
         };
     }

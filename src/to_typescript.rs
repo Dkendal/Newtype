@@ -69,8 +69,8 @@ impl ToTypescript for Node {
             }),
             Node::String(string) => RcDoc::text(string),
             Node::TemplateString(_) => todo!(),
-            Node::IfExpr(cond, then, els) => {
-                unreachable!();
+            Node::IfExpr(_cond, _then, _els) => {
+                unreachable!("IfExpr should be desugared before this point");
             }
             // (*cond)
             // .to_ts()
@@ -163,7 +163,9 @@ impl ToTypescript for Node {
                 .append(RcDoc::space())
                 .append(els.to_ts()),
             Node::Infer(ident) => RcDoc::text("infer").append(RcDoc::space()).append(ident),
-            Node::ExtendsBinOp { .. } => unreachable!(),
+            Node::ExtendsBinOp { .. } => {
+                unreachable!("ExtendsBinOp should be desugared before this point")
+            }
         }
     }
 }
