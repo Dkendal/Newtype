@@ -136,4 +136,22 @@ mod tests {
             parse!(expr, "if a <: b then e else if c <: d then e else f else f").simplify(),
         )
     }
+
+    // #[test]
+    // fn simplify_case() {
+    //     assert_eq!(
+    //         parse!(
+    //             expr,
+    //             r#"
+    //             case A {
+    //                 number => 1,
+    //                 string => 2,
+    //                 _ => 3
+    //             }
+    //             "#
+    //         )
+    //         .simplify(),
+    //         parse!(expr, "1")
+    //     )
+    // }
 }

@@ -7,7 +7,7 @@ pub trait Transform {
 }
 
 impl Transform for Expr {
-    fn transform<T>(&self, f: &T) -> Self
+    fn transform<T>(&self, _f: &T) -> Self
     where
         Self: Clone,
         T: Fn(&Self) -> Self,

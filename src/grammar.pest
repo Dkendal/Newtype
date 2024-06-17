@@ -3,16 +3,16 @@ program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 statement = _{ type_alias }
 
 type_alias = {
-    "type" ~ s ~ #name = ident ~ s ~
-    ("(" ~ s ~ #parameters = type_parameters ~ s ~ ")")? ~ s ~
-    "=" ~ s ~ #body = expr
+    "type" ~ #name = ident ~
+    ("(" ~ #parameters = type_parameters ~ ")")? ~ 
+    "=" ~ #body = expr
 }
 
-type_parameters = { ident ~ (s ~ "," ~ s ~ ident)* }
+type_parameters = { ident ~ ( "," ~ ident)* }
 
-expr = { expr1 ~ (s ~ infix ~ s ~ expr1)* }
+expr = { expr1 ~ ( infix ~ expr1)* }
 
-expr1 = _{ prefix* ~ s ~ primary }
+expr1 = _{ prefix* ~ primary }
 
 primary = _{
     if_expr
@@ -25,9 +25,9 @@ array = { sub_expr ~ (array_modifier)+ }
 
 array_modifier = @{ "[]" }
 
-application = { ident ~ "(" ~ s ~ #arguments = argument_list ~ s ~ ")" }
+application = { ident ~ "(" ~ #arguments = argument_list ~ ")" }
 
-argument_list = { expr ~ (s ~ "," ~ s ~ expr)* }
+argument_list = { expr ~ ( "," ~ expr)* }
 
 sub_expr = _{ term | "(" ~ expr ~ ")" }
 
@@ -72,21 +72,21 @@ primitive = {
 }
 
 object_literal = {
-    "{" ~ s ~ ((object_property ~ s ~ "," ~ s)* ~ object_property ~ s ~ ","?)? ~ s ~ "}"
+    "{" ~ ((object_property ~ ",")* ~ object_property ~ ","?)? ~ "}"
 }
 
 object_property = {
-    (#readonly = readonly_modifier)? ~ s ~ #key = ident ~ s ~ (#optional = optional_modifier)? ~ s ~ ":" ~ s ~ #value = expr
+    (#readonly = readonly_modifier)? ~ #key = ident ~ (#optional = optional_modifier)? ~ ":" ~ #value = expr
 }
 
 if_expr = {
-    "if" ~ s ~ #condition = extends_condition ~ s ~ "then" ~ s ~ #then = expr ~ s ~ ("else" ~ s ~ #else = expr)?
+    "if" ~ #condition = extends_condition ~ "then" ~ #then = expr ~ ("else" ~ #else = expr)?
 }
 
 extends_condition = { extends_expr }
 
 extends_expr = _{
-    extends_prefix* ~ s ~ extends_primary ~ s ~ (extends_prefix* ~ s ~ extends_infix ~ s ~ extends_primary ~ s)*
+    extends_prefix* ~ extends_primary ~ (extends_prefix* ~ extends_infix ~ extends_primary)*
 }
 
 extends_primary = _{
@@ -186,7 +186,7 @@ keyword = _{
 }
 
 number = @{
-    (neg ~ s)? ~ !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT | "_")*)?
+    (neg ~ WHITESPACE*)? ~ !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT | "_")*)?
 }
 
 // NewBlock = _{
@@ -198,12 +198,6 @@ number = @{
 // exiting the block DROP
 // }
 
-s = _{ (ws | comment)* }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
-ws = _{
-    NEWLINE
-  | " "
-  | "\t"
-}
-
-comment = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+WHITESPACE = _{ " " | "\t" | "\n" }

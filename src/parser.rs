@@ -445,12 +445,6 @@ mod tests {
         assert_typescript!("type A = (1 | 2) & 3;", "type A = (1 | 2) & 3");
     }
 
-    #[test]
-    fn statment_indent_sensitive() {
-        assert_matches!(parse_newtype(" type A = 1"), Err(_));
-        // assert_matches!(parse_newtype(join!("type A =", "1")), Err(_));
-    }
-
     // If case
 
     #[test]
