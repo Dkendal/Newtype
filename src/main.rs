@@ -1,5 +1,6 @@
 // #![feature(never_type)]
 #![feature(assert_matches)]
+#![feature(box_patterns)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_macros)]
@@ -19,13 +20,14 @@ extern crate quickcheck_macros;
 
 mod ast;
 mod parser;
-mod to_typescript;
 mod simplify;
+mod to_typescript;
+mod transform;
 
+use crate::simplify::Simplify;
+use crate::to_typescript::ToTypescript;
 use clap::Parser;
 use std::io::Read;
-use crate::to_typescript::ToTypescript;
-use crate::simplify::Simplify;
 
 #[derive(Debug, Parser)]
 #[clap(name = "newtype compiler")]
@@ -63,4 +65,65 @@ fn main() {
             eprintln!("{}", error);
         }
     }
+}
+
+#[cfg(test)]
+pub mod test_support {
+    use crate::{ast::Node, parser::parse_newtype};
+
+    macro_rules! join {
+        ($($e:expr),*) => {
+            vec![$($e.to_string()),*].join("\n").as_str()
+        };
+    }
+    pub(crate) use join;
+
+    macro_rules! parse {
+        ($source:expr) => {
+            crate::parser::parse_node(
+                crate::parser::NewtypeParser::parse(
+                    crate::parser::Rule::program,
+                    &$source.to_string(),
+                )
+                .unwrap()
+                .next()
+                .unwrap(),
+            )
+        };
+        ($rule:expr, $source:expr) => {
+            crate::parser::parse_node(
+                crate::parser::NewtypeParser::parse($rule, &$source.to_string())
+                    .unwrap()
+                    .next()
+                    .unwrap(),
+            )
+        };
+    }
+
+    pub(crate) use parse;
+
+    macro_rules! assert_typescript {
+        ($expected:expr, $source:expr) => {
+            let result = parse!($source);
+            println!("INITIAL AST: {result:#?}");
+            let simplified = result.simplify();
+            println!("SIMPLIFIED AST: {:#?}", simplified);
+            let actual = simplified.to_pretty_ts(usize::MAX);
+            assert_eq!($expected.trim(), actual.trim());
+        };
+    }
+
+    pub(crate) use assert_typescript;
+
+    macro_rules! assert_parse_failure {
+        ($source:expr) => {
+            let result = parse_newtype($source.to_string())
+            println!("{:#?}", result);
+            assert!(result.is_err());
+        };
+    }
+
+    // pub(crate) fn parse(source: String) -> Node {
+    //     parse_newtype(&source).unwrap_or_else(|e| panic!("Failed to parse: {}", e))
+    // }
 }

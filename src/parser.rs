@@ -28,6 +28,7 @@ lazy_static::lazy_static! {
 
         // Precedence is defined lowest to highest
         PrattParser::new()
+            .op(Op::prefix(not))
             .op(
                 Op::infix(or, Left)
                 | Op::infix(and, Left)
@@ -41,12 +42,13 @@ lazy_static::lazy_static! {
                 | Op::infix(strict_not_equals, Left)
             )
             .op(Op::prefix(infer))
+
     };
 }
 
 pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
     EXPR_PARSER
-        .map_primary(node)
+        .map_primary(parse_node)
         .map_infix(|lhs, op, rhs| {
             let op = match op.as_rule() {
                 Rule::union => Op::Union,
@@ -62,23 +64,10 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
         .parse(pairs)
 }
 
-// fn explode_if_expr(cond: &ExtendsExpr, then: &Node, els: &Option<Box<Node>>) -> Node {
-//     Node::ExtendsExpr(
-//         Box::new(Node::Number("1".to_string())),
-//         Box::new(Node::Number("2".to_string())),
-//         Box::new(Node::Number("3".to_string())),
-//         Box::new(Node::Number("4".to_string())),
-//         // Box::new(then.clone()),
-//         // Box::new(els.clone()),
-//         // Box::new(then.clone()),
-//         // Box::new(els.clone()),
-//     )
-// }
-
 pub fn parse_newtype(source: &str) -> Result<Node, Error<Rule>> {
     let pair = NewtypeParser::parse(Rule::program, source)?.next().unwrap();
 
-    Ok(node(pair))
+    Ok(parse_node(pair))
 }
 
 fn new_error(message: String, pair: Pair<Rule>) -> Node {
@@ -90,27 +79,30 @@ fn new_error(message: String, pair: Pair<Rule>) -> Node {
 
 fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
     EXTENDS_PARSER
-        .map_primary(node)
-        .map_prefix(|op, primary| match op.as_rule() {
-            Rule::infer => match primary {
-                Node::Ident(ident) => Node::Infer(ident.to_string()),
-                _ => new_error("Only identifiers may be inferred".to_string(), op),
-            },
-            _ => unreachable!(),
+        .map_primary(parse_node)
+        .map_prefix(|op, primary_node| {
+            let op = match op.as_rule() {
+                Rule::infer => PrefixOp::Infer,
+                Rule::not => PrefixOp::Not,
+                rule => unreachable!("parse expected prefix operation, found {:?}", rule),
+            };
+
+            Node::ExtendsPrefixOp {
+                op,
+                value: Box::new(primary_node),
+            }
         })
         .map_infix(|lhs, op, rhs| {
             let op = match op.as_rule() {
-                Rule::extends => ExtendsInfixOp::Extends,
-                Rule::not_extends => ExtendsInfixOp::NotExtends,
-                Rule::equals => ExtendsInfixOp::Equals,
-                Rule::not_equals => ExtendsInfixOp::NotEquals,
-                Rule::strict_equals => ExtendsInfixOp::StrictEquals,
-                Rule::strict_not_equals => ExtendsInfixOp::StrictNotEquals,
-                Rule::and => ExtendsInfixOp::And,
-                rule => unreachable!(
-                    "ExtendsExpr::parse expected infix operation, found {:?}",
-                    rule
-                ),
+                Rule::extends => InfixOp::Extends,
+                Rule::not_extends => InfixOp::NotExtends,
+                Rule::equals => InfixOp::Equals,
+                Rule::not_equals => InfixOp::NotEquals,
+                Rule::strict_equals => InfixOp::StrictEquals,
+                Rule::strict_not_equals => InfixOp::StrictNotEquals,
+                Rule::and => InfixOp::And,
+                Rule::or => InfixOp::Or,
+                rule => unreachable!("Expected infix operation, found {:?}", rule),
             };
             Node::ExtendsBinOp {
                 lhs: Box::new(lhs),
@@ -121,14 +113,13 @@ fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
         .parse(pairs)
 }
 
-fn node(pair: Pair<Rule>) -> Node {
+pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
     match pair.as_rule() {
-        // Rule::program => Node::Program(pair.into_inner().map(parse_node).collect()),
         Rule::program => {
             let children: Vec<_> = pair
                 .into_inner()
                 .filter(|pair| pair.as_rule() != Rule::EOI) // Remove the end of input token
-                .map(node)
+                .map(parse_node)
                 .collect();
 
             Node::Program(children)
@@ -139,9 +130,9 @@ fn node(pair: Pair<Rule>) -> Node {
         Rule::primitive => {
             let value = pair.into_inner().next().unwrap();
             let primitive = match value.as_rule() {
-                Rule::type_string => Primitive::String,
-                Rule::type_number => Primitive::Number,
-                Rule::type_boolean => Primitive::Boolean,
+                Rule::type_string => PrimitiveType::String,
+                Rule::type_number => PrimitiveType::Number,
+                Rule::type_boolean => PrimitiveType::Boolean,
                 _ => unreachable!(
                     "unexpected rule while parsing primitive: {:?}",
                     value.as_rule()
@@ -164,17 +155,23 @@ fn node(pair: Pair<Rule>) -> Node {
         Rule::application => {
             let mut inner = pair.into_inner();
 
-            let ident = inner.next().map(text).unwrap();
+            let identifier = inner.next().map(text).unwrap();
 
-            let arguments = inner.map(node).collect();
+            let arguments_pair = inner
+                .find_first_tagged("arguments")
+                .expect("application missing arguments");
 
-            Node::Application(ident, arguments)
+            let arguments = arguments_pair.into_inner().map(parse_node).collect();
+
+            println!(">> {arguments:#?}");
+
+            Node::Application(identifier, arguments)
         }
         Rule::EOI => unreachable!("unexpected end of input"),
         Rule::expr => parse_expr(pair.into_inner()),
         Rule::array => {
             let mut inner = pair.into_inner();
-            let mut value = inner.next().map(node).unwrap();
+            let mut value = inner.next().map(parse_node).unwrap();
 
             // To avoid a left hand recursive rule in the grammar
             // The rule allows for one or more array modifiers to be applied,
@@ -205,17 +202,34 @@ fn parse_if_expr(pair: Pair<Rule>) -> Node {
 
     let then = inner
         .find_first_tagged("then")
-        .map(node)
+        .map(parse_node)
         .map(Box::new)
         .unwrap();
 
-    let els = inner.find_first_tagged("else").map(node).map(Box::new);
+    let else_ = inner
+        .find_first_tagged("else")
+        .map(parse_node)
+        .map(Box::new)
+        .unwrap_or(Box::new(Node::Never));
 
-    Node::IfExpr(condition, then, els)
+    match *condition {
+        // If the condition is a binary operation, we can desugar it into an extends expression
+        Node::ExtendsBinOp {
+            op: InfixOp::Extends,
+            lhs,
+            rhs,
+        } => Node::ExtendsExpr(lhs, rhs, then, else_),
+
+        // Other conditions are desugared later in the simplification step
+        Node::ExtendsBinOp { .. } | Node::ExtendsPrefixOp { .. } => {
+            Node::IfExpr(condition, then, Some(else_))
+        }
+        _ => unreachable!(),
+    }
 }
 
 fn tuple(pair: Pair<Rule>) -> Node {
-    let items = pair.into_inner().map(node).collect();
+    let items = pair.into_inner().map(parse_node).collect();
 
     Node::Tuple(items)
 }
@@ -241,7 +255,7 @@ fn parse_object_literal(pair: Pair<Rule>) -> Node {
 
                 let value = inner
                     .find_first_tagged("value")
-                    .map(node)
+                    .map(parse_node)
                     .expect("object property missing value");
 
                 properties.push(ObjectProperty {
@@ -262,17 +276,24 @@ fn parse_object_literal(pair: Pair<Rule>) -> Node {
 }
 
 fn parse_type_alias(pair: Pair<Rule>) -> Node {
-    let mut inner = pair.into_inner();
+    let inner = pair.into_inner();
 
-    let pair = inner.next().unwrap();
-    assert_eq!(Rule::ident, pair.as_rule());
-    let name = pair.as_str().to_string();
+    let name = inner
+        .find_first_tagged("name")
+        .expect("type alias missing name")
+        .as_str()
+        .to_string();
 
-    let pair = inner.next().unwrap();
-    assert_eq!(Rule::type_parameters, pair.as_rule());
-    let type_parameters = pair.into_inner().map(node).collect();
+    let type_parameters = inner
+        .find_first_tagged("parameters")
+        .map(|p| p.into_inner().map(parse_node).collect())
+        .unwrap_or_else(Vec::new);
 
-    let body = Box::new(inner.next().map(node).unwrap());
+    let body = inner
+        .find_first_tagged("body")
+        .map(parse_node)
+        .map(Box::new)
+        .unwrap();
 
     Node::TypeAlias(name, type_parameters, body)
 }
@@ -283,174 +304,145 @@ fn text(pair: Pair<Rule>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches::assert_matches;
-
+    use super::*;
+    use crate::test_support::*;
     use pretty_assertions::{assert_eq, assert_ne};
     use quickcheck::TestResult;
-
-    use super::*;
-
-    macro_rules! join {
-        ($($e:expr),*) => {
-            vec![$($e.to_string()),*].join("\n").as_str()
-        };
-    }
-
-    macro_rules! assert_typescript {
-        ($expected:expr, $source:expr) => {
-            let result = parse($source.to_string());
-            println!("AST: {:#?}", result);
-            assert_eq!($expected, result.simplify().to_pretty_ts(usize::MAX));
-        };
-    }
-
-    macro_rules! assert_parse_failure {
-        ($source:expr) => {
-            let result = parse_newtype($source.to_string())
-            println!("{:#?}", result);
-            assert!(result.is_err());
-        };
-    }
-
-    macro_rules! inspect {
-        ($source:expr) => {
-            println!("{:#?}", parse($source.to_string()));
-            assert!(false)
-        };
-    }
+    use std::assert_matches::assert_matches;
 
     fn s(input: &str) -> String {
         input.to_string()
     }
 
-    fn parse(source: String) -> Node {
-        parse_newtype(&source).unwrap_or_else(|e| panic!("ERROR {}", e))
-    }
+    // #[test]
+    // fn infer() {
+    //     assert_typescript!("", "type A = ?x");
+    // }
 
     #[test]
     fn primitive_string() {
-        assert_typescript!("type A = string;\n", "type A = string");
+        assert_typescript!("type A = string;", "type A = string");
     }
 
     #[test]
     fn primitive_number() {
-        assert_typescript!("type A = number;\n", "type A = number");
+        assert_typescript!("type A = number;", "type A = number");
     }
 
     #[test]
     fn primitive_boolean() {
-        assert_typescript!("type A = boolean;\n", "type A = boolean");
+        assert_typescript!("type A = boolean;", "type A = boolean");
     }
 
     #[test]
     fn primitive_never() {
-        assert_typescript!("type A = never;\n", "type A = never");
+        assert_typescript!("type A = never;", "type A = never");
     }
 
     #[test]
     fn primitive_any() {
-        assert_typescript!("type A = any;\n", "type A = any");
+        assert_typescript!("type A = any;", "type A = any");
     }
 
     #[test]
     fn primitive_unknown() {
-        assert_typescript!("type A = unknown;\n", "type A = unknown");
+        assert_typescript!("type A = unknown;", "type A = unknown");
     }
 
     #[test]
     fn number_literal_positive_integer() {
-        assert_typescript!("type A = 1;\n", "type A = 1");
+        assert_typescript!("type A = 1;", "type A = 1");
     }
 
     #[test]
     fn number_literal_negative_integer() {
-        assert_typescript!("type A = -1;\n", "type A = -1");
+        assert_typescript!("type A = -1;", "type A = -1");
     }
 
     #[test]
     fn number_literal_negative_integer_with_space() {
-        assert_typescript!("type A = - 1;\n", "type A = - 1");
+        assert_typescript!("type A = - 1;", "type A = - 1");
     }
 
     #[test]
     fn number_literal_large_integer() {
-        assert_typescript!("type A = 100;\n", "type A = 100");
+        assert_typescript!("type A = 100;", "type A = 100");
     }
 
     #[test]
     fn number_literal_integer_with_underscore() {
-        assert_typescript!("type A = 1_000;\n", "type A = 1_000");
+        assert_typescript!("type A = 1_000;", "type A = 1_000");
     }
 
     #[test]
     fn number_literal_decimal_without_fraction() {
-        assert_typescript!("type A = 100.;\n", "type A = 100.");
+        assert_typescript!("type A = 100.;", "type A = 100.");
     }
 
     #[test]
     fn number_literal_decimal_with_fraction() {
-        assert_typescript!("type A = 100.0;\n", "type A = 100.0");
+        assert_typescript!("type A = 100.0;", "type A = 100.0");
     }
 
     #[test]
     fn number_literal_decimal_with_fraction_and_underscore() {
-        assert_typescript!("type A = 100.000_000;\n", "type A = 100.000_000");
+        assert_typescript!("type A = 100.000_000;", "type A = 100.000_000");
     }
 
     #[test]
     fn string_literals() {
-        assert_typescript!("type A = \"1\";\n", "type A = \"1\"");
-        assert_typescript!("type A = '1';\n", "type A = '1'");
+        assert_typescript!("type A = \"1\";", "type A = \"1\"");
+        assert_typescript!("type A = '1';", "type A = '1'");
     }
 
     #[test]
     fn template_string_literals() {
-        assert_typescript!("type A = `1`;\n", "type A = `1`");
+        assert_typescript!("type A = `1`;", "type A = `1`");
     }
 
     #[test]
     fn literal_true() {
-        assert_typescript!("type A = true;\n", "type A = true");
+        assert_typescript!("type A = true;", "type A = true");
     }
 
     #[test]
     fn literal_false() {
-        assert_typescript!("type A = false;\n", "type A = false");
+        assert_typescript!("type A = false;", "type A = false");
     }
 
     #[test]
     fn literal_null() {
-        assert_typescript!("type A = null;\n", "type A = null");
+        assert_typescript!("type A = null;", "type A = null");
     }
 
     #[test]
     fn literal_undefined() {
-        assert_typescript!("type A = undefined;\n", "type A = undefined");
+        assert_typescript!("type A = undefined;", "type A = undefined");
     }
 
     #[test]
     fn bin_ops_union() {
-        assert_typescript!("type A = 1 | 2;\n", "type A = 1 | 2");
+        assert_typescript!("type A = 1 | 2;", "type A = 1 | 2");
     }
 
     #[test]
     fn bin_ops_intersection() {
-        assert_typescript!("type A = 1 & 2;\n", "type A = 1 & 2");
+        assert_typescript!("type A = 1 & 2;", "type A = 1 & 2");
     }
 
     #[test]
     fn bin_ops_union_with_intersection() {
-        assert_typescript!("type A = 1 | (2 & 3);\n", "type A = 1 | 2 & 3");
+        assert_typescript!("type A = 1 | (2 & 3);", "type A = 1 | 2 & 3");
     }
 
     #[test]
     fn bin_ops_intersection_with_union() {
-        assert_typescript!("type A = 1 & (2 | 3);\n", "type A = 1 & 2 | 3");
+        assert_typescript!("type A = 1 & (2 | 3);", "type A = 1 & 2 | 3");
     }
 
     #[test]
     fn bin_ops_grouped_union_and_intersection() {
-        assert_typescript!("type A = (1 | 2) & 3;\n", "type A = (1 | 2) & 3");
+        assert_typescript!("type A = (1 | 2) & 3;", "type A = (1 | 2) & 3");
     }
 
     #[test]
@@ -464,15 +456,23 @@ mod tests {
     #[test]
     fn if_expr_simple_if_else() {
         assert_typescript!(
-            "type A = 1 extends number ? 1 : 0;\n",
+            "type A = 1 extends number ? 1 : 0;",
             "type A = if 1 <: number then 1 else 0"
         );
     }
 
+    // #[test]
+    // fn if_expr_with_negation() {
+    //     assert_typescript!(
+    //         "type A = 1 extends number ? never : 1;",
+    //         "type A = if not 1 <: number then 1"
+    //     );
+    // }
+
     #[test]
     fn if_expr_if_without_else() {
         assert_typescript!(
-            "type A = 1 extends number ? 1 : never;\n",
+            "type A = 1 extends number ? 1 : never;",
             "type A = if 1 <: number then 1"
         );
     }
@@ -480,135 +480,144 @@ mod tests {
     #[test]
     fn if_expr_nested_if() {
         assert_typescript!(
-            "type A = 1 extends number ? 2 extends number ? 3 : never : never;\n",
+            "type A = 1 extends number ? 2 extends number ? 3 : never : never;",
             "type A = if 1 <: number then if 2 <: number then 3"
         );
     }
 
     #[test]
-    fn if_expr_if_with_and_condition() {
+    fn if_not_extends() {
         assert_typescript!(
-            "type A = 1 extends number ? 2 extends number ? 3 : never : never;\n",
-            "type A = if 1 <: number && 2 <:3 then 3"
+            "type A = a extends b ? d : c;",
+            "type A = if not a <: b then c else d"
+        );
+    }
+
+    #[test]
+    fn if_and() {
+        assert_typescript!(
+            "type A = a extends b ? c extends d ? e : f : f;",
+            "type A = if a <: b and c <: d then e else f"
         );
     }
 
     #[test]
     fn if_expr_joined_conditions() {
         assert_typescript!(
-            "type A = 1 extends number ? 1 : 0;\n",
+            "type A = 1 extends number ? 1 : 0;",
             join!("type A = if 1 <: number", "then 1", "else 0")
         );
     }
 
     #[test]
     fn object_object_literal_empty() {
-        assert_typescript!("type A = {};\n", "type A = {}");
+        assert_typescript!("type A = {};", "type A = {}");
     }
 
     #[test]
     fn object_literal_one_key() {
-        assert_typescript!("type A = {x: 1};\n", "type A = {x: 1}");
+        assert_typescript!("type A = {x: 1};", "type A = {x: 1}");
     }
 
     #[test]
     fn object_literal_many_keys() {
         assert_typescript!(
-            "type A = {x: 1, y: 2, z: 3};\n",
+            "type A = {x: 1, y: 2, z: 3};",
             "type A = {x: 1, y: 2, z: 3}"
         );
     }
 
     #[test]
     fn object_literal_readonly_modifier() {
-        assert_typescript!("type A = {readonly x: 1};\n", "type A = {readonly x: 1}");
+        assert_typescript!("type A = {readonly x: 1};", "type A = {readonly x: 1}");
     }
 
     #[test]
     fn object_literal_optional_modifier() {
-        assert_typescript!("type A = {x?: 1};\n", "type A = {x?: 1}");
+        assert_typescript!("type A = {x?: 1};", "type A = {x?: 1}");
     }
 
     #[test]
     fn tuple_empty() {
-        assert_typescript!("type A = [];\n", "type A = []");
+        assert_typescript!("type A = [];", "type A = []");
     }
 
     #[test]
     fn tuple_single_element() {
-        assert_typescript!("type A = [1];\n", "type A = [1]");
+        assert_typescript!("type A = [1];", "type A = [1]");
     }
 
     #[test]
     fn tuple_multiple_elements() {
-        assert_typescript!("type A = [1, 2, 3];\n", "type A = [1, 2, 3]");
+        assert_typescript!("type A = [1, 2, 3];", "type A = [1, 2, 3]");
     }
 
     #[test]
     fn tuple_single_string_element() {
-        assert_typescript!("type A = [\"sup\"];\n", "type A = [\"sup\"]");
+        assert_typescript!(r#"type A = ["sup"];"#, r#"type A = ["sup"]"#);
     }
 
     #[test]
     fn array_of_numbers() {
-        assert_typescript!("type A = number[];\n", "type A = number[]");
+        assert_typescript!("type A = number[];", "type A = number[]");
     }
 
     #[test]
     fn array_of_numbers_with_parentheses() {
-        assert_typescript!("type A = number[];\n", "type A = (number)[]");
+        assert_typescript!("type A = number[];", "type A = (number)[]");
     }
 
     #[test]
     fn multidimensional_array_of_numbers() {
-        assert_typescript!("type A = number[][][];\n", "type A = number[][][]");
+        assert_typescript!("type A = number[][][];", "type A = number[][][]");
     }
 
     #[test]
     fn array_of_union_types() {
         assert_typescript!(
-            "type A = (number | string)[];\n",
+            "type A = (number | string)[];",
             "type A = (number | string)[]"
         );
     }
 
     #[test]
     fn generics_one_argument() {
-        assert_typescript!("type A<x> = x;\n", "type A x = x");
+        assert_typescript!("type A<x> = x;", "type A(x) = x");
     }
 
+    #[test]
     fn generics_many_arguments() {
-        assert_typescript!("type A<x, y, z> = 1;\n", "type A x y z = 1");
+        assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) = 1");
     }
 
     #[test]
     fn application_single_type_argument() {
-        assert_typescript!("type B = A<1>;\n", "type B = A 1");
+        assert_typescript!("type B = A<1>;", "type B = A(1)");
     }
 
     #[test]
     fn application_multiple_type_arguments() {
-        assert_typescript!("type B = A<1, 2, 3>;\n", "type B = A 1 2 3");
+        assert_typescript!("type B = A<1, 2, 3>;", "type B = A(1, 2, 3)");
     }
 
     #[test]
     fn application_type_argument_with_array() {
-        assert_typescript!("type B = A<1, []>;\n", "type B = A 1 []");
+        assert_typescript!("type B = A<1, []>;", "type B = A(1, [])");
     }
 
     #[test]
     fn application_multiple_array_type_arguments() {
-        assert_typescript!("type B = A<[], [], []>;\n", "type B = A [] [] []");
+        assert_typescript!("type B = A<[], [], []>;", "type B = A([], [], [])");
     }
 
     #[test]
     fn application_nested_type_argument() {
-        assert_typescript!("type B = A<B<1>>;\n", "type B = A (B 1)");
+        assert_typescript!("type B = A<B<1>>;", "type B = A(B(1))");
     }
 
     #[test]
     fn application_mixed_type_arguments() {
-        assert_typescript!("type B = A<B, 1>;\n", "type B = A B 1");
+        assert_typescript!("type B = A<B, 1>;", "type B = A(B, 1)");
     }
 
     //

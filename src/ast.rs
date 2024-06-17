@@ -15,7 +15,7 @@ pub enum Node {
     },
     Ident(String),
     Number(String),
-    Primitive(Primitive),
+    Primitive(PrimitiveType),
     String(String),
     TemplateString(String),
     IfExpr(
@@ -23,10 +23,13 @@ pub enum Node {
         Box<Node>,         // then
         Option<Box<Node>>, // else
     ),
-    Infer(String),
+    ExtendsPrefixOp {
+        op: PrefixOp,
+        value: Box<Node>,
+    },
     ExtendsBinOp {
         lhs: Box<Node>,
-        op: ExtendsInfixOp,
+        op: InfixOp,
         rhs: Box<Node>,
     },
     ExtendsExpr(
@@ -35,7 +38,6 @@ pub enum Node {
         Box<Node>, // then
         Box<Node>, // else
     ),
-    None,
     Error(ParserError),
     ObjectLiteral(Vec<ObjectProperty>),
     Application(String, Vec<Node>),
@@ -76,30 +78,20 @@ pub enum Op {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Primitive {
+pub enum PrimitiveType {
     Boolean,
     Number,
     String,
 }
 
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub enum ExtendsExpr {
-//     Value(Box<Node>),
-//     Infer(String),
-//     ExtendsBinOp {
-//         lhs: Box<ExtendsExpr>,
-//         op: ExtendsInfixOp,
-//         rhs: Box<ExtendsExpr>,
-//     },
-// }
-
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ExtendsPrefixOp {
-    Infer(String),
+pub enum PrefixOp {
+    Infer,
+    Not
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ExtendsInfixOp {
+pub enum InfixOp {
     Extends,
     NotExtends,
     Equals,

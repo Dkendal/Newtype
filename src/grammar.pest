@@ -3,16 +3,14 @@ program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 statement = _{ type_alias }
 
 type_alias = {
-  "type" ~ s ~
-  ident ~ s ~
-  type_parameters ~ s ~
-  "=" ~ s ~
-  expr
+    "type" ~ s ~ #name = ident ~ s ~
+    ("(" ~ s ~ #parameters = type_parameters ~ s ~ ")")? ~ s ~
+    "=" ~ s ~ #body = expr
 }
 
-type_parameters = { (ident ~ s)* }
+type_parameters = { ident ~ (s ~ "," ~ s ~ ident)* }
 
-expr = { expr1 ~ ( s ~ infix ~ s ~ expr1 )* }
+expr = { expr1 ~ (s ~ infix ~ s ~ expr1)* }
 
 expr1 = _{ prefix* ~ s ~ primary }
 
@@ -27,7 +25,9 @@ array = { sub_expr ~ (array_modifier)+ }
 
 array_modifier = @{ "[]" }
 
-application = { ident ~ (s ~ sub_expr)+ }
+application = { ident ~ "(" ~ s ~ #arguments = argument_list ~ s ~ ")" }
+
+argument_list = { expr ~ (s ~ "," ~ s ~ expr)* }
 
 sub_expr = _{ term | "(" ~ expr ~ ")" }
 
@@ -59,7 +59,7 @@ term = _{
   | object_literal
 }
 
-tuple = { "[" ~ ( expr ~ ( "," ~ expr )* ) ? ~ "]" }
+tuple = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 
 top_type = _{ any | unknown }
 
@@ -72,46 +72,21 @@ primitive = {
 }
 
 object_literal = {
-  "{" ~ s ~
-  (
-    (
-      object_property ~ s ~
-      "," ~ s
-      )* ~
-    object_property ~ s ~ ","?
-  )? ~ s ~
-  "}"
+    "{" ~ s ~ ((object_property ~ s ~ "," ~ s)* ~ object_property ~ s ~ ","?)? ~ s ~ "}"
 }
 
 object_property = {
-    (#readonly=readonly_modifier)? ~ s ~
-    #key=ident ~ s ~
-    (#optional=optional_modifier)? ~ s ~
-    ":" ~ s ~
-    #value = expr
+    (#readonly = readonly_modifier)? ~ s ~ #key = ident ~ s ~ (#optional = optional_modifier)? ~ s ~ ":" ~ s ~ #value = expr
 }
 
 if_expr = {
-    "if" ~ s ~
-    #condition=extends_condition ~ s ~
-    "then" ~ s ~
-    #then=expr ~ s ~
-    (
-      "else" ~ s ~
-      #else=expr
-    )?
+    "if" ~ s ~ #condition = extends_condition ~ s ~ "then" ~ s ~ #then = expr ~ s ~ ("else" ~ s ~ #else = expr)?
 }
 
 extends_condition = { extends_expr }
 
 extends_expr = _{
-    extends_prefix* ~ s ~
-    extends_primary ~ s ~
-    (
-      extends_prefix* ~ s ~
-      extends_infix ~ s ~
-      extends_primary ~ s
-    )*
+    extends_prefix* ~ s ~ extends_primary ~ s ~ (extends_prefix* ~ s ~ extends_infix ~ s ~ extends_primary ~ s)*
 }
 
 extends_primary = _{
@@ -131,8 +106,6 @@ extends_infix = _{
   | or
 }
 
-not = @{ "!" }
-
 extends = @{ "<:" }
 
 not_extends = @{ "!<:" }
@@ -145,9 +118,11 @@ strict_equals = @{ "==" }
 
 strict_not_equals = @{ "!==" }
 
-and = @{ "&&" }
+and = @{ "and" }
 
-or = @{ "||" }
+or = @{ "or" }
+
+not = @{ "not" }
 
 any = @{ "any" }
 
@@ -210,15 +185,8 @@ keyword = _{
   | "in"
 }
 
-
 number = @{
-    (neg ~ s)? ~
-    !"_" ~
-    (ASCII_DIGIT | "_")+ ~
-    (
-      "." ~
-      !"_" ~
-      (ASCII_DIGIT | "_")*)?
+    (neg ~ s)? ~ !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT | "_")*)?
 }
 
 // NewBlock = _{

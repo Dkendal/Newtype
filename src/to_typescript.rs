@@ -63,12 +63,12 @@ impl ToTypescript for Node {
             Node::Ident(ident) => RcDoc::text(ident),
             Node::Number(number) => RcDoc::text(number),
             Node::Primitive(primitive) => RcDoc::text(match primitive {
-                Primitive::Boolean => "boolean",
-                Primitive::Number => "number",
-                Primitive::String => "string",
+                PrimitiveType::Boolean => "boolean",
+                PrimitiveType::Number => "number",
+                PrimitiveType::String => "string",
             }),
             Node::String(string) => RcDoc::text(string),
-            Node::TemplateString(_) => todo!(),
+            Node::TemplateString(string) => RcDoc::text(string),
             Node::IfExpr(_cond, _then, _els) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
@@ -81,11 +81,6 @@ impl ToTypescript for Node {
             // .append(RcDoc::space())
             // .append(":")
             // .append(RcDoc::space())
-            // .append(match els {
-            //     Some(els) => els.to_ts(),
-            //     None => RcDoc::text("never"),
-            // }),
-            Node::None => todo!(),
             Node::Error(_) => todo!(),
             Node::ObjectLiteral(props) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
@@ -162,10 +157,10 @@ impl ToTypescript for Node {
                 .append(":")
                 .append(RcDoc::space())
                 .append(els.to_ts()),
-            Node::Infer(ident) => RcDoc::text("infer").append(RcDoc::space()).append(ident),
             Node::ExtendsBinOp { .. } => {
                 unreachable!("ExtendsBinOp should be desugared before this point")
             }
+            Node::ExtendsPrefixOp { op, value } => todo!(),
         }
     }
 }

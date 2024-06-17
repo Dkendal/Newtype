@@ -1,130 +1,147 @@
 use crate::ast::*;
+use crate::transform::*;
 
+/**
+ * Simplification is a desugaring process that removes newtype specific language features,
+ * replacing them with typescript compatible constructs.
+ */
 pub trait Simplify {
     fn simplify(&self) -> Self;
 }
 
-pub trait Transform {
-    fn transform<T>(&self, f: &T) -> Self
-    where
-        T: Fn(&Self) -> Self;
+fn expand_conditional(condition: &Node, then: &Node, else_: &Node) -> Node {
+    match condition {
+        // Unary operators
+        Node::ExtendsPrefixOp { op, value } => {
+            match op {
+                // Swap `then` and `else` branches
+                PrefixOp::Not => expand_conditional(value, else_, then),
+                _ => todo!(),
+            }
+        }
+        // Binary operators
+        Node::ExtendsBinOp { lhs, op, rhs } => match op {
+            // Equivalent to `lhs extends rhs ? then : else`
+            InfixOp::Extends => Node::ExtendsExpr(
+                lhs.clone(),
+                rhs.clone(),
+                Box::new(then.clone()),
+                Box::new(else_.clone()),
+            ),
+            InfixOp::NotExtends => Node::ExtendsExpr(
+                lhs.clone(),
+                rhs.clone(),
+                Box::new(else_.clone()),
+                Box::new(then.clone()),
+            ),
+            InfixOp::Equals => todo!(),
+            InfixOp::NotEquals => todo!(),
+            InfixOp::StrictEquals => todo!(),
+            InfixOp::StrictNotEquals => todo!(),
+            InfixOp::And => {
+                let then = expand_conditional(rhs, then, else_);
+                expand_conditional(lhs, &then, else_)
+            }
+            InfixOp::Or => {
+                let else_ = expand_conditional(rhs, then, else_);
+                expand_conditional(lhs, then, &else_)
+            }
+        },
+        _ => panic!("Expected extends operator, found {condition:#?}"),
+    }
 }
 
 impl Simplify for Node {
-    /**
-     * Simplification is a desugaring process that removes newtype specific language features,
-     * replacing them with typescript compatible constructs.
-     */
     fn simplify(&self) -> Self {
         self.transform(&|node| match node {
             // Replace all instances of `IfExpr` with `ExtendsExpr`
             Node::IfExpr(op, then, else_) => {
-                let (lhs, rhs) = match *op.clone() {
-                    Node::ExtendsBinOp { lhs, op, rhs } => (lhs, rhs),
-                    _ => panic!("Expected ExtendsBinOp, found {op:#?}"),
-                };
-
                 let else_ = match else_ {
                     Some(v) => v.clone(),
                     None => Box::new(Node::Never),
                 };
 
-                Node::ExtendsExpr(lhs.clone(), rhs.clone(), then.clone(), else_.clone())
+                expand_conditional(op, then, &else_)
             }
-            _ => node.clone(),
-        })
-    }
-}
-
-impl Transform for Expr {
-    fn transform<T>(&self, f: &T) -> Self
-    where
-        Self: Clone,
-        T: Fn(&Self) -> Self,
-    {
-        self.clone()
-    }
-}
-
-impl Transform for Node {
-    /**
-     * Recursively transform a node and all of its children. There is no generalize
-     * tree walk method in Rust to deal with ADTs, so we have to implement it manually.
-     */
-    fn transform<T>(&self, f: &T) -> Self
-    where
-        Self: Clone,
-        T: Fn(&Self) -> Self,
-    {
-        let transform = |node: &Node| node.transform(f);
-
-        let transform_and_box = |node: &Node| Box::new(node.transform(f));
-
-        let transform_each =
-            |nodes: &Vec<Node>| nodes.into_iter().map(transform).collect::<Vec<_>>();
-
-        // For all nodes that are not a leaf node,
-        // we need to recursively simplify
-        let out = match self {
-            Node::Program(vec) => Node::Program(transform_each(vec)),
-            Node::TypeAlias(ident, type_params, expr) => Node::TypeAlias(
-                ident.clone(),
-                transform_each(type_params),
-                Box::new(expr.transform(f)),
-            ),
-            Node::Tuple(vec) => Node::Tuple(transform_each(vec)),
-            Node::Array(vec) => Node::Array(transform_and_box(vec)),
-            Node::IfExpr(cond, then, els) => Node::IfExpr(
-                transform_and_box(cond),
-                transform_and_box(then),
-                els.as_ref().map(|v| transform_and_box(v)),
-            ),
-            Node::BinOp { lhs, op, rhs } => Node::BinOp {
-                lhs: transform_and_box(lhs),
-                op: op.clone(),
-                rhs: transform_and_box(rhs),
-            },
-            Node::ExtendsBinOp { lhs, op, rhs } => Node::ExtendsBinOp {
-                lhs: transform_and_box(lhs),
-                op: op.clone(),
-                rhs: transform_and_box(rhs),
-            },
-            Node::ExtendsExpr(lhs, rhs, then, els) => Node::ExtendsExpr(
-                transform_and_box(lhs),
-                transform_and_box(rhs),
-                transform_and_box(then),
-                transform_and_box(els),
-            ),
-            Node::ObjectLiteral(props) => Node::ObjectLiteral(
-                props
-                    .into_iter()
-                    .map(|prop| {
-                        let mut p = prop.clone();
-                        p.value = transform(&prop.value);
-                        p
-                    })
-                    .collect(),
-            ),
-            Node::Application(name, args) => Node::Application(name.clone(), transform_each(args)),
-
-            // Leaf nodes are not transformed
-            Node::None
-            | Node::Error(_)
-            | Node::Never
-            | Node::Any
-            | Node::Unknown
-            | Node::Null
-            | Node::Undefined
-            | Node::False
-            | Node::True
+            Node::Program(_)
+            | Node::TypeAlias(_, _, _)
+            | Node::BinOp {
+                lhs: _,
+                op: _,
+                rhs: _,
+            }
             | Node::Ident(_)
             | Node::Number(_)
             | Node::Primitive(_)
             | Node::String(_)
             | Node::TemplateString(_)
-            | Node::Infer(_) => self.clone(),
-        };
+            | Node::ExtendsPrefixOp { op: _, value: _ }
+            | Node::ExtendsBinOp {
+                lhs: _,
+                op: _,
+                rhs: _,
+            }
+            | Node::ExtendsExpr(_, _, _, _)
+            | Node::Error(_)
+            | Node::ObjectLiteral(_)
+            | Node::Application(_, _)
+            | Node::Never
+            | Node::Any
+            | Node::Unknown
+            | Node::Tuple(_)
+            | Node::Array(_)
+            | Node::Null
+            | Node::Undefined
+            | Node::False
+            | Node::True => node.clone(),
+        })
+    }
+}
 
-        f(&out)
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::ast::Node::*;
+    use crate::parser::Rule::expr;
+    use crate::pest::Parser;
+    use crate::test_support::parse;
+    use pretty_assertions::{assert_eq, assert_ne};
+
+    #[test]
+    fn simplify_basic() {
+        assert_eq!(
+            parse!(expr, "if a <: b then c else d").simplify(),
+            ExtendsExpr(
+                Box::new(Ident("a".to_string())),
+                Box::new(Ident("b".to_string())),
+                Box::new(Ident("c".to_string())),
+                Box::new(Ident("d".to_string())),
+            )
+        )
+    }
+
+    #[test]
+    fn simplify_not() {
+        assert_eq!(
+            parse!(expr, "if not a <: b then c else d").simplify(),
+            parse!(expr, "if a <: b then d else c").simplify(),
+        )
+    }
+
+    #[test]
+    fn simplify_and() {
+        assert_eq!(
+            parse!(expr, "if a <: b and c <: d then e else f").simplify(),
+            parse!(expr, "if a <: b then if c <: d then e else f else f").simplify(),
+        )
+    }
+
+    #[test]
+    fn simplify_or() {
+        assert_eq!(
+            parse!(expr, "if a <: b or c <: d then e else f").simplify(),
+            parse!(expr, "if a <: b then e else if c <: d then e else f else f").simplify(),
+        )
     }
 }
