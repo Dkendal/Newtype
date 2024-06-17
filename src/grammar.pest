@@ -189,15 +189,6 @@ number = @{
     (neg ~ WHITESPACE*)? ~ !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT | "_")*)?
 }
 
-// NewBlock = _{
-// // The first line in the block
-// PEEK_ALL ~ PUSH("  "+ | "\t"+) ~ statement ~
-// // Subsequent lines in the block
-// (PEEK_ALL ~ statement)* ~
-// // Remove the last layer of indentation from the stack when
-// exiting the block DROP
-// }
-
 COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
 WHITESPACE = _{ " " | "\t" | "\n" }

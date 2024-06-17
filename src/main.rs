@@ -53,7 +53,9 @@ fn main() {
 
     match result {
         Ok(result) => {
-            let out = result.to_pretty_ts(120);
+            let simplified = result.simplify();
+
+            let out = simplified.to_pretty_ts(120);
 
             if let Some(output_filename) = args.output {
                 std::fs::write(output_filename, out).unwrap();
@@ -122,8 +124,4 @@ pub mod test_support {
             assert!(result.is_err());
         };
     }
-
-    // pub(crate) fn parse(source: String) -> Node {
-    //     parse_newtype(&source).unwrap_or_else(|e| panic!("Failed to parse: {}", e))
-    // }
 }

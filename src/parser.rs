@@ -455,14 +455,6 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn if_expr_with_negation() {
-    //     assert_typescript!(
-    //         "type A = 1 extends number ? never : 1;",
-    //         "type A = if not 1 <: number then 1"
-    //     );
-    // }
-
     #[test]
     fn if_expr_if_without_else() {
         assert_typescript!(

@@ -9,3 +9,4 @@ type A(x) =
     else 0
 
 
+type A(a, b, c, d, e, f) = if a <: b and c <: d then e else f
