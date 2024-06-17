@@ -65,22 +65,14 @@ impl Simplify for Node {
             }
             Node::Program(_)
             | Node::TypeAlias(_, _, _)
-            | Node::BinOp {
-                lhs: _,
-                op: _,
-                rhs: _,
-            }
+            | Node::BinOp { .. }
             | Node::Ident(_)
             | Node::Number(_)
             | Node::Primitive(_)
             | Node::String(_)
             | Node::TemplateString(_)
-            | Node::ExtendsPrefixOp { op: _, value: _ }
-            | Node::ExtendsBinOp {
-                lhs: _,
-                op: _,
-                rhs: _,
-            }
+            | Node::ExtendsPrefixOp { .. }
+            | Node::ExtendsBinOp { .. }
             | Node::ExtendsExpr(_, _, _, _)
             | Node::Error(_)
             | Node::ObjectLiteral(_)
