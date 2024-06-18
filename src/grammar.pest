@@ -17,6 +17,7 @@ expr1 = _{ prefix* ~ primary }
 primary = _{
     if_expr
   | match_expr
+  | cond_expr
   | array
   | application
   | sub_expr
@@ -86,12 +87,32 @@ if_expr = {
 
 match_expr = {
     "match" ~ #value = expr ~ "do" ~
-    #arm = match_arm ~ ("," ~ #arm = match_arm)* ~ ","? ~
+    #arm = match_arm ~
+    ("," ~ #arm = match_arm)* ~
+    ("," ~ #else = else_arm)? ~
+    ","? ~
     "end"
 }
 
 match_arm = {
     #pattern = expr ~ "=>" ~ #body = expr
+}
+
+cond_expr = {
+    "cond" ~ "do" ~
+    #arm = cond_arm ~
+    ("," ~ #arm = cond_arm)* ~
+    ("," ~ #else = else_arm)? ~
+    ","?
+    ~ "end"
+}
+
+cond_arm = {
+    #condition = extends_condition ~ "=>" ~ #body = expr
+}
+
+else_arm = {
+    "else" ~ "=>" ~ #body = expr
 }
 
 extends_condition = { extends_expr }

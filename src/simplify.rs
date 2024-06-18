@@ -19,9 +19,10 @@ impl Simplify for Node {
                     None => Box::new(Node::Never),
                 };
 
-                simplify_conditional(op, then, &else_)
+                simplify_if_expr(op, then, &else_)
             }
             Node::MatchExpr { .. } => simplify_match_expr(node),
+            Node::CondExpr { .. } => simplify_cond_expr(node),
             Node::Program(_)
             | Node::TypeAlias(_, _, _)
             | Node::BinOp { .. }
@@ -49,13 +50,32 @@ impl Simplify for Node {
     }
 }
 
-fn simplify_conditional(condition: &Node, then: &Node, else_: &Node) -> Node {
+fn simplify_cond_expr(node: &Node) -> Node {
+    // Convert a CondExpr to a series of nested ternary expressions
+    let Node::CondExpr { arms, else_ } = node else {
+        panic!("Expected CondExpr, found {node:#?}");
+    };
+
+    let init_else: Node = (**else_).clone();
+
+    let acc: Node = arms.iter().rev().fold(init_else, |else_, arm| {
+        let CondArm {
+            condition,
+            body: then,
+        } = arm;
+        simplify_if_expr(condition, then, &else_)
+    });
+
+    acc
+}
+
+fn simplify_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
     match condition {
         // Unary operators
         Node::ExtendsPrefixOp { op, value } => {
             match op {
                 // Swap `then` and `else` branches
-                PrefixOp::Not => simplify_conditional(value, else_, then),
+                PrefixOp::Not => simplify_if_expr(value, else_, then),
                 _ => todo!(),
             }
         }
@@ -79,12 +99,12 @@ fn simplify_conditional(condition: &Node, then: &Node, else_: &Node) -> Node {
             InfixOp::StrictEquals => todo!(),
             InfixOp::StrictNotEquals => todo!(),
             InfixOp::And => {
-                let then = simplify_conditional(rhs, then, else_);
-                simplify_conditional(lhs, &then, else_)
+                let then = simplify_if_expr(rhs, then, else_);
+                simplify_if_expr(lhs, &then, else_)
             }
             InfixOp::Or => {
-                let else_ = simplify_conditional(rhs, then, else_);
-                simplify_conditional(lhs, then, &else_)
+                let else_ = simplify_if_expr(rhs, then, else_);
+                simplify_if_expr(lhs, then, &else_)
             }
         },
         _ => panic!("Expected extends operator, found {condition:#?}"),

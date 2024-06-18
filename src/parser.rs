@@ -114,7 +114,8 @@ fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
 }
 
 pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
-    match pair.as_rule() {
+    let rule = pair.as_rule();
+    match rule {
         Rule::program => {
             let children: Vec<_> = pair
                 .into_inner()
@@ -163,8 +164,6 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
 
             let arguments = arguments_pair.into_inner().map(parse_node).collect();
 
-            println!(">> {arguments:#?}");
-
             Node::Application(identifier, arguments)
         }
         Rule::EOI => unreachable!("unexpected end of input"),
@@ -209,49 +208,89 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             "Match arms must be used in a match expression".to_string(),
             pair,
         ),
-        Rule::statement
-        | Rule::type_parameters
-        | Rule::expr1
-        | Rule::primary
-        | Rule::array_modifier
-        | Rule::argument_list
-        | Rule::sub_expr
-        | Rule::prefix
-        | Rule::infix
-        | Rule::neg
-        | Rule::union
-        | Rule::intersection
-        | Rule::term
-        | Rule::top_type
-        | Rule::bottom_type
-        | Rule::object_property
-        | Rule::extends_condition
-        | Rule::extends_expr
-        | Rule::extends_primary
-        | Rule::extends_prefix
-        | Rule::extends_infix
-        | Rule::extends
-        | Rule::not_extends
-        | Rule::equals
-        | Rule::not_equals
-        | Rule::strict_equals
-        | Rule::strict_not_equals
-        | Rule::and
-        | Rule::or
-        | Rule::not
-        | Rule::type_string
-        | Rule::type_boolean
-        | Rule::type_number
-        | Rule::readonly_modifier
-        | Rule::optional_modifier
-        | Rule::double_quote_string
-        | Rule::single_quote_string
-        | Rule::COMMENT
-        | Rule::WHITESPACE
-        | Rule::keyword => new_error(
-            format!("unexpected rule while parsing node: {:?}", pair.as_rule()),
+        Rule::cond_expr => {
+            let inner = pair.into_inner();
+
+            let else_ = inner
+                .find_first_tagged("else")
+                .and_then(|p| p.into_inner().find_first_tagged("body"))
+                .map(parse_node)
+                .map(Box::new)
+                .unwrap_or(Box::new(Node::Never));
+
+            let arms: Vec<CondArm> = inner
+                .find_tagged("arm")
+                .map(|arm| {
+                    let inner = arm.into_inner();
+                    let condition = inner
+                        .find_first_tagged("condition")
+                        .map(|p| p.into_inner())
+                        .map(parse_extends_condition)
+                        .unwrap();
+                    let body = inner.find_first_tagged("body").map(parse_node).unwrap();
+                    CondArm { condition, body }
+                })
+                .collect();
+
+            Node::CondExpr { arms, else_ }
+        }
+        Rule::cond_arm => new_error(
+            "Condition arms must be used in a condition expression".to_string(),
             pair,
         ),
+        Rule::statement
+        | Rule::and
+        | Rule::argument_list
+        | Rule::array_modifier
+        | Rule::bottom_type
+        | Rule::double_quote_string
+        | Rule::else_arm
+        | Rule::equals
+        | Rule::expr1
+        | Rule::extends
+        | Rule::extends_condition
+        | Rule::extends_expr
+        | Rule::extends_infix
+        | Rule::extends_prefix
+        | Rule::extends_primary
+        | Rule::infix
+        | Rule::intersection
+        | Rule::neg
+        | Rule::not
+        | Rule::not_equals
+        | Rule::not_extends
+        | Rule::object_property
+        | Rule::optional_modifier
+        | Rule::or
+        | Rule::prefix
+        | Rule::primary
+        | Rule::readonly_modifier
+        | Rule::single_quote_string
+        | Rule::strict_equals
+        | Rule::strict_not_equals
+        | Rule::sub_expr
+        | Rule::term
+        | Rule::top_type
+        | Rule::type_boolean
+        | Rule::type_number
+        | Rule::type_parameters
+        | Rule::type_string
+        | Rule::union
+        | Rule::COMMENT
+        | Rule::WHITESPACE
+        | Rule::keyword => {
+            let positives: Vec<Rule> = vec![];
+            let negatives: Vec<Rule> = vec![pair.as_rule()];
+            let error = Error::new_from_span(
+                ErrorVariant::ParsingError {
+                    positives,
+                    negatives,
+                },
+                pair.as_span(),
+            );
+
+            panic!("{error}")
+        }
     }
 }
 
@@ -670,7 +709,7 @@ mod tests {
     }
 
     #[test]
-    fn case() {
+    fn case_expr() {
         assert_typescript!(
             r#"
             type A<x> = x extends number ? 1 : x extends string ? 2 : 3;
@@ -680,6 +719,37 @@ mod tests {
                 number => 1,
                 string => 2,
                 _ => 3
+            end
+            "#
+        );
+    }
+
+    #[test]
+    fn cond_expr() {
+        assert_typescript!(
+            r#"
+            type A<x> = x extends number ? 1 : x extends {} ? x extends {a: 1} ? 2 : never : never;
+            "#,
+            r#"
+            type A(x) = cond do
+                x <: number => 1,
+                x <: {} and x <: {a: 1} => 2,
+            end
+            "#
+        );
+    }
+
+    #[test]
+    fn cond_expr_with_else() {
+        assert_typescript!(
+            r#"
+            type A<x> = x extends number ? 1 : x extends {} ? x extends {a: 1} ? 2 : 3 : 3;
+            "#,
+            r#"
+            type A(x) = cond do
+                x <: number => 1,
+                x <: {} and x <: {a: 1} => 2,
+                else => 3
             end
             "#
         );

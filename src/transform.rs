@@ -99,6 +99,22 @@ impl Transform for Node {
                 Node::MatchExpr { value, arms }
             }
 
+            Node::CondExpr { arms, else_ } => {
+                let arms = arms
+                    .into_iter()
+                    .map(|arm| {
+                        let mut a = arm.clone();
+                        a.condition = transform(&arm.condition);
+                        a.body = transform(&arm.body);
+                        a
+                    })
+                    .collect();
+
+                let else_ = Box::new(transform(else_));
+
+                Node::CondExpr { arms, else_ }
+            }
+
             // Leaf nodes are not transformed
             Node::Error(_)
             | Node::Never

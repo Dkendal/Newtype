@@ -27,6 +27,10 @@ pub enum Node {
         value: Box<Node>,
         arms: Vec<MatchArm>,
     },
+    CondExpr{
+        arms: Vec<CondArm>,
+        else_: Box<Node>,
+    },
     ExtendsPrefixOp {
         op: PrefixOp,
         value: Box<Node>,
@@ -109,6 +113,12 @@ pub enum InfixOp {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MatchArm {
     pub pattern: Node,
+    pub body: Node,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct CondArm {
+    pub condition: Node,
     pub body: Node,
 }
 

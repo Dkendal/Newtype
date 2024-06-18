@@ -166,6 +166,9 @@ impl ToTypescript for Node {
             Node::MatchExpr { .. } => {
                 unreachable!("MatchExpr should be desugared before this point")
             }
+            Node::CondExpr { .. } => {
+                unreachable!("CondExpr should be desugared before this point")
+            }
         }
     }
 }
