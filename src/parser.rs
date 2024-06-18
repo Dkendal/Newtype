@@ -186,9 +186,72 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             "Infer operator must be used in an extends expression".to_string(),
             pair,
         ),
-        _ => {
-            unreachable!("unexpected rule while parsing expr: {:?}", pair.as_rule())
-        } // rule => unreachable!("unexpected rule: {:?}", rule),
+        Rule::match_expr => {
+            let inner = pair.into_inner();
+            let value = inner
+                .find_first_tagged("value")
+                .map(parse_node)
+                .map(Box::new)
+                .unwrap();
+
+            let arms: Vec<MatchArm> = inner
+                .find_tagged("arm")
+                .map(|arm| {
+                    let inner = arm.into_inner();
+                    let pattern = inner.find_first_tagged("pattern").map(parse_node).unwrap();
+                    let body = inner.find_first_tagged("body").map(parse_node).unwrap();
+                    MatchArm { pattern, body }
+                })
+                .collect();
+            Node::MatchExpr { value, arms }
+        }
+        Rule::match_arm => new_error(
+            "Match arms must be used in a match expression".to_string(),
+            pair,
+        ),
+        Rule::statement
+        | Rule::type_parameters
+        | Rule::expr1
+        | Rule::primary
+        | Rule::array_modifier
+        | Rule::argument_list
+        | Rule::sub_expr
+        | Rule::prefix
+        | Rule::infix
+        | Rule::neg
+        | Rule::union
+        | Rule::intersection
+        | Rule::term
+        | Rule::top_type
+        | Rule::bottom_type
+        | Rule::object_property
+        | Rule::extends_condition
+        | Rule::extends_expr
+        | Rule::extends_primary
+        | Rule::extends_prefix
+        | Rule::extends_infix
+        | Rule::extends
+        | Rule::not_extends
+        | Rule::equals
+        | Rule::not_equals
+        | Rule::strict_equals
+        | Rule::strict_not_equals
+        | Rule::and
+        | Rule::or
+        | Rule::not
+        | Rule::type_string
+        | Rule::type_boolean
+        | Rule::type_number
+        | Rule::readonly_modifier
+        | Rule::optional_modifier
+        | Rule::double_quote_string
+        | Rule::single_quote_string
+        | Rule::COMMENT
+        | Rule::WHITESPACE
+        | Rule::keyword => new_error(
+            format!("unexpected rule while parsing node: {:?}", pair.as_rule()),
+            pair,
+        ),
     }
 }
 
@@ -604,6 +667,22 @@ mod tests {
     #[test]
     fn application_mixed_type_arguments() {
         assert_typescript!("type B = A<B, 1>;", "type B = A(B, 1)");
+    }
+
+    #[test]
+    fn case() {
+        assert_typescript!(
+            r#"
+            type A<x> = x extends number ? 1 : x extends string ? 2 : 3;
+            "#,
+            r#"
+            type A(x) = match x do
+                number => 1,
+                string => 2,
+                _ => 3
+            end
+            "#
+        );
     }
 
     //

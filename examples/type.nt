@@ -9,4 +9,14 @@ type A(x) =
     else 0
 
 
-type A(a, b, c, d, e, f) = if a <: b and c <: d then e else f
+type A(a, b, c, d, e, f) =
+  if a <: b and c <: d
+    then e
+    else f
+
+type A(a) =
+  match a do
+    string => 1,
+    number => 2,
+    _ => 3
+  end

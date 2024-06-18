@@ -23,6 +23,10 @@ pub enum Node {
         Box<Node>,         // then
         Option<Box<Node>>, // else
     ),
+    MatchExpr{
+        value: Box<Node>,
+        arms: Vec<MatchArm>,
+    },
     ExtendsPrefixOp {
         op: PrefixOp,
         value: Box<Node>,
@@ -100,6 +104,12 @@ pub enum InfixOp {
     StrictNotEquals,
     And,
     Or,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct MatchArm {
+    pub pattern: Node,
+    pub body: Node,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

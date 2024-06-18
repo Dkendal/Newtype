@@ -160,7 +160,12 @@ impl ToTypescript for Node {
             Node::ExtendsBinOp { .. } => {
                 unreachable!("ExtendsBinOp should be desugared before this point")
             }
-            Node::ExtendsPrefixOp {..} => todo!(),
+            Node::ExtendsPrefixOp { .. } => {
+                unreachable!("ExtendsPrefixOp should be desugared before this point")
+            }
+            Node::MatchExpr { .. } => {
+                unreachable!("MatchExpr should be desugared before this point")
+            }
         }
     }
 }

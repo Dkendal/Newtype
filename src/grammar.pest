@@ -16,6 +16,7 @@ expr1 = _{ prefix* ~ primary }
 
 primary = _{
     if_expr
+  | match_expr
   | array
   | application
   | sub_expr
@@ -81,6 +82,16 @@ object_property = {
 
 if_expr = {
     "if" ~ #condition = extends_condition ~ "then" ~ #then = expr ~ ("else" ~ #else = expr)?
+}
+
+match_expr = {
+    "match" ~ #value = expr ~ "do" ~
+    #arm = match_arm ~ ("," ~ #arm = match_arm)* ~ ","? ~
+    "end"
+}
+
+match_arm = {
+    #pattern = expr ~ "=>" ~ #body = expr
 }
 
 extends_condition = { extends_expr }
