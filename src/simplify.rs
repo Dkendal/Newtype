@@ -114,35 +114,13 @@ fn simplify_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
 // Convert match arms to a series of extends expressions.
 // Allows for a single wildcard pattern ("_") to be used as the default case.
 fn simplify_match_expr(node: &Node) -> Node {
-    let Node::MatchExpr { value, arms } = node else {
+    let Node::MatchExpr { value, arms, else_ } = node else {
         panic!("Expected MatchExpr, found {node:#?}");
     };
 
-    let mut arms = arms.clone();
-    let mut wildcard_idx = None;
-    let mut else_body = Node::Never;
+    let init_else: Node = (**else_).clone();
 
-    for (i, arm) in arms.iter().enumerate() {
-        match arm {
-            MatchArm {
-                pattern: Node::Ident(ident_name),
-                ..
-            } if ident_name == "_" => {
-                if wildcard_idx.is_some() {
-                    panic!("Multiple wildcard patterns found in match expression");
-                }
-                wildcard_idx = Some(i);
-                else_body = arm.body.clone();
-            }
-            _ => {}
-        };
-    }
-
-    if let Some(idx) = wildcard_idx {
-        arms.remove(idx);
-    }
-
-    arms.into_iter().rev().fold(else_body, |acc, arm| {
+    let out: Node = arms.into_iter().rev().fold(init_else, |acc, arm| -> Node {
         let MatchArm { pattern, body } = arm;
 
         Node::ExtendsExpr(
@@ -151,7 +129,9 @@ fn simplify_match_expr(node: &Node) -> Node {
             Box::new(body.clone()),
             Box::new(acc),
         )
-    })
+    });
+
+    out
 }
 
 #[cfg(test)]
@@ -210,7 +190,7 @@ mod tests {
                 match A do
                     number => 1,
                     string => 2,
-                    _ => 3,
+                    else => 3
                 end
                 "#
             )

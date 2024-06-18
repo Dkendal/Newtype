@@ -193,6 +193,13 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                 .map(Box::new)
                 .unwrap();
 
+            let else_ = inner
+                .find_first_tagged("else")
+                .and_then(|p| p.into_inner().find_first_tagged("body"))
+                .map(parse_node)
+                .map(Box::new)
+                .unwrap_or(Box::new(Node::Never));
+
             let arms: Vec<MatchArm> = inner
                 .find_tagged("arm")
                 .map(|arm| {
@@ -202,7 +209,8 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                     MatchArm { pattern, body }
                 })
                 .collect();
-            Node::MatchExpr { value, arms }
+
+            Node::MatchExpr { value, arms, else_ }
         }
         Rule::match_arm => new_error(
             "Match arms must be used in a match expression".to_string(),
@@ -709,7 +717,7 @@ mod tests {
     }
 
     #[test]
-    fn case_expr() {
+    fn match_expr() {
         assert_typescript!(
             r#"
             type A<x> = x extends number ? 1 : x extends string ? 2 : 3;
@@ -718,7 +726,7 @@ mod tests {
             type A(x) = match x do
                 number => 1,
                 string => 2,
-                _ => 3
+                else => 3
             end
             "#
         );

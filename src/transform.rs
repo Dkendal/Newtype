@@ -83,7 +83,7 @@ impl Transform for Node {
             ),
             Node::Application(name, args) => Node::Application(name.clone(), transform_each(args)),
 
-            Node::MatchExpr { value, arms } => {
+            Node::MatchExpr { value, arms, else_ } => {
                 let value = transform_and_box(value);
 
                 let arms = arms
@@ -96,7 +96,9 @@ impl Transform for Node {
                     })
                     .collect();
 
-                Node::MatchExpr { value, arms }
+                let else_ = Box::new(transform(else_));
+
+                Node::MatchExpr { value, arms, else_ }
             }
 
             Node::CondExpr { arms, else_ } => {
