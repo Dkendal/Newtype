@@ -37,11 +37,12 @@ impl Transform for Node {
         // we need to recursively simplify
         let out = match self {
             Node::Program(vec) => Node::Program(transform_each(vec)),
-            Node::TypeAlias(ident, type_params, expr) => Node::TypeAlias(
-                ident.clone(),
-                transform_each(type_params),
-                Box::new(expr.transform(f)),
-            ),
+            Node::TypeAlias{export, name, params, body} => Node::TypeAlias{
+                export: *export,
+                name: name.clone(),
+                params: transform_each(params),
+                body: Box::new(body.transform(f)),
+            },
             Node::Tuple(vec) => Node::Tuple(transform_each(vec)),
             Node::Array(vec) => Node::Array(transform_and_box(vec)),
             Node::IfExpr(cond, then, els) => Node::IfExpr(

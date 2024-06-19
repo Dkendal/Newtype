@@ -3,6 +3,7 @@ program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 statement = _{ type_alias }
 
 type_alias = {
+    (#export = export)? ~
     "type" ~ #name = ident ~
     ("(" ~ #parameters = type_parameters ~ ")")? ~ 
     "=" ~ #body = expr
@@ -178,6 +179,8 @@ literal_false = @{ "false" }
 
 readonly_modifier = @{ "readonly" }
 
+export = @{ "export" }
+
 optional_modifier = @{ "?" }
 
 string = { double_quote_string | single_quote_string }
@@ -221,6 +224,8 @@ number = @{
     (neg ~ WHITESPACE*)? ~ !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT | "_")*)?
 }
 
-COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+COMMENT = _{ BLOCK_COMMENT | LINE_COMMENT }
+BLOCK_COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+LINE_COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* }
 
 WHITESPACE = _{ " " | "\t" | "\n" }

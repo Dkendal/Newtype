@@ -284,7 +284,10 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
         | Rule::type_parameters
         | Rule::type_string
         | Rule::union
+        | Rule::export
         | Rule::COMMENT
+        | Rule::BLOCK_COMMENT
+        | Rule::LINE_COMMENT
         | Rule::WHITESPACE
         | Rule::keyword => {
             let positives: Vec<Rule> = vec![];
@@ -388,13 +391,17 @@ fn parse_object_literal(pair: Pair<Rule>) -> Node {
 fn parse_type_alias(pair: Pair<Rule>) -> Node {
     let inner = pair.into_inner();
 
+    println!("{inner:#?}");
+
+    let export = inner.find_first_tagged("export").is_some();
+
     let name = inner
         .find_first_tagged("name")
         .expect("type alias missing name")
         .as_str()
         .to_string();
 
-    let type_parameters = inner
+    let params = inner
         .find_first_tagged("parameters")
         .map(|p| p.into_inner().map(parse_node).collect())
         .unwrap_or_else(Vec::new);
@@ -405,7 +412,12 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
         .map(Box::new)
         .unwrap();
 
-    Node::TypeAlias(name, type_parameters, body)
+    Node::TypeAlias {
+        export,
+        name,
+        params,
+        body,
+    }
 }
 
 fn text(pair: Pair<Rule>) -> String {
@@ -684,6 +696,11 @@ mod tests {
     #[test]
     fn generics_many_arguments() {
         assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) = 1");
+    }
+
+    #[test]
+    fn exported_type() {
+        assert_typescript!("export type A = 1;", "export type A = 1");
     }
 
     #[test]

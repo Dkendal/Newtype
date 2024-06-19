@@ -24,7 +24,7 @@ impl Simplify for Node {
             Node::MatchExpr { .. } => simplify_match_expr(node),
             Node::CondExpr { .. } => simplify_cond_expr(node),
             Node::Program(_)
-            | Node::TypeAlias(_, _, _)
+            | Node::TypeAlias { .. }
             | Node::BinOp { .. }
             | Node::Ident(_)
             | Node::Number(_)

@@ -3,11 +3,12 @@ use crate::parser::ParserError;
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Node {
     Program(Vec<Node>),
-    TypeAlias(
-        String,    // Ident
-        Vec<Node>, // TypeParams
-        Box<Node>, // Expression
-    ),
+    TypeAlias {
+        export: bool,
+        name: String,
+        params: Vec<Node>,
+        body: Box<Node>,
+    },
     BinOp {
         lhs: Box<Node>,
         op: Op,
@@ -23,12 +24,12 @@ pub enum Node {
         Box<Node>,         // then
         Option<Box<Node>>, // else
     ),
-    MatchExpr{
+    MatchExpr {
         value: Box<Node>,
         arms: Vec<MatchArm>,
         else_: Box<Node>,
     },
-    CondExpr{
+    CondExpr {
         arms: Vec<CondArm>,
         else_: Box<Node>,
     },
@@ -96,7 +97,7 @@ pub enum PrimitiveType {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PrefixOp {
     Infer,
-    Not
+    Not,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

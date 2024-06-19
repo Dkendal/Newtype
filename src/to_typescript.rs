@@ -36,10 +36,21 @@ impl ToTypescript for Node {
                 }
                 doc
             }
-            Node::TypeAlias(name, params, body) => {
+            Node::TypeAlias {
+                export,
+                name,
+                params,
+                body,
+            } => {
                 let body = (*body).to_ts();
 
-                RcDoc::text("type")
+                let doc = if *export {
+                    RcDoc::text("export").append(RcDoc::space())
+                } else {
+                    RcDoc::nil()
+                };
+
+                doc.append("type")
                     .append(RcDoc::space())
                     .append(name)
                     .append(match params {
