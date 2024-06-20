@@ -1,0 +1,26 @@
+// sources/Any/At.ts
+
+// export type At<A extends any, K extends Key> =
+//     A extends List
+//     ? number extends A['length']
+//       ? K extends number | `${number}`
+//         ? A[never] | undefined
+//         : undefined
+//       : K extends keyof A ? A[K] : undefined
+//     : unknown extends A ? unknown :
+//       K extends keyof A ? A[K] :
+//       undefined;
+
+export type At(A, K) =
+  if A <: List then
+    if number <: A['length'] then
+      if K <: number | `${number}` then A[never] | undefined
+      else undefined
+    else
+      if K <: keyof A then A[K]
+      else undefined
+    else
+      if unknown <: A then unknwon
+      else
+        if K <: keyof A then A[K]
+        else undefined

@@ -36,8 +36,29 @@ impl Transform for Node {
         // For all nodes that are not a leaf node,
         // we need to recursively simplify
         let out = match self {
+            // Leaf nodes are not transformed
+            Node::Error { .. }
+            | Node::Never
+            | Node::Any
+            | Node::Unknown
+            | Node::Null
+            | Node::Undefined
+            | Node::False
+            | Node::True
+            | Node::Ident { .. }
+            | Node::Number { .. }
+            | Node::Primitive { .. }
+            | Node::String { .. }
+            | Node::TemplateString { .. } => self.clone(),
+
+            // For all other nodes, we recursively transform
             Node::Program(vec) => Node::Program(transform_each(vec)),
-            Node::TypeAlias{export, name, params, body} => Node::TypeAlias{
+            Node::TypeAlias {
+                export,
+                name,
+                params,
+                body,
+            } => Node::TypeAlias {
                 export: *export,
                 name: name.clone(),
                 params: transform_each(params),
@@ -45,6 +66,11 @@ impl Transform for Node {
             },
             Node::Tuple(vec) => Node::Tuple(transform_each(vec)),
             Node::Array(vec) => Node::Array(transform_and_box(vec)),
+            Node::Access { lhs, rhs, is_dot } => Node::Access {
+                lhs: transform_and_box(lhs),
+                rhs: transform_and_box(rhs),
+                is_dot: *is_dot,
+            },
             Node::IfExpr(cond, then, els) => Node::IfExpr(
                 transform_and_box(cond),
                 transform_and_box(then),
@@ -118,20 +144,11 @@ impl Transform for Node {
                 Node::CondExpr { arms, else_ }
             }
 
-            // Leaf nodes are not transformed
-            Node::Error(_)
-            | Node::Never
-            | Node::Any
-            | Node::Unknown
-            | Node::Null
-            | Node::Undefined
-            | Node::False
-            | Node::True
-            | Node::Ident(_)
-            | Node::Number(_)
-            | Node::Primitive(_)
-            | Node::String(_)
-            | Node::TemplateString(_) => self.clone(),
+            Node::Builtin { name, argument } => Node::Builtin {
+                name: name.clone(),
+                argument: transform_and_box(argument),
+            },
+            Node::Statement(node) => Node::Statement(Box::new(node.transform(f))),
         };
 
         f(&out)

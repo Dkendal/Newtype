@@ -3,6 +3,7 @@ use crate::parser::ParserError;
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Node {
     Program(Vec<Node>),
+    Statement(Box<Node>),
     TypeAlias {
         export: bool,
         name: String,
@@ -48,6 +49,10 @@ pub enum Node {
         Box<Node>, // then
         Box<Node>, // else
     ),
+    Builtin {
+        name: BuiltInKeyword,
+        argument: Box<Node>,
+    },
     Error(ParserError),
     ObjectLiteral(Vec<ObjectProperty>),
     Application(String, Vec<Node>),
@@ -56,10 +61,20 @@ pub enum Node {
     Unknown,
     Tuple(Vec<Node>),
     Array(Box<Node>),
+    Access {
+        lhs: Box<Node>,
+        rhs: Box<Node>,
+        is_dot: bool,
+    },
     Null,
     Undefined,
     False,
     True,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum BuiltInKeyword {
+    Keyof,
 }
 
 impl Node {
@@ -67,6 +82,14 @@ impl Node {
         match self {
             Node::BinOp { .. } => true,
             _ => false,
+        }
+    }
+
+    pub fn as_ident(&self) -> Option<&String> {
+        if let Self::Ident(v) = self {
+            Some(v)
+        } else {
+            None
         }
     }
 }

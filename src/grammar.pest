@@ -1,6 +1,6 @@
 program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 
-statement = _{ type_alias }
+statement = { type_alias }
 
 type_alias = {
     (#export = export)? ~
@@ -13,32 +13,41 @@ type_parameters = { ident ~ ( "," ~ ident)* }
 
 expr = { expr1 ~ ( infix ~ expr1)* }
 
-expr1 = _{ prefix* ~ primary }
+expr1 = _{ prefix* ~ primary ~ postfix* }
 
 primary = _{
     if_expr
   | match_expr
   | cond_expr
-  | array
+  | builtin
   | application
-  | sub_expr
+  | term
+  | "(" ~ expr ~ ")"
 }
 
-array = { sub_expr ~ (array_modifier)+ }
+prefix = _{ infer }
+
+infix = _{ union | intersection }
+
+postfix = _{ indexed_access | dot_access | array_modifier }
 
 array_modifier = @{ "[]" }
+
+indexed_access = { "[" ~ expr ~ "]" }
+
+dot_access = { "." ~ ident }
+
+builtin = { #name = builtin_keyword ~ "(" ~ #argument = expr ~ ")" }
+
+builtin_keyword = _{ keyof }
+
+keyof = @{ "keyof" }
 
 application = { ident ~ "(" ~ #arguments = argument_list ~ ")" }
 
 argument_list = { expr ~ ( "," ~ expr)* }
 
-sub_expr = _{ term | "(" ~ expr ~ ")" }
-
-prefix = _{ infer }
-
 infer = @{ "?" }
-
-infix = _{ union | intersection }
 
 neg = _{ "-" }
 

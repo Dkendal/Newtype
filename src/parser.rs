@@ -20,6 +20,9 @@ lazy_static::lazy_static! {
         // Precedence is defined lowest to highest
         PrattParser::new()
             .op(Op::infix(union, Right) | Op::infix(intersection, Right))
+            .op(Op::postfix(array_modifier))
+            .op(Op::postfix(dot_access))
+            .op(Op::postfix(indexed_access))
     };
 
     static ref EXTENDS_PARSER: PrattParser<Rule> = {
@@ -42,23 +45,57 @@ lazy_static::lazy_static! {
                 | Op::infix(strict_not_equals, Left)
             )
             .op(Op::prefix(infer))
-
     };
 }
 
 pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
+    use Rule::*;
     EXPR_PARSER
         .map_primary(parse_node)
+        .map_prefix(|op, _rhs| match op.as_rule() {
+            _ => unreachable!("Expected prefix operator, found {:?}", op.as_rule()),
+        })
+        .map_postfix(|lhs, op| match op.as_rule() {
+            indexed_access => {
+                let inner = op.into_inner().next().unwrap();
+                let index = parse_node(inner);
+                Node::Access {
+                    lhs: boxed(lhs),
+                    rhs: boxed(index),
+                    is_dot: false,
+                }
+            }
+            array_modifier => Node::Array(boxed(lhs)),
+            dot_access => {
+                let index = op.into_inner().next().map(parse_node).unwrap();
+                Node::Access {
+                    lhs: boxed(lhs),
+                    rhs: boxed(index),
+                    is_dot: true,
+                }
+            }
+            rule => {
+                let error = Error::new_from_span(
+                    ErrorVariant::ParsingError {
+                        positives: vec![indexed_access, array_modifier, dot_access],
+                        negatives: vec![rule],
+                    },
+                    op.as_span(),
+                );
+
+                panic!("{error}")
+            }
+        })
         .map_infix(|lhs, op, rhs| {
             let op = match op.as_rule() {
-                Rule::union => Op::Union,
-                Rule::intersection => Op::Intersection,
-                rule => unreachable!("Expr::parse expected infix operation, found {:?}", rule),
+                union => Op::Union,
+                intersection => Op::Intersection,
+                rule => unreachable!("Expected infix operator, found {:?}", rule),
             };
             Node::BinOp {
-                lhs: Box::new(lhs),
+                lhs: boxed(lhs),
                 op,
-                rhs: Box::new(rhs),
+                rhs: boxed(rhs),
             }
         })
         .parse(pairs)
@@ -80,16 +117,19 @@ fn new_error(message: String, pair: Pair<Rule>) -> Node {
 fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
     EXTENDS_PARSER
         .map_primary(parse_node)
+        .map_postfix(|_lhs, op| match op.as_rule() {
+            rule => unreachable!("Expected postfix operation, found {:?}", rule),
+        })
         .map_prefix(|op, primary_node| {
             let op = match op.as_rule() {
                 Rule::infer => PrefixOp::Infer,
                 Rule::not => PrefixOp::Not,
-                rule => unreachable!("parse expected prefix operation, found {:?}", rule),
+                rule => unreachable!("Expected prefix operation, found {:?}", rule),
             };
 
             Node::ExtendsPrefixOp {
                 op,
-                value: Box::new(primary_node),
+                value: boxed(primary_node),
             }
         })
         .map_infix(|lhs, op, rhs| {
@@ -105,9 +145,9 @@ fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
                 rule => unreachable!("Expected infix operation, found {:?}", rule),
             };
             Node::ExtendsBinOp {
-                lhs: Box::new(lhs),
+                lhs: boxed(lhs),
                 op,
-                rhs: Box::new(rhs),
+                rhs: boxed(rhs),
             }
         })
         .parse(pairs)
@@ -115,6 +155,7 @@ fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
 
 pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
     let rule = pair.as_rule();
+
     match rule {
         Rule::program => {
             let children: Vec<_> = pair
@@ -124,6 +165,11 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                 .collect();
 
             Node::Program(children)
+        }
+        Rule::statement => {
+            let inner = pair.into_inner().next().unwrap();
+            let inner = parse_node(inner);
+            Node::Statement(boxed(inner))
         }
         Rule::type_alias => parse_type_alias(pair),
         Rule::if_expr => parse_if_expr(pair),
@@ -166,21 +212,28 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
 
             Node::Application(identifier, arguments)
         }
+        Rule::builtin => {
+            let inner = pair.into_inner();
+
+            let name = inner.find_first_tagged("name").unwrap();
+
+            let name = match name.as_rule() {
+                Rule::keyof => BuiltInKeyword::Keyof,
+                _ => unreachable!(
+                    "unexpected rule while parsing builtin: {:?}",
+                    name.as_rule()
+                ),
+            };
+
+            let argument = inner.find_first_tagged("argument").map(parse_node).unwrap();
+
+            Node::Builtin {
+                name,
+                argument: boxed(argument),
+            }
+        }
         Rule::EOI => unreachable!("unexpected end of input"),
         Rule::expr => parse_expr(pair.into_inner()),
-        Rule::array => {
-            let mut inner = pair.into_inner();
-            let mut value = inner.next().map(parse_node).unwrap();
-
-            // To avoid a left hand recursive rule in the grammar
-            // The rule allows for one or more array modifiers to be applied,
-            // which we nest here.
-            while let Some(_) = inner.next() {
-                value = Node::Array(Box::new(value));
-            }
-
-            value
-        }
         Rule::infer => new_error(
             "Infer operator must be used in an extends expression".to_string(),
             pair,
@@ -190,15 +243,15 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             let value = inner
                 .find_first_tagged("value")
                 .map(parse_node)
-                .map(Box::new)
+                .map(boxed)
                 .unwrap();
 
             let else_ = inner
                 .find_first_tagged("else")
                 .and_then(|p| p.into_inner().find_first_tagged("body"))
                 .map(parse_node)
-                .map(Box::new)
-                .unwrap_or(Box::new(Node::Never));
+                .map(boxed)
+                .unwrap_or(boxed(Node::Never));
 
             let arms: Vec<MatchArm> = inner
                 .find_tagged("arm")
@@ -223,8 +276,8 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                 .find_first_tagged("else")
                 .and_then(|p| p.into_inner().find_first_tagged("body"))
                 .map(parse_node)
-                .map(Box::new)
-                .unwrap_or(Box::new(Node::Never));
+                .map(boxed)
+                .unwrap_or(boxed(Node::Never));
 
             let arms: Vec<CondArm> = inner
                 .find_tagged("arm")
@@ -246,50 +299,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             "Condition arms must be used in a condition expression".to_string(),
             pair,
         ),
-        Rule::statement
-        | Rule::and
-        | Rule::argument_list
-        | Rule::array_modifier
-        | Rule::bottom_type
-        | Rule::double_quote_string
-        | Rule::else_arm
-        | Rule::equals
-        | Rule::expr1
-        | Rule::extends
-        | Rule::extends_condition
-        | Rule::extends_expr
-        | Rule::extends_infix
-        | Rule::extends_prefix
-        | Rule::extends_primary
-        | Rule::infix
-        | Rule::intersection
-        | Rule::neg
-        | Rule::not
-        | Rule::not_equals
-        | Rule::not_extends
-        | Rule::object_property
-        | Rule::optional_modifier
-        | Rule::or
-        | Rule::prefix
-        | Rule::primary
-        | Rule::readonly_modifier
-        | Rule::single_quote_string
-        | Rule::strict_equals
-        | Rule::strict_not_equals
-        | Rule::sub_expr
-        | Rule::term
-        | Rule::top_type
-        | Rule::type_boolean
-        | Rule::type_number
-        | Rule::type_parameters
-        | Rule::type_string
-        | Rule::union
-        | Rule::export
-        | Rule::COMMENT
-        | Rule::BLOCK_COMMENT
-        | Rule::LINE_COMMENT
-        | Rule::WHITESPACE
-        | Rule::keyword => {
+        _ => {
             let positives: Vec<Rule> = vec![];
             let negatives: Vec<Rule> = vec![pair.as_rule()];
             let error = Error::new_from_span(
@@ -310,20 +320,22 @@ fn parse_if_expr(pair: Pair<Rule>) -> Node {
 
     let condition = inner
         .find_first_tagged("condition")
-        .map(|p| Box::new(parse_extends_condition(p.into_inner())))
+        .map(|p| boxed(parse_extends_condition(p.into_inner())))
         .unwrap();
 
     let then = inner
         .find_first_tagged("then")
         .map(parse_node)
-        .map(Box::new)
+        .map(boxed)
         .unwrap();
 
     let else_ = inner
-        .find_first_tagged("else")
+        .clone()
+        .find(|p| p.as_node_tag() == Some("else"))
         .map(parse_node)
-        .map(Box::new)
-        .unwrap_or(Box::new(Node::Never));
+        .unwrap_or_else(|| Node::Never);
+
+    let else_ = boxed(else_);
 
     match *condition {
         // If the condition is a binary operation, we can desugar it into an extends expression
@@ -345,6 +357,10 @@ fn tuple(pair: Pair<Rule>) -> Node {
     let items = pair.into_inner().map(parse_node).collect();
 
     Node::Tuple(items)
+}
+
+fn boxed(lhs: Node) -> Box<Node> {
+    Box::new(lhs)
 }
 
 fn parse_object_literal(pair: Pair<Rule>) -> Node {
@@ -409,7 +425,7 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
     let body = inner
         .find_first_tagged("body")
         .map(parse_node)
-        .map(Box::new)
+        .map(boxed)
         .unwrap();
 
     Node::TypeAlias {
@@ -424,26 +440,64 @@ fn text(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
 }
 
+pub fn find_tagged_children<'i, R>(
+    pairs: Pairs<'i, R>,
+    tag: &'i str,
+) -> std::iter::Filter<Pairs<'i, R>, impl FnMut(&Pair<'i, R>) -> bool>
+where
+    R: pest::RuleType,
+{
+    pairs.filter(move |pair: &Pair<'i, R>| matches!(pair.as_node_tag(), Some(nt) if nt == tag))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::*;
+    use pest::consumes_to;
+    use pest::parses_to;
     use pretty_assertions::{assert_eq, assert_ne};
     use quickcheck::TestResult;
     use std::assert_matches::assert_matches;
+    use textwrap_macros::dedent;
+    use Rule::*;
 
     fn s(input: &str) -> String {
         input.to_string()
     }
 
-    // #[test]
-    // fn infer() {
-    //     assert_typescript!("", "type A = ?x");
-    // }
+    #[test]
+    fn array_access_single_quote() {
+        assert_typescript!(expr, "A['field']", "A['field']");
+    }
 
     #[test]
-    fn primitive_string() {
-        assert_typescript!("type A = string;", "type A = string");
+    fn array_access_double_quote() {
+        assert_typescript!(expr, r#"A["field"]"#, r#"A["field"]"#);
+    }
+
+    #[test]
+    fn array_access_template_string() {
+        assert_typescript!(expr, r#"A[`${x}`]"#, r#"A[`${x}`]"#);
+    }
+
+    #[test]
+    fn dot_access() {
+        assert_typescript!(expr, r#"A["x"]"#, r#"A.x"#);
+    }
+
+    fn chained_dot_access() {
+        assert_typescript!(expr, r#"A["x"]["y"]["z"]"#, r#"A.x.y.z"#);
+    }
+
+    #[test]
+    fn chained_array_access() {
+        assert_typescript!(expr, r#"A['x']['y']['z']"#, r#"A['x']['y']['z']"#);
+    }
+
+    #[test]
+    fn array_access_indexer() {
+        assert_typescript!(expr, r#"A[string]"#, r#"A[string]"#);
     }
 
     #[test]
@@ -513,13 +567,13 @@ mod tests {
 
     #[test]
     fn string_literals() {
-        assert_typescript!("type A = \"1\";", "type A = \"1\"");
-        assert_typescript!("type A = '1';", "type A = '1'");
+        assert_typescript!(expr, r#""1""#, r#""1""#);
+        assert_typescript!(expr, "'1'", "'1'");
     }
 
     #[test]
     fn template_string_literals() {
-        assert_typescript!("type A = `1`;", "type A = `1`");
+        assert_typescript!(expr, "`1`", "`1`");
     }
 
     #[test]
@@ -594,6 +648,57 @@ mod tests {
     }
 
     #[test]
+    fn if_expr_nested_if_else() {
+        assert_typescript!(
+            expr,
+            r#"
+            a extends b
+                ? c extends d
+                    ? x
+                    : never
+                : never
+            "#,
+            r#"
+            if a <: b then
+                if c <: d then x
+            "#
+        );
+
+        assert_typescript!(
+            expr,
+            r#"
+            a extends b
+                ? c extends d
+                    ? x
+                    : y
+                : never
+            "#,
+            r#"
+            if a <: b then
+                if c <: d then x
+                else y
+            "#
+        );
+
+        assert_typescript!(
+            expr,
+            r#"
+            a extends b
+                ? c extends d
+                    ? x
+                    : y
+                : z
+            "#,
+            r#"
+            if a <: b then
+                if c <: d then x
+                else y
+            else z
+            "#
+        );
+    }
+
+    #[test]
     fn if_not_extends() {
         assert_typescript!(
             "type A = a extends b ? d : c;",
@@ -613,7 +718,7 @@ mod tests {
     fn if_expr_joined_conditions() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : 0;",
-            join!("type A = if 1 <: number", "then 1", "else 0")
+            "type A = if 1 <: number then 1 else 0"
         );
     }
 
@@ -666,18 +771,17 @@ mod tests {
     }
 
     #[test]
-    fn array_of_numbers() {
-        assert_typescript!("type A = number[];", "type A = number[]");
+    fn array_2d() {
+        assert_typescript!(expr, "number[]", "number[]");
+    }
+    #[test]
+    fn array_4d() {
+        assert_typescript!(expr, "number[][][]", "number[][][]");
     }
 
     #[test]
     fn array_of_numbers_with_parentheses() {
         assert_typescript!("type A = number[];", "type A = (number)[]");
-    }
-
-    #[test]
-    fn multidimensional_array_of_numbers() {
-        assert_typescript!("type A = number[][][];", "type A = number[][][]");
     }
 
     #[test]
@@ -699,13 +803,18 @@ mod tests {
     }
 
     #[test]
+    fn generic_with_guard() {
+        assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) = 1");
+    }
+
+    #[test]
     fn exported_type() {
         assert_typescript!("export type A = 1;", "export type A = 1");
     }
 
     #[test]
     fn application_single_type_argument() {
-        assert_typescript!("type B = A<1>;", "type B = A(1)");
+        assert_typescript!(expr, "A<1>", "A(1)");
     }
 
     #[test]
@@ -734,6 +843,29 @@ mod tests {
     }
 
     #[test]
+    fn keyof() {
+        assert_typescript!(expr, "keyof A", "keyof(A)");
+    }
+
+    #[test]
+    fn keyof_twice() {
+        assert_typescript!(expr, "keyof keyof A", "keyof(keyof(A))");
+    }
+
+    #[test]
+    fn if_keyof() {
+        assert_typescript!(
+            expr,
+            r#"
+            x extends keyof y
+                ? 1
+                : never
+            "#,
+            "if x <: keyof(y) then 1"
+        );
+    }
+
+    #[test]
     fn match_expr() {
         assert_typescript!(
             r#"
@@ -753,7 +885,14 @@ mod tests {
     fn cond_expr() {
         assert_typescript!(
             r#"
-            type A<x> = x extends number ? 1 : x extends {} ? x extends {a: 1} ? 2 : never : never;
+            type A<x> =
+                x extends number
+                    ? 1
+                    : x extends {}
+                        ? x extends {a: 1}
+                            ? 2
+                            : never
+                        : never;
             "#,
             r#"
             type A(x) = cond do
@@ -776,6 +915,60 @@ mod tests {
                 x <: {} and x <: {a: 1} => 2,
                 else => 3
             end
+            "#
+        );
+    }
+
+    // #[test]
+    // fn ts_toolbelt_1() {
+    //     assert_typescript!(
+    //         expr,
+    //         r#"
+    //         "#,
+    //         r#"
+    //         if number <: A.length then
+    //             if K <: number | `${number}` then
+    //                 A[never] | undefined
+    //             else 1
+    //         "#
+    //     );
+    // }
+
+    #[test]
+    fn ts_toolbelt_any_at() {
+        assert_typescript!(
+            statement,
+            r#"
+            export type At<A extends any, K extends Key> =
+                A extends List
+                    ? number extends A["length"]
+                        ? K extends number | `${number}`
+                            ? A[never] | undefined
+                            : undefined
+                        : K extends keyof A
+                            ? A[K]
+                            : undefined
+                    : unknown extends A
+                        ? unknown
+                        : K extends keyof A
+                            ? A[K]
+                            : undefined;
+            "#,
+            r#"
+            export type At(A, K) =
+                if A <: List then
+                    if number <: A.length then
+                        if K <: number | `${number}` then
+                            A[never] | undefined
+                        else undefined
+                    else
+                        if K <: keyof(A) then A[K]
+                        else undefined
+                else
+                    if unknown <: A then unknown
+                    else if K <: keyof(A) then A[K]
+                    else undefined
+
             "#
         );
     }

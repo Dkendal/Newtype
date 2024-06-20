@@ -73,45 +73,56 @@ fn main() {
 pub mod test_support {
     use crate::{ast::Node, parser::parse_newtype};
 
-    macro_rules! join {
-        ($($e:expr),*) => {
-            vec![$($e.to_string()),*].join("\n").as_str()
-        };
-    }
-    pub(crate) use join;
-
     macro_rules! parse {
-        ($source:expr) => {
-            crate::parser::parse_node(
-                crate::parser::NewtypeParser::parse(
-                    crate::parser::Rule::program,
-                    &$source.to_string(),
-                )
-                .unwrap()
+        ($rule:expr, $source:expr) => {{
+            let pair = crate::parser::NewtypeParser::parse($rule, $source)
+                .unwrap_or_else(|e| panic!("{}", e))
                 .next()
-                .unwrap(),
-            )
-        };
-        ($rule:expr, $source:expr) => {
-            crate::parser::parse_node(
-                crate::parser::NewtypeParser::parse($rule, &$source.to_string())
-                    .unwrap()
-                    .next()
-                    .unwrap(),
-            )
+                .unwrap_or_else(|| panic!("No parse result"));
+
+            println!("================================================================================");
+            println!("STAGE 1: RULES");
+            println!("================================================================================");
+            println!("{:#?}", pair);
+
+            assert_eq!(pair.as_span().as_str(), $source, "Rule did not consume entire input");
+
+            let out = crate::parser::parse_node(pair);
+
+            out
+        }};
+        ($source:expr) => {
+            parse!(crate::parser::Rule::program, $source)
         };
     }
 
     pub(crate) use parse;
 
     macro_rules! assert_typescript {
+        ($rule:expr, $expected:expr, $source:expr) => {
+            let source = dedent!($source).trim();
+            let expected = dedent!($expected).trim();
+
+            let pairs = parse!($rule, source);
+
+            println!("================================================================================");
+            println!("STAGE 2: INITIAL AST");
+            println!("================================================================================");
+            println!("{:#?}", pairs);
+
+            let simplified = pairs.simplify();
+
+            println!("================================================================================");
+            println!("STAGE 3: SIMPLIFIED AST");
+            println!("================================================================================");
+            println!("{:#?}", pairs);
+
+            let actual = simplified.to_pretty_ts(80);
+            assert_eq!(expected, actual.trim());
+        };
+
         ($expected:expr, $source:expr) => {
-            let result = parse!($source);
-            println!("INITIAL AST: {result:#?}");
-            let simplified = result.simplify();
-            println!("SIMPLIFIED AST: {:#?}", simplified);
-            let actual = simplified.to_pretty_ts(usize::MAX);
-            assert_eq!($expected.trim(), actual.trim());
+            assert_typescript!(crate::parser::Rule::statement, $expected, $source);
         };
     }
 
@@ -119,9 +130,9 @@ pub mod test_support {
 
     macro_rules! assert_parse_failure {
         ($source:expr) => {
-            let result = parse_newtype($source.to_string())
-            println!("{:#?}", result);
-            assert!(result.is_err());
+            let node = parse_newtype($source.to_string())
+            println!("{:#?}", node);
+            assert!(node.is_err());
         };
     }
 }

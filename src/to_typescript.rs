@@ -13,6 +13,14 @@ fn parens(doc: RcDoc<()>) -> RcDoc<()> {
     surround(doc, "(", ")")
 }
 
+fn single_quote(doc: RcDoc<()>) -> RcDoc<()> {
+    surround(doc, "'", "'")
+}
+
+fn double_quote(doc: RcDoc<()>) -> RcDoc<()> {
+    surround(doc, "\"", "\"")
+}
+
 pub trait ToTypescript {
     fn to_pretty_ts(&self, width: usize) -> String {
         let mut w = Vec::new();
@@ -29,10 +37,7 @@ impl ToTypescript for Node {
             Node::Program(stmnts) => {
                 let mut doc = RcDoc::nil();
                 for stmnt in stmnts {
-                    doc = doc
-                        .append(stmnt.to_ts())
-                        .append(";")
-                        .append(RcDoc::hardline());
+                    doc = doc.append(stmnt.to_ts()).append(RcDoc::hardline());
                 }
                 doc
             }
@@ -50,26 +55,26 @@ impl ToTypescript for Node {
                     RcDoc::nil()
                 };
 
+                let params_doc = match params {
+                    list if list.len() == 0 => RcDoc::nil(),
+                    list => {
+                        let seperator = RcDoc::text(",").append(RcDoc::space());
+
+                        let body =
+                            RcDoc::intersperse(list.iter().map(|param| param.to_ts()), seperator);
+
+                        RcDoc::text("<").append(body).append(RcDoc::text(">"))
+                    }
+                };
+
                 doc.append("type")
                     .append(RcDoc::space())
                     .append(name)
-                    .append(match params {
-                        list if list.len() == 0 => RcDoc::nil(),
-                        list => {
-                            let seperator = RcDoc::text(",").append(RcDoc::space());
-
-                            let body = RcDoc::intersperse(
-                                list.iter().map(|param| param.to_ts()),
-                                seperator,
-                            );
-
-                            RcDoc::text("<").append(body).append(RcDoc::text(">"))
-                        }
-                    })
+                    .append(params_doc)
                     .append(RcDoc::space())
                     .append("=")
-                    .append(RcDoc::space())
-                    .append(body)
+                    .append(RcDoc::line().append(body).nest(4))
+                    .group()
             }
             Node::Ident(ident) => RcDoc::text(ident),
             Node::Number(number) => RcDoc::text(number),
@@ -83,15 +88,27 @@ impl ToTypescript for Node {
             Node::IfExpr(_cond, _then, _els) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
-            // (*cond)
-            // .to_ts()
-            // .append(RcDoc::space())
-            // .append("?")
-            // .append(RcDoc::space())
-            // .append(then.to_ts())
-            // .append(RcDoc::space())
-            // .append(":")
-            // .append(RcDoc::space())
+            Node::Access {
+                lhs,
+                rhs,
+                is_dot: true,
+            } => {
+                let rhs = rhs
+                    .as_ident()
+                    .expect("rhs of dot access should be an ident");
+
+                lhs.to_ts()
+                    .append(RcDoc::text("["))
+                    .append(smart_quote(rhs))
+                    .append(RcDoc::text("]"))
+                    .group()
+            }
+            Node::Access { lhs, rhs, .. } => lhs
+                .to_ts()
+                .append(RcDoc::text("["))
+                .append(rhs.to_ts())
+                .append(RcDoc::text("]"))
+                .group(),
             Node::Error(_) => todo!(),
             Node::ObjectLiteral(props) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
@@ -154,20 +171,31 @@ impl ToTypescript for Node {
                     .append(RcDoc::space())
                     .append(rhs)
             }
-            Node::ExtendsExpr(lhs, rhs, then, els) => lhs
-                .to_ts()
-                .append(RcDoc::space())
-                .append("extends")
-                .append(RcDoc::space())
-                .append(rhs.to_ts())
-                .append(RcDoc::space())
-                .append("?")
-                .append(RcDoc::space())
-                .append(then.to_ts())
-                .append(RcDoc::space())
-                .append(":")
-                .append(RcDoc::space())
-                .append(els.to_ts()),
+
+            Node::Builtin { name, argument } => name.to_ts().append(" ").append(argument.to_ts()),
+
+            Node::ExtendsExpr(lhs, rhs, then, els) => {
+                let condition_doc = lhs
+                    .to_ts()
+                    .append(RcDoc::space())
+                    .append("extends")
+                    .append(RcDoc::space())
+                    .append(rhs.to_ts());
+
+                let then_doc = RcDoc::line()
+                    .append("?")
+                    .append(RcDoc::space())
+                    .append(then.to_ts())
+                    .nest(4);
+
+                let else_doc = RcDoc::line()
+                    .append(":")
+                    .append(RcDoc::space())
+                    .append(els.to_ts())
+                    .nest(4);
+
+                condition_doc.append(then_doc).append(else_doc)
+            }
             Node::ExtendsBinOp { .. } => {
                 unreachable!("ExtendsBinOp should be desugared before this point")
             }
@@ -180,6 +208,15 @@ impl ToTypescript for Node {
             Node::CondExpr { .. } => {
                 unreachable!("CondExpr should be desugared before this point")
             }
+            Node::Statement(stmnt) => stmnt.to_ts().append(RcDoc::text(";")),
+        }
+    }
+}
+
+impl ToTypescript for BuiltInKeyword {
+    fn to_ts(&self) -> RcDoc<()> {
+        match self {
+            BuiltInKeyword::Keyof => RcDoc::text("keyof"),
         }
     }
 }
@@ -206,5 +243,13 @@ impl ToTypescript for ObjectProperty {
             .append(RcDoc::text(":"))
             .append(RcDoc::space())
             .append(self.value.to_ts())
+    }
+}
+
+fn smart_quote(name: &str) -> RcDoc<()> {
+    if name.chars().any(|c| c == '\"') {
+        single_quote(RcDoc::text(name))
+    } else {
+        double_quote(RcDoc::text(name))
     }
 }

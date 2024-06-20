@@ -21,31 +21,14 @@ impl Simplify for Node {
 
                 simplify_if_expr(op, then, &else_)
             }
+            Node::Access { lhs, rhs, is_dot } => Node::Access {
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+                is_dot: *is_dot,
+            },
             Node::MatchExpr { .. } => simplify_match_expr(node),
             Node::CondExpr { .. } => simplify_cond_expr(node),
-            Node::Program(_)
-            | Node::TypeAlias { .. }
-            | Node::BinOp { .. }
-            | Node::Ident(_)
-            | Node::Number(_)
-            | Node::Primitive(_)
-            | Node::String(_)
-            | Node::TemplateString(_)
-            | Node::ExtendsPrefixOp { .. }
-            | Node::ExtendsBinOp { .. }
-            | Node::ExtendsExpr(_, _, _, _)
-            | Node::Error(_)
-            | Node::ObjectLiteral(_)
-            | Node::Application(_, _)
-            | Node::Never
-            | Node::Any
-            | Node::Unknown
-            | Node::Tuple(_)
-            | Node::Array(_)
-            | Node::Null
-            | Node::Undefined
-            | Node::False
-            | Node::True => node.clone(),
+            _ => node.clone(),
         })
     }
 }
@@ -177,7 +160,16 @@ mod tests {
     fn simplify_or() {
         assert_eq!(
             parse!(expr, "if a <: b or c <: d then e else f").simplify(),
-            parse!(expr, "if a <: b then e else if c <: d then e else f else f").simplify(),
+            parse!(
+                expr,
+                r#"
+                if a <: b then e
+                else
+                    if c <: d then e
+                    else f
+                "#
+            )
+            .simplify(),
         )
     }
 
