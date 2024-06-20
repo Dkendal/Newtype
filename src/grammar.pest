@@ -3,15 +3,20 @@ program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 statement = { type_alias }
 
 type_alias = {
-    (#export = export)? ~
-    "type" ~ #name = ident ~
-    ("(" ~ #parameters = type_parameters ~ ")")? ~ 
-    "=" ~ #body = expr
+    (#export = export)? ~ "type" ~ #name = ident ~ ("(" ~ #parameters = type_parameters ~ ")")? ~ #where = where_clause? ~ "=" ~ #body = expr
 }
 
-type_parameters = { ident ~ ( "," ~ ident)* }
+where_clause = {
+    "where" ~ #constraint = type_constraint ~ ("," ~ #constraint = type_constraint)*
+}
 
-expr = { expr1 ~ ( infix ~ expr1)* }
+type_constraint = {
+    #name = ident ~ extends ~ #constraint = expr
+}
+
+type_parameters = { ident ~ ("," ~ ident)* }
+
+expr = { expr1 ~ (infix ~ expr1)* }
 
 expr1 = _{ prefix* ~ primary ~ postfix* }
 
@@ -45,7 +50,7 @@ keyof = @{ "keyof" }
 
 application = { ident ~ "(" ~ #arguments = argument_list ~ ")" }
 
-argument_list = { expr ~ ( "," ~ expr)* }
+argument_list = { expr ~ ("," ~ expr)* }
 
 infer = @{ "?" }
 
@@ -96,12 +101,7 @@ if_expr = {
 }
 
 match_expr = {
-    "match" ~ #value = expr ~ "do" ~
-    #arm = match_arm ~
-    ("," ~ #arm = match_arm)* ~
-    ("," ~ #else = else_arm)? ~
-    ","? ~
-    "end"
+    "match" ~ #value = expr ~ "do" ~ #arm = match_arm ~ ("," ~ #arm = match_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ "end"
 }
 
 match_arm = {
@@ -109,12 +109,7 @@ match_arm = {
 }
 
 cond_expr = {
-    "cond" ~ "do" ~
-    #arm = cond_arm ~
-    ("," ~ #arm = cond_arm)* ~
-    ("," ~ #else = else_arm)? ~
-    ","?
-    ~ "end"
+    "cond" ~ "do" ~ #arm = cond_arm ~ ("," ~ #arm = cond_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ "end"
 }
 
 cond_arm = {
@@ -207,7 +202,6 @@ keyword = _{
   | "class"
   | "else"
   | "extends"
-  | "extends"
   | "false"
   | "function"
   | "infer"
@@ -233,8 +227,8 @@ number = @{
     (neg ~ WHITESPACE*)? ~ !"_" ~ (ASCII_DIGIT | "_")+ ~ ("." ~ !"_" ~ (ASCII_DIGIT | "_")*)?
 }
 
-COMMENT = _{ BLOCK_COMMENT | LINE_COMMENT }
+COMMENT       = _{ BLOCK_COMMENT | LINE_COMMENT }
 BLOCK_COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
-LINE_COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* }
+LINE_COMMENT  = _{ "//" ~ (!NEWLINE ~ ANY)* }
 
 WHITESPACE = _{ " " | "\t" | "\n" }

@@ -407,8 +407,6 @@ fn parse_object_literal(pair: Pair<Rule>) -> Node {
 fn parse_type_alias(pair: Pair<Rule>) -> Node {
     let inner = pair.into_inner();
 
-    println!("{inner:#?}");
-
     let export = inner.find_first_tagged("export").is_some();
 
     let name = inner
@@ -428,6 +426,10 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
         .map(boxed)
         .unwrap();
 
+    dbg!(inner
+        .find_tagged("constraint")
+        .collect::<Vec<_>>());
+
     Node::TypeAlias {
         export,
         name,
@@ -438,16 +440,6 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
 
 fn text(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
-}
-
-pub fn find_tagged_children<'i, R>(
-    pairs: Pairs<'i, R>,
-    tag: &'i str,
-) -> std::iter::Filter<Pairs<'i, R>, impl FnMut(&Pair<'i, R>) -> bool>
-where
-    R: pest::RuleType,
-{
-    pairs.filter(move |pair: &Pair<'i, R>| matches!(pair.as_node_tag(), Some(nt) if nt == tag))
 }
 
 #[cfg(test)]
@@ -955,7 +947,7 @@ mod tests {
                             : undefined;
             "#,
             r#"
-            export type At(A, K) =
+            export type At(A, K) where A <: any, K <: Key =
                 if A <: List then
                     if number <: A.length then
                         if K <: number | `${number}` then
