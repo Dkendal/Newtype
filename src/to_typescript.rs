@@ -58,12 +58,15 @@ impl ToTypescript for Node {
                 let params_doc = match params {
                     list if list.len() == 0 => RcDoc::nil(),
                     list => {
-                        let seperator = RcDoc::text(",").append(RcDoc::space());
+                        let seperator = RcDoc::text(",").append(RcDoc::line());
 
                         let body =
-                            RcDoc::intersperse(list.iter().map(|param| param.to_ts()), seperator);
+                            RcDoc::intersperse(list.iter().map(|param| param.to_ts().group()), seperator);
 
-                        RcDoc::text("<").append(body).append(RcDoc::text(">"))
+                        RcDoc::text("<")
+                            .append(RcDoc::line_().append(body).append(RcDoc::line_()).nest(4))
+                            .append(RcDoc::text(">"))
+                            .group()
                     }
                 };
 
@@ -281,6 +284,38 @@ impl ToTypescript for Node {
                     .group()
             }
         }
+    }
+}
+
+impl ToTypescript for TypeParameter {
+    fn to_ts(&self) -> RcDoc<()> {
+        let rest = if self.rest {
+            RcDoc::text("...")
+        } else {
+            RcDoc::nil()
+        };
+
+        let constraint = match &self.constraint {
+            Some(constraint) => RcDoc::space()
+                .append("extends")
+                .append(RcDoc::space())
+                .append(constraint.to_ts()),
+            None => RcDoc::nil(),
+        };
+
+        let default_value = match &self.default {
+            Some(value) => RcDoc::space()
+                .append("=")
+                .append(RcDoc::space())
+                .append(value.to_ts()),
+            None => RcDoc::nil(),
+        };
+
+        RcDoc::nil()
+            .append(rest)
+            .append(self.name.clone())
+            .append(constraint)
+            .append(default_value)
     }
 }
 

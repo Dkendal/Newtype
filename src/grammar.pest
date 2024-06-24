@@ -3,11 +3,27 @@ program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 statement = { type_alias }
 
 type_alias = {
-    (#export = export)? ~ "type" ~ #name = ident ~ ("(" ~ #parameters = type_parameters ~ ")")? ~ #where = where_clause? ~ "=" ~ #body = expr
+    (#export = export)? ~ "type" ~ #name = ident ~
+    ("(" ~ #parameters = type_parameters ~ ")")? ~
+    #defaults = defaults_caluse? ~
+    #where = where_clause? ~
+    "=" ~ #body = expr
+}
+
+defaults_caluse = {
+    "defaults" ~ #default = type_parameter_default ~
+    ("," ~ #default = type_parameter_default)* ~
+    ","?
 }
 
 where_clause = {
-    "where" ~ #constraint = type_constraint ~ ("," ~ #constraint = type_constraint)*
+    "where" ~ #constraint = type_constraint ~
+    ("," ~ #constraint = type_constraint)* ~
+    ","?
+}
+
+type_parameter_default = {
+    #name = ident ~ "=" ~ #value = expr
 }
 
 type_constraint = {

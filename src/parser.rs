@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::default;
 use std::iter::FilterMap;
@@ -442,9 +444,12 @@ fn parse_object_literal(pair: Pair<Rule>) -> Node {
 }
 
 fn parse_type_alias(pair: Pair<Rule>) -> Node {
-    let mut inner = pair.clone().into_inner();
+    let inner = pair.clone().into_inner();
 
-    let export = inner.clone().find(tag_eq("export")).is_some();
+    let export = inner
+        .peek()
+        .map(|p| p.as_rule() == Rule::export)
+        .unwrap_or(false);
 
     let name = inner
         .clone()
@@ -460,76 +465,106 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
         .map(boxed)
         .unwrap();
 
-    let mut constraints: HashMap<&str, Node> = HashMap::new();
+    // Track the order of the inserted parametes
+    let mut ordered_params: Vec<&str> = Default::default();
 
-    // FIXME: rewrite with filter(..)
-    inner.clone().find_tagged("constraint").for_each(|pair| {
-        let mut inner = pair.clone().into_inner();
-        let name = inner.next().unwrap();
-        assert_eq!(name.as_node_tag(), Some("constraint_name"));
-        assert_eq!(name.as_rule(), Rule::ident);
-        let name_str = name.as_str();
-
-        let op = inner.next().unwrap();
-        assert_eq!(op.as_rule(), Rule::extends);
-        let op = InfixOp::Extends;
-
-        let body = inner.next().unwrap();
-
-        assert_eq!(body.as_node_tag(), Some("constraint_body"));
-        assert_eq!(body.as_rule(), Rule::expr);
-        let body = parse_node(body);
-
-        let node = Node::ExtendsBinOp {
-            lhs: boxed(Node::Ident(name_str.to_string())),
-            op,
-            rhs: boxed(body),
-        };
-
-        if constraints.contains_key(name_str) {
-            let error = Error::<Rule>::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!("Duplicate constraint: {}", name_str),
-                },
-                pair.clone().as_span(),
-            );
-
-            panic!("{error}")
-        }
-
-        constraints.insert(name_str, node);
-    });
-
-    let params = inner
+    let mut params: HashMap<&str, TypeParameter> = inner
         .clone()
         .find(tag_eq("parameters"))
-        .map(|p| {
-            let idents: Vec<Node> = p
-                .into_inner()
-                .map(|node| {
-                    assert_eq!(node.as_rule(), Rule::ident);
+        .map(|p| -> HashMap<&str, TypeParameter> {
+            p.into_inner()
+                .map(|param| {
+                    ordered_params.push(param.as_str());
 
-                    match constraints.remove(node.as_str()) {
-                        Some(constraint) => constraint,
-                        None => Node::Ident(node.as_str().to_string()),
-                    }
+                    (
+                        param.as_str(),
+                        TypeParameter::new(param.as_str().to_string(), None, None, false),
+                    )
                 })
-                .collect();
-
-            idents
+                .collect()
         })
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
 
-    for (name, _) in constraints {
-        let error = Error::<Rule>::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!("Unused constraint: {}", name),
-            },
-            pair.clone().as_span(),
-        );
+    if let Some(where_clause) = inner.clone().find(tag_eq("where")) {
+        where_clause
+            .into_inner()
+            .filter(tag_eq("constraint"))
+            .for_each(|pair| {
+                let mut inner = pair.clone().into_inner();
+                let name = inner.next().unwrap();
+                assert_eq!(name.as_node_tag(), Some("constraint_name"));
+                assert_eq!(name.as_rule(), Rule::ident);
+                let name = name.as_str();
 
-        panic!("{error}")
+                assert_eq!(inner.next().unwrap().as_rule(), Rule::extends);
+
+                let body = inner.next().unwrap();
+                assert_eq!(body.as_node_tag(), Some("constraint_body"));
+                assert_eq!(body.as_rule(), Rule::expr);
+                let body = parse_node(body);
+
+                let param = match params.get_mut(name) {
+                    Some(param) => param,
+                    None => {
+                        let error = Error::<Rule>::new_from_span(
+                            ErrorVariant::CustomError {
+                                message: format!(
+                                    r#"Type parameter "{}", is missing from signature"#,
+                                    name
+                                ),
+                            },
+                            pair.clone().as_span(),
+                        );
+
+                        panic!("{error}")
+                    }
+                };
+
+                param.constraint = Some(boxed(body));
+            });
     }
+
+    if let Some(defaults_clause) = inner.clone().find(tag_eq("defaults")) {
+        defaults_clause
+            .into_inner()
+            .filter(tag_eq("default"))
+            .for_each(|pair| {
+                let mut inner = pair.clone().into_inner();
+                let name = inner.next().unwrap();
+                assert_eq!(name.as_node_tag(), Some("name"));
+                assert_eq!(name.as_rule(), Rule::ident);
+                let name = name.as_str();
+
+                let body = inner.next().unwrap();
+                assert_eq!(body.as_node_tag(), Some("value"));
+                assert_eq!(body.as_rule(), Rule::expr);
+                let body = parse_node(body);
+
+                let param = match params.get_mut(name) {
+                    Some(param) => param,
+                    None => {
+                        let error = Error::<Rule>::new_from_span(
+                            ErrorVariant::CustomError {
+                                message: format!(
+                                    r#"Type parameter "{}", is missing from signature"#,
+                                    name
+                                ),
+                            },
+                            pair.clone().as_span(),
+                        );
+
+                        panic!("{error}")
+                    }
+                };
+
+                param.default = Some(boxed(body));
+            });
+    };
+
+    let params = ordered_params
+        .iter()
+        .map(|name| params.get(name).unwrap().clone())
+        .collect();
 
     Node::TypeAlias {
         export,
@@ -549,6 +584,21 @@ fn text(pair: Pair<Rule>) -> String {
 fn tag_eq<'a>(tag: &'a str) -> impl FnMut(&Pair<'a, Rule>) -> bool {
     |pair: &Pair<Rule>| pair.as_node_tag() == Some(tag)
 }
+
+// Generate tests for all test cases in tests/pest/foo/ and all subdirectories. Since
+// `lazy_static = true`, a single `PestTester` is created and used by all tests; otherwise a new
+// `PestTester` would be created for each test.
+// #[pest_test_gen::pest_tests(
+//     crate::parser::NewtypeParser,
+//     crate::parser::Rule,
+//     "program",
+//     subdir = "newtype",
+//     recursive = true,
+//     lazy_static = true
+// )]
+// #[cfg(test)]
+// mod newtype_tests {
+// }
 
 #[cfg(test)]
 mod tests {
@@ -1158,15 +1208,50 @@ mod tests {
             type Exact(A, W) =
                 if W <: unknown then
                     if A <: W then
-                        if A <: Narrowable then A
+                        if A <: Narrowable then
+                            A
                         else
                             for K in keyof(A) do
-                                if K <: keyof(W) then Exact(A[K], W[K]) end
+                                if K <: keyof(W) then
+                                    Exact(A[K], W[K])
+                                end
                             end
                         end
-                    else W
+                    else
+                        W
                     end
                 end
+            "#
+        );
+    }
+
+    #[test]
+    fn ts_toolbelt_list_assign() {
+        assert_typescript!(
+            statement,
+            r#"
+            export type Assign<
+                L extends List,
+                Ls extends List<List>,
+                depth extends Depth = 'flat',
+                ignore extends object = BuiltIn,
+                fill extends any = never
+            > =
+                Cast<OAssign<L, Ls, depth, ignore, fill>, List>;
+            "#,
+            r#"
+            export type Assign(L, Ls, depth, ignore, fill)
+                defaults
+                    depth = 'flat',
+                    ignore = BuiltIn,
+                    fill = never,
+                where
+                    L <: List,
+                    Ls <: List(List),
+                    depth <: Depth,
+                    ignore <: object,
+                    fill <: any
+                = Cast(OAssign(L, Ls, depth, ignore, fill), List)
             "#
         );
     }

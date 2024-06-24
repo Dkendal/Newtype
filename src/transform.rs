@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::ast::*;
 
 pub trait Transform {
@@ -58,12 +60,24 @@ impl Transform for Node {
                 name,
                 params,
                 body,
-            } => Node::TypeAlias {
-                export: *export,
-                name: name.clone(),
-                params: transform_each(params),
-                body: Box::new(body.transform(f)),
-            },
+            } => {
+                let params = params
+                    .iter()
+                    .map(|param| {
+                        let mut param = param.clone();
+                        param.default = param.default.map(|d| Box::new(d.transform(f)));
+                        param.constraint = param.constraint.map(|d| Box::new(d.transform(f)));
+                        param
+                    })
+                    .collect_vec();
+
+                Node::TypeAlias {
+                    export: *export,
+                    name: name.clone(),
+                    params,
+                    body: Box::new(body.transform(f)),
+                }
+            }
             Node::Tuple(vec) => Node::Tuple(transform_each(vec)),
             Node::Array(vec) => Node::Array(transform_and_box(vec)),
             Node::Access { lhs, rhs, is_dot } => Node::Access {

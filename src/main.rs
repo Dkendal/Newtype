@@ -80,15 +80,6 @@ pub mod test_support {
                 .next()
                 .unwrap_or_else(|| panic!("No parse result"));
 
-            println!(
-                "================================================================================"
-            );
-            println!("STAGE 1: RULES");
-            println!(
-                "================================================================================"
-            );
-            println!("{:#?}", pair);
-
             assert_eq!(
                 pair.as_span().as_str(),
                 $source,
@@ -113,25 +104,7 @@ pub mod test_support {
 
             let pairs = parse!($rule, source);
 
-            println!(
-                "================================================================================"
-            );
-            println!("STAGE 2: INITIAL AST");
-            println!(
-                "================================================================================"
-            );
-            println!("{:#?}", pairs);
-
             let simplified = pairs.simplify();
-
-            println!(
-                "================================================================================"
-            );
-            println!("STAGE 3: SIMPLIFIED AST");
-            println!(
-                "================================================================================"
-            );
-            println!("{:#?}", pairs);
 
             let actual = simplified.to_pretty_ts(80);
             assert_eq!(expected, actual.trim());

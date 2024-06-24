@@ -7,7 +7,7 @@ pub enum Node {
     TypeAlias {
         export: bool,
         name: String,
-        params: Vec<Node>,
+        params: Vec<TypeParameter>,
         body: Box<Node>,
     },
     BinOp {
@@ -167,4 +167,28 @@ pub struct ObjectProperty {
     pub optional: bool,
     pub key: String,
     pub value: Node,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct TypeParameter {
+    pub name: String,
+    pub constraint: Option<Box<Node>>,
+    pub default: Option<Box<Node>>,
+    pub rest: bool,
+}
+
+impl TypeParameter {
+    pub fn new(
+        name: String,
+        constraint: Option<Box<Node>>,
+        default: Option<Box<Node>>,
+        rest: bool,
+    ) -> Self {
+        Self {
+            name,
+            constraint,
+            default,
+            rest,
+        }
+    }
 }
