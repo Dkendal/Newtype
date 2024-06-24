@@ -279,28 +279,25 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
 
             let else_ = inner
                 .clone()
-                .find_next_tagged_child("else")
-                .and_then(|p| p.into_inner().find_first_tagged("body"))
+                .find(tag_eq("else"))
+                .and_then(|p| p.into_inner().find(tag_eq("body")))
                 .map(parse_node)
                 .map(boxed)
                 .unwrap_or(boxed(Node::Never));
 
             let arms: Vec<CondArm> = inner
                 .clone()
-                .find_all_tagged_children("arm")
+                .filter(tag_eq("arm"))
                 .map(|arm| {
                     let mut inner = arm.into_inner();
 
                     let condition = inner
-                        .find_next_tagged_child("condition")
+                        .find(tag_eq("condition"))
                         .map(|p| p.into_inner())
                         .map(parse_extends_condition)
                         .unwrap();
 
-                    let body = inner
-                        .find_next_tagged_child("body")
-                        .map(parse_node)
-                        .unwrap();
+                    let body = inner.find(tag_eq("body")).map(parse_node).unwrap();
 
                     CondArm { condition, body }
                 })
@@ -315,20 +312,16 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
         Rule::for_expr => {
             let mut inner = pair.into_inner();
 
-            let index = inner
-                .find_next_tagged_child("index")
-                .unwrap()
-                .as_str()
-                .to_string();
+            let index = inner.find(tag_eq("index")).unwrap().as_str().to_string();
 
             let iterable = inner
-                .find_next_tagged_child("iterable")
+                .find(tag_eq("iterable"))
                 .map(parse_node)
                 .map(boxed)
                 .unwrap();
 
             let body = inner
-                .find_next_tagged_child("body")
+                .find(tag_eq("body"))
                 .map(parse_node)
                 .map(boxed)
                 .unwrap();
@@ -362,18 +355,18 @@ fn parse_if_expr(pair: Pair<Rule>) -> Node {
     let mut inner = pair.into_inner();
 
     let condition = inner
-        .find_next_tagged_child("condition")
+        .find(tag_eq("condition"))
         .map(|p| boxed(parse_extends_condition(p.into_inner())))
         .unwrap();
 
     let then = inner
-        .find_next_tagged_child("then")
+        .find(tag_eq("then"))
         .map(parse_node)
         .map(boxed)
         .unwrap();
 
     let else_ = inner
-        .find_next_tagged_child("else")
+        .find(tag_eq("else"))
         .map(parse_node)
         .unwrap_or_else(|| Node::Never);
 
@@ -542,35 +535,6 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
 
 fn text(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
-}
-
-/// Trait for extending the `Pairs` iterator with additional methods.
-trait PairsExt<'i> {
-    fn find_next_tagged_child(&mut self, tag: &str) -> Option<Pair<Rule>>;
-
-    fn find_all_tagged_children(
-        &mut self,
-        tag: &str,
-    ) -> FilterMap<&mut Pairs<'i, Rule>, impl FnMut(Pair<'i, Rule>) -> Option<Pair<'i, Rule>>>;
-}
-
-impl<'i> PairsExt<'i> for Pairs<'i, Rule> {
-    fn find_next_tagged_child(&mut self, tag: &str) -> Option<Pair<Rule>> {
-        self.find(|pair| pair.as_node_tag() == Some(tag))
-    }
-
-    fn find_all_tagged_children(
-        &mut self,
-        tag: &str,
-    ) -> FilterMap<&mut Pairs<'i, Rule>, impl FnMut(Pair<'i, Rule>) -> Option<Pair<'i, Rule>>> {
-        self.filter_map(|pair| {
-            if pair.as_node_tag() == Some(tag) {
-                Some(pair)
-            } else {
-                None
-            }
-        })
-    }
 }
 
 /**
@@ -1200,4 +1164,14 @@ mod tests {
             "#
         );
     }
+
+    //
+    //     #[quickcheck]
+    //     fn prop_parse_number_float(n: f64) -> bool {
+    //         let Ok(("", Number(out))) = number(&n.to_string())
+    //         else {
+    //             return false
+    //         };
+    //         n.to_string() == out.to_string()
+    //     }
 }
