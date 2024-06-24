@@ -1111,38 +1111,6 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn cond_expr_tokens() {
-    //     parses_to! {
-    //         parser: NewtypeParser,
-    //         input: r#"cond do x <: y => a, else => b end"#,
-    //         rule: Rule::cond_expr,
-    //         tokens: [
-    //             cond_expr(0, 34, [
-    //                 cond_arm(8, 19, [
-    //                     extends_condition(8, 15, [
-    //                         expr(8, 10, [
-    //                             ident(8, 9)
-    //                         ]),
-    //                         extends(10, 12),
-    //                         expr(13, 15, [
-    //                             ident(13, 14)
-    //                         ]),
-    //                     ]),
-    //                     expr(18, 19, [
-    //                         ident(18, 19)
-    //                     ])
-    //                 ]),
-    //                 else_arm(21, 31, [
-    //                     expr(29, 31, [
-    //                         ident(29, 30)
-    //                     ])
-    //                 ])
-    //             ])
-    //         ]
-    //     }
-    // }
-
     #[test]
     fn ts_toolbelt_any_at() {
         assert_typescript!(
@@ -1232,14 +1200,4 @@ mod tests {
             "#
         );
     }
-
-    //
-    //     #[quickcheck]
-    //     fn prop_parse_number_float(n: f64) -> bool {
-    //         let Ok(("", Number(out))) = number(&n.to_string())
-    //         else {
-    //             return false
-    //         };
-    //         n.to_string() == out.to_string()
-    //     }
 }
