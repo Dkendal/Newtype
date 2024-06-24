@@ -1038,6 +1038,30 @@ mod tests {
     }
 
     #[test]
+    fn type_where_clause() {
+        assert_typescript!(
+            r#"type A<x extends number> = x;"#,
+            r#"type A(x) where x <: number = x"#
+        );
+    }
+
+    #[test]
+    fn type_defaults_clause() {
+        assert_typescript!(
+            r#"type A<x = number> = x;"#,
+            r#"type A(x) defaults x = number = x"#
+        );
+    }
+
+    #[test]
+    fn type_where_and_defaults_clause() {
+        assert_typescript!(
+            r#"type A<x extends number = number> = x;"#,
+            r#"type A(x) defaults x = number where x <: number = x"#
+        );
+    }
+
+    #[test]
     fn application_single_type_argument() {
         assert_typescript!(expr, "A<1>", "A(1)");
     }
