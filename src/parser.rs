@@ -634,31 +634,14 @@ fn tag_eq<'a>(tag: &'a str) -> impl FnMut(&Pair<'a, Rule>) -> bool {
 // Generate tests for all test cases in tests/pest/foo/ and all subdirectories. Since
 // `lazy_static = true`, a single `PestTester` is created and used by all tests; otherwise a new
 // `PestTester` would be created for each test.
-#[pest_test_gen::pest_tests(
-    crate::parser::NewtypeParser,
-    crate::parser::Rule,
-    "statement",
-    recursive = true,
-    lazy_static = true
-)]
 #[cfg(test)]
-mod pest_tests {}
-
-#[cfg(test)]
-mod tests {
+mod parser_tests {
     use super::*;
     use crate::test_support::*;
-    use pest::consumes_to;
-    use pest::parses_to;
     use pretty_assertions::{assert_eq, assert_ne};
-    use quickcheck::TestResult;
     use std::assert_matches::assert_matches;
     use textwrap_macros::dedent;
     use Rule::*;
-
-    fn s(input: &str) -> String {
-        input.to_string()
-    }
 
     #[test]
     fn array_access_single_quote() {
@@ -696,72 +679,77 @@ mod tests {
 
     #[test]
     fn primitive_number() {
-        assert_typescript!("type A = number;", "type A = number");
+        assert_typescript!("type A = number;","type A as number");
     }
 
     #[test]
     fn primitive_boolean() {
-        assert_typescript!("type A = boolean;", "type A = boolean");
+        assert_typescript!("type A = boolean;","type A as boolean");
     }
 
     #[test]
     fn primitive_never() {
-        assert_typescript!("type A = never;", "type A = never");
+        assert_typescript!("type A = never;","type A as never");
     }
 
     #[test]
     fn primitive_any() {
-        assert_typescript!("type A = any;", "type A = any");
+        assert_typescript!("type A = any;","type A as any");
     }
 
     #[test]
     fn primitive_unknown() {
-        assert_typescript!("type A = unknown;", "type A = unknown");
+        assert_typescript!("type A = unknown;","type A as unknown");
     }
 
     #[test]
     fn number_literal_positive_integer() {
-        assert_typescript!("type A = 1;", "type A = 1");
+        assert_typescript!("type A = 1;","type A as 1");
     }
 
     #[test]
     fn number_literal_negative_integer() {
-        assert_typescript!("type A = -1;", "type A = -1");
+        assert_typescript!("type A = -1;","type A as -1");
     }
 
     #[test]
     fn number_literal_negative_integer_with_space() {
-        assert_typescript!("type A = - 1;", "type A = - 1");
+        assert_typescript!("type A = - 1;","type A as - 1");
     }
 
     #[test]
     fn number_literal_large_integer() {
-        assert_typescript!("type A = 100;", "type A = 100");
+        assert_typescript!("type A = 100;","type A as 100");
     }
 
     #[test]
     fn number_literal_integer_with_underscore() {
-        assert_typescript!("type A = 1_000;", "type A = 1_000");
+        assert_typescript!("type A = 1_000;","type A as 1_000");
     }
 
     #[test]
     fn number_literal_decimal_without_fraction() {
-        assert_typescript!("type A = 100.;", "type A = 100.");
+        assert_typescript!("type A = 100.;","type A as 100.");
     }
 
     #[test]
     fn number_literal_decimal_with_fraction() {
-        assert_typescript!("type A = 100.0;", "type A = 100.0");
+        assert_typescript!("type A = 100.0;","type A as 100.0");
     }
 
     #[test]
     fn number_literal_decimal_with_fraction_and_underscore() {
-        assert_typescript!("type A = 100.000_000;", "type A = 100.000_000");
+        assert_typescript!("type A = 100.000_000;","type A as 100.000_000");
     }
 
     #[test]
     fn string_atom_literals() {
         assert_typescript!(expr, r#"'x'"#, ":x");
+    }
+
+    #[test]
+    fn string_atom_literals_space() {
+        assert_typescript!(expr, r#"['$x', '--y__']"#, "[:$x, :--y__]");
     }
 
     #[test]
@@ -781,32 +769,32 @@ mod tests {
 
     #[test]
     fn literal_true() {
-        assert_typescript!("type A = true;", "type A = true");
+        assert_typescript!("type A = true;","type A as true");
     }
 
     #[test]
     fn literal_false() {
-        assert_typescript!("type A = false;", "type A = false");
+        assert_typescript!("type A = false;","type A as false");
     }
 
     #[test]
     fn literal_null() {
-        assert_typescript!("type A = null;", "type A = null");
+        assert_typescript!("type A = null;","type A as null");
     }
 
     #[test]
     fn literal_undefined() {
-        assert_typescript!("type A = undefined;", "type A = undefined");
+        assert_typescript!("type A = undefined;","type A as undefined");
     }
 
     #[test]
     fn bin_ops_pipe_into_identifier() {
-        assert_typescript!(Rule::program, r#"type A = Y<X>;"#, r#"type A = X |> Y"#);
+        assert_typescript!(Rule::program, r#"type A = Y<X>;"#, r#"type A as X |> Y"#);
     }
 
     #[test]
     fn bin_ops_pipe_literal() {
-        assert_typescript!(Rule::program, r#"type A = Y<1>;"#, r#"type A = 1 |> Y"#);
+        assert_typescript!(Rule::program, r#"type A = Y<1>;"#, r#"type A as 1 |> Y"#);
     }
 
     #[test]
@@ -814,7 +802,7 @@ mod tests {
         assert_typescript!(
             Rule::program,
             r#"type A = Y<X, 1>;"#,
-            r#"type A = X |> Y(1)"#
+            r#"type A as X |> Y(1)"#
         );
     }
 
@@ -823,33 +811,33 @@ mod tests {
         assert_typescript!(
             Rule::program,
             r#"type A = D<C<B<A, 1>>, 2, 3, 4>;"#,
-            r#"type A = A |> B(1) |> C |> D(2, 3, 4)"#
+            r#"type A as A |> B(1) |> C |> D(2, 3, 4)"#
         );
     }
 
     #[test]
     fn bin_ops_union() {
-        assert_typescript!("type A = 1 | 2;", "type A = 1 | 2");
+        assert_typescript!("type A = 1 | 2;","type A as 1 | 2");
     }
 
     #[test]
     fn bin_ops_intersection() {
-        assert_typescript!("type A = 1 & 2;", "type A = 1 & 2");
+        assert_typescript!("type A = 1 & 2;","type A as 1 & 2");
     }
 
     #[test]
     fn bin_ops_union_with_intersection() {
-        assert_typescript!("type A = 1 | (2 & 3);", "type A = 1 | 2 & 3");
+        assert_typescript!("type A = 1 | (2 & 3);","type A as 1 | 2 & 3");
     }
 
     #[test]
     fn bin_ops_intersection_with_union() {
-        assert_typescript!("type A = 1 & (2 | 3);", "type A = 1 & 2 | 3");
+        assert_typescript!("type A = 1 & (2 | 3);","type A as 1 & 2 | 3");
     }
 
     #[test]
     fn bin_ops_grouped_union_and_intersection() {
-        assert_typescript!("type A = (1 | 2) & 3;", "type A = (1 | 2) & 3");
+        assert_typescript!("type A = (1 | 2) & 3;","type A as (1 | 2) & 3");
     }
 
     // If case
@@ -858,7 +846,7 @@ mod tests {
     fn if_expr_simple_if_else() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : 0;",
-            "type A = if 1 <: number then 1 else 0 end"
+            "type A as if 1 <: number then 1 else 0 end"
         );
     }
 
@@ -866,7 +854,7 @@ mod tests {
     fn if_expr_if_without_else() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : never;",
-            "type A = if 1 <: number then 1 end"
+            "type A as if 1 <: number then 1 end"
         );
     }
 
@@ -977,11 +965,12 @@ mod tests {
         assert_typescript!(
             "type A = a extends b ? d : c;",
             r#"
-            type A = if not a <: b then
-                c
-            else
-                d
-            end
+            type A as
+                if not a <: b then
+                    c
+                else
+                    d
+                end
             "#
         );
     }
@@ -990,7 +979,7 @@ mod tests {
     fn if_and() {
         assert_typescript!(
             "type A = a extends b ? c extends d ? e : f : f;",
-            "type A = if a <: b and c <: d then e else f end"
+            "type A as if a <: b and c <: d then e else f end"
         );
     }
 
@@ -998,7 +987,7 @@ mod tests {
     fn if_expr_joined_conditions() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : 0;",
-            r#"type A = if 1 <: number then 1 else 0 end"#
+            r#"type A as if 1 <: number then 1 else 0 end"#
         );
     }
 
@@ -1030,50 +1019,50 @@ mod tests {
 
     #[test]
     fn object_object_literal_empty() {
-        assert_typescript!("type A = {};", "type A = {}");
+        assert_typescript!("type A = {};","type A as {}");
     }
 
     #[test]
     fn object_literal_one_key() {
-        assert_typescript!("type A = {x: 1};", "type A = {x: 1}");
+        assert_typescript!("type A = {x: 1};","type A as {x: 1}");
     }
 
     #[test]
     fn object_literal_many_keys() {
         assert_typescript!(
             "type A = {x: 1, y: 2, z: 3};",
-            "type A = {x: 1, y: 2, z: 3}"
+            "type A as {x: 1, y: 2, z: 3}"
         );
     }
 
     #[test]
     fn object_literal_readonly_modifier() {
-        assert_typescript!("type A = {readonly x: 1};", "type A = {readonly x: 1}");
+        assert_typescript!("type A = {readonly x: 1};","type A as {readonly x: 1}");
     }
 
     #[test]
     fn object_literal_optional_modifier() {
-        assert_typescript!("type A = {x?: 1};", "type A = {x?: 1}");
+        assert_typescript!("type A = {x?: 1};","type A as {x?: 1}");
     }
 
     #[test]
     fn tuple_empty() {
-        assert_typescript!("type A = [];", "type A = []");
+        assert_typescript!("type A = [];","type A as []");
     }
 
     #[test]
     fn tuple_single_element() {
-        assert_typescript!("type A = [1];", "type A = [1]");
+        assert_typescript!("type A = [1];","type A as [1]");
     }
 
     #[test]
     fn tuple_multiple_elements() {
-        assert_typescript!("type A = [1, 2, 3];", "type A = [1, 2, 3]");
+        assert_typescript!("type A = [1, 2, 3];", "type A as [1, 2, 3]");
     }
 
     #[test]
     fn tuple_single_string_element() {
-        assert_typescript!(r#"type A = ['sup'];"#, r#"type A = ["sup"]"#);
+        assert_typescript!(r#"type A = ['sup'];"#, r#"type A as [:sup]"#);
     }
 
     #[test]
@@ -1087,42 +1076,42 @@ mod tests {
 
     #[test]
     fn array_of_numbers_with_parentheses() {
-        assert_typescript!("type A = number[];", "type A = (number)[]");
+        assert_typescript!("type A = number[];", "type A as (number)[]");
     }
 
     #[test]
     fn array_of_union_types() {
         assert_typescript!(
             "type A = (number | string)[];",
-            "type A = (number | string)[]"
+            "type A as (number | string)[]"
         );
     }
 
     #[test]
     fn generics_one_argument() {
-        assert_typescript!("type A<x> = x;", "type A(x) = x");
+        assert_typescript!("type A<x> = x;", "type A(x) as x");
     }
 
     #[test]
     fn generics_many_arguments() {
-        assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) = 1");
+        assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) as 1");
     }
 
     #[test]
     fn generic_with_guard() {
-        assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) = 1");
+        assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) as 1");
     }
 
     #[test]
     fn exported_type() {
-        assert_typescript!("export type A = 1;", "export type A = 1");
+        assert_typescript!("export type A = 1;", "export type A as 1");
     }
 
     #[test]
     fn type_where_clause() {
         assert_typescript!(
             r#"type A<x extends number> = x;"#,
-            r#"type A(x) where x <: number = x"#
+            r#"type A(x) where x <: number as x"#
         );
     }
 
@@ -1130,7 +1119,7 @@ mod tests {
     fn type_defaults_clause() {
         assert_typescript!(
             r#"type A<x = number> = x;"#,
-            r#"type A(x) defaults x = number = x"#
+            r#"type A(x) defaults x = number as x"#
         );
     }
 
@@ -1138,7 +1127,7 @@ mod tests {
     fn type_where_and_defaults_clause() {
         assert_typescript!(
             r#"type A<x extends number = number> = x;"#,
-            r#"type A(x) defaults x = number where x <: number = x"#
+            r#"type A(x) defaults x = number where x <: number as x"#
         );
     }
 
@@ -1149,27 +1138,27 @@ mod tests {
 
     #[test]
     fn application_multiple_type_arguments() {
-        assert_typescript!("type B = A<1, 2, 3>;", "type B = A(1, 2, 3)");
+        assert_typescript!("type B = A<1, 2, 3>;", "type B as A(1, 2, 3)");
     }
 
     #[test]
     fn application_type_argument_with_array() {
-        assert_typescript!("type B = A<1, []>;", "type B = A(1, [])");
+        assert_typescript!("type B = A<1, []>;", "type B as A(1, [])");
     }
 
     #[test]
     fn application_multiple_array_type_arguments() {
-        assert_typescript!("type B = A<[], [], []>;", "type B = A([], [], [])");
+        assert_typescript!("type B = A<[], [], []>;", "type B as A([], [], [])");
     }
 
     #[test]
     fn application_nested_type_argument() {
-        assert_typescript!("type B = A<B<1>>;", "type B = A(B(1))");
+        assert_typescript!("type B = A<B<1>>;", "type B as A(B(1))");
     }
 
     #[test]
     fn application_mixed_type_arguments() {
-        assert_typescript!("type B = A<B, 1>;", "type B = A(B, 1)");
+        assert_typescript!("type B = A<B, 1>;", "type B as A(B, 1)");
     }
 
     #[test]
@@ -1189,7 +1178,7 @@ mod tests {
             type A<x> = x extends number ? 1 : x extends string ? 2 : 3;
             "#,
             r#"
-            type A(x) = match x do
+            type A(x) as match x do
                 number => 1,
                 string => 2,
                 else => 3
@@ -1212,7 +1201,7 @@ mod tests {
                         : never;
             "#,
             r#"
-            type A(x) = cond do
+            type A(x) as cond do
                 x <: number => 1,
                 x <: {} and x <: {a: 1} => 2,
             end
@@ -1227,7 +1216,7 @@ mod tests {
             type A<x> = x extends number ? 1 : x extends {} ? x extends {a: 1} ? 2 : 3 : 3;
             "#,
             r#"
-            type A(x) = cond do
+            type A(x) as cond do
                 x <: number => 1,
                 x <: {} and x <: {a: 1} => 2,
                 else => 3
@@ -1257,9 +1246,11 @@ mod tests {
                             : undefined;
             "#,
             r#"
-            export type At(A, K) where
-                A <: any,
-                K <: Key =
+            export type At(A, K)
+                where
+                    A <: any,
+                    K <: Key
+                as
                     cond do
                         A <: List =>
                             if number <: A.length then
@@ -1310,7 +1301,7 @@ mod tests {
                     : never;
             "#,
             r#"
-            type Exact(A, W) =
+            type Exact(A, W) as
                 if W <: unknown then
                     if A <: W then
                         if A <: Narrowable then
@@ -1347,7 +1338,7 @@ mod tests {
             r#"
             export type Assign(L, Ls, depth, ignore, fill)
                 defaults
-                    depth = 'flat',
+                    depth = :flat,
                     ignore = BuiltIn,
                     fill = never,
                 where
@@ -1356,18 +1347,11 @@ mod tests {
                     depth <: Depth,
                     ignore <: object,
                     fill <: any
-                = OAssign(L, Ls, depth, ignore, fill) |> Cast(List)
+                as
+                    L
+                    |> OAssign(Ls, depth, ignore, fill)
+                    |> Cast(List)
             "#
         );
     }
-
-    //
-    //     #[quickcheck]
-    //     fn prop_parse_number_float(n: f64) -> bool {
-    //         let Ok(("", Number(out))) = number(&n.to_string())
-    //         else {
-    //             return false
-    //         };
-    //         n.to_string() == out.to_string()
-    //     }
 }

@@ -3,23 +3,15 @@ program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 statement = { type_alias }
 
 type_alias = {
-    (#export = export)? ~ "type" ~ #name = ident ~
-    ("(" ~ #parameters = type_parameters ~ ")")? ~
-    #defaults = defaults_caluse? ~
-    #where = where_clause? ~
-    "=" ~ #body = expr
+    (#export = export)? ~ "type" ~ #name = ident ~ ("(" ~ #parameters = type_parameters ~ ")")? ~ #defaults = defaults_caluse? ~ #where = where_clause? ~ "as" ~ #body = expr
 }
 
 defaults_caluse = {
-    "defaults" ~ #default = type_parameter_default ~
-    ("," ~ #default = type_parameter_default)* ~
-    ","?
+    "defaults" ~ #default = type_parameter_default ~ ("," ~ #default = type_parameter_default)* ~ ","?
 }
 
 where_clause = {
-    "where" ~ #constraint = type_constraint ~
-    ("," ~ #constraint = type_constraint)* ~
-    ","?
+    "where" ~ #constraint = type_constraint ~ ("," ~ #constraint = type_constraint)* ~ ","?
 }
 
 type_parameter_default = {
@@ -212,13 +204,13 @@ optional_modifier = @{ "?" }
 
 string = { atom_string | double_quote_string | single_quote_string }
 
-atom_string = @{ ":" ~ #value = (!WHITESPACE ~ ASCII)+ }
+atom_string = @{ ":" ~ (!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_" | "-"))+ }
 
-double_quote_string = @{ "\"" ~ #value = (!"\"" ~ ANY)* ~ "\"" }
+double_quote_string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-single_quote_string = @{ "'" ~ #value = (!"'" ~ ANY)* ~ "'" }
+single_quote_string = @{ "'" ~ (!"'" ~ ANY)* ~ "'" }
 
-template_string = @{ "`" ~ #value = (!"`" ~ ANY)* ~ "`" }
+template_string = @{ "`" ~ (!"`" ~ ANY)* ~ "`" }
 
 ident = @{ !keyword ~ !ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
 
