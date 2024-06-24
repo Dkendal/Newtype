@@ -19,6 +19,19 @@ pub struct NewtypeParser;
 
 pub type ParserError = pest::error::Error<Rule>;
 
+macro_rules! parse_error {
+    ($span:expr, $positives:expr, $negatives:expr) => {{
+        let error = Error::<Rule>::new_from_span(
+            ErrorVariant::ParsingError {
+                positives: $positives,
+                negatives: $negatives,
+            },
+            $span,
+        );
+        panic!("{}", error);
+    }};
+}
+
 lazy_static::lazy_static! {
     static ref EXPR_PARSER: PrattParser<Rule> = {
         use pest::pratt_parser::{Assoc::*, Op};
@@ -219,7 +232,16 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             Node::Primitive(primitive)
         }
         Rule::number => Node::Number(text(pair)),
-        Rule::string => Node::String(text(pair)),
+        Rule::string => {
+            let content = match pair.clone().into_inner().next().unwrap().as_rule() {
+                Rule::atom_string => pair.as_str().trim_start_matches(':').to_string(),
+                Rule::double_quote_string => pair.as_str().trim_matches('"').to_string(),
+                Rule::single_quote_string => pair.as_str().trim_matches('\'').to_string(),
+                _ => parse_error!(pair.as_span(), vec![], vec![]),
+            };
+
+            Node::String(content)
+        }
         Rule::template_string => Node::TemplateString(text(pair)),
         Rule::ident => Node::Ident(text(pair)),
         Rule::never => Node::Never,
@@ -645,7 +667,7 @@ mod tests {
 
     #[test]
     fn array_access_double_quote() {
-        assert_typescript!(expr, r#"A["field"]"#, r#"A["field"]"#);
+        assert_typescript!(expr, r#"A['field']"#, r#"A["field"]"#);
     }
 
     #[test]
@@ -738,8 +760,17 @@ mod tests {
     }
 
     #[test]
-    fn string_literals() {
-        assert_typescript!(expr, r#""1""#, r#""1""#);
+    fn string_atom_literals() {
+        assert_typescript!(expr, r#"'x'"#, ":x");
+    }
+
+    #[test]
+    fn string_double_quoted_literals() {
+        assert_typescript!(expr, r#"'1'"#, r#""1""#);
+    }
+
+    #[test]
+    fn string_single_quoted_literals() {
         assert_typescript!(expr, "'1'", "'1'");
     }
 
@@ -1042,7 +1073,7 @@ mod tests {
 
     #[test]
     fn tuple_single_string_element() {
-        assert_typescript!(r#"type A = ["sup"];"#, r#"type A = ["sup"]"#);
+        assert_typescript!(r#"type A = ['sup'];"#, r#"type A = ["sup"]"#);
     }
 
     #[test]

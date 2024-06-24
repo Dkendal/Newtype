@@ -60,8 +60,10 @@ impl ToTypescript for Node {
                     list => {
                         let seperator = RcDoc::text(",").append(RcDoc::line());
 
-                        let body =
-                            RcDoc::intersperse(list.iter().map(|param| param.to_ts().group()), seperator);
+                        let body = RcDoc::intersperse(
+                            list.iter().map(|param| param.to_ts().group()),
+                            seperator,
+                        );
 
                         RcDoc::text("<")
                             .append(RcDoc::line_().append(body).append(RcDoc::line_()).nest(4))
@@ -86,7 +88,9 @@ impl ToTypescript for Node {
                 PrimitiveType::Number => "number",
                 PrimitiveType::String => "string",
             }),
-            Node::String(string) => RcDoc::text(string),
+            Node::String(string) => RcDoc::text("\'")
+                .append(RcDoc::text(string.replace("\'", "\\\'")))
+                .append(RcDoc::text("\'")),
             Node::TemplateString(string) => RcDoc::text(string),
             Node::IfExpr(_cond, _then, _els) => {
                 unreachable!("IfExpr should be desugared before this point");

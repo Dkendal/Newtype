@@ -210,15 +210,17 @@ export = @{ "export" }
 
 optional_modifier = @{ "?" }
 
-string = { double_quote_string | single_quote_string }
+string = { atom_string | double_quote_string | single_quote_string }
 
-double_quote_string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+atom_string = @{ ":" ~ #value = (!WHITESPACE ~ ASCII)+ }
 
-single_quote_string = @{ "'" ~ (!"'" ~ ANY)* ~ "'" }
+double_quote_string = @{ "\"" ~ #value = (!"\"" ~ ANY)* ~ "\"" }
 
-template_string = @{ "`" ~ (!"`" ~ ANY)* ~ "`" }
+single_quote_string = @{ "'" ~ #value = (!"'" ~ ANY)* ~ "'" }
 
-ident = @{ !keyword ~ !(ASCII_DIGIT) ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
+template_string = @{ "`" ~ #value = (!"`" ~ ANY)* ~ "`" }
+
+ident = @{ !keyword ~ !ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
 
 keyword = _{
     "as"
