@@ -1320,7 +1320,7 @@ mod tests {
                     depth <: Depth,
                     ignore <: object,
                     fill <: any
-                = Cast(OAssign(L, Ls, depth, ignore, fill), List)
+                = OAssign(L, Ls, depth, ignore, fill) |> Cast(List)
             "#
         );
     }
