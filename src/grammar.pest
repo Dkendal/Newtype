@@ -49,7 +49,7 @@ primary = _{
 
 prefix = _{ infer }
 
-infix = _{ union | intersection }
+infix = _{ union | intersection | pipe }
 
 postfix = _{ indexed_access | dot_access | array_modifier }
 
@@ -73,7 +73,9 @@ infer = @{ "?" }
 
 neg = _{ "-" }
 
-union = @{ "|" }
+pipe = @{ "|>" }
+
+union = @{ !pipe ~ "|" }
 
 intersection = @{ "&" }
 

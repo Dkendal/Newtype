@@ -27,6 +27,7 @@ lazy_static::lazy_static! {
         // Precedence is defined lowest to highest
         PrattParser::new()
             .op(Op::infix(union, Right) | Op::infix(intersection, Right))
+            .op(Op::infix(pipe, Left))
             .op(Op::postfix(array_modifier))
             .op(Op::postfix(dot_access))
             .op(Op::postfix(indexed_access))
@@ -94,11 +95,34 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
             }
         })
         .map_infix(|lhs, op, rhs| {
+            if op.as_rule() == pipe {
+                return match rhs {
+                    Node::Ident(rhs_name) => Node::Application(rhs_name.clone(), vec![lhs]),
+                    Node::Application(name, params) => {
+                        let mut params = params.clone();
+                        params.insert(0, lhs);
+                        Node::Application(name.clone(), params)
+                    }
+                    _ => {
+                        let error = Error::new_from_span(
+                            ErrorVariant::ParsingError {
+                                positives: vec![ident, application],
+                                // FIXME: don't know what the input rule was
+                                negatives: vec![],
+                            },
+                            op.as_span(),
+                        );
+                        panic!("{}", error);
+                    }
+                };
+            }
+
             let op = match op.as_rule() {
                 union => Op::Union,
                 intersection => Op::Intersection,
                 rule => unreachable!("Expected infix operator, found {:?}", rule),
             };
+
             Node::BinOp {
                 lhs: boxed(lhs),
                 op,
@@ -588,17 +612,15 @@ fn tag_eq<'a>(tag: &'a str) -> impl FnMut(&Pair<'a, Rule>) -> bool {
 // Generate tests for all test cases in tests/pest/foo/ and all subdirectories. Since
 // `lazy_static = true`, a single `PestTester` is created and used by all tests; otherwise a new
 // `PestTester` would be created for each test.
-// #[pest_test_gen::pest_tests(
-//     crate::parser::NewtypeParser,
-//     crate::parser::Rule,
-//     "program",
-//     subdir = "newtype",
-//     recursive = true,
-//     lazy_static = true
-// )]
-// #[cfg(test)]
-// mod newtype_tests {
-// }
+#[pest_test_gen::pest_tests(
+    crate::parser::NewtypeParser,
+    crate::parser::Rule,
+    "statement",
+    recursive = true,
+    lazy_static = true
+)]
+#[cfg(test)]
+mod pest_tests {}
 
 #[cfg(test)]
 mod tests {
@@ -744,6 +766,29 @@ mod tests {
     #[test]
     fn literal_undefined() {
         assert_typescript!("type A = undefined;", "type A = undefined");
+    }
+
+    #[test]
+    fn bin_ops_pipe_into_identifier() {
+        assert_typescript!(Rule::program, r#"type A = Y<X>;"#, r#"type A = X |> Y"#);
+    }
+
+    #[test]
+    fn bin_ops_pipe_into_call_with_args() {
+        assert_typescript!(
+            Rule::program,
+            r#"type A = Y<X, 1>;"#,
+            r#"type A = X |> Y(1)"#
+        );
+    }
+
+    #[test]
+    fn bin_ops_pipe_chained() {
+        assert_typescript!(
+            Rule::program,
+            r#"type A = D<C<B<A, 1>>, 2, 3, 4>;"#,
+            r#"type A = A |> B(1) |> C |> D(2, 3, 4)"#
+        );
     }
 
     #[test]

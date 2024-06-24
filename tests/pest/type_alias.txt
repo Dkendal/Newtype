@@ -1,0 +1,17 @@
+With literal
+
+=======
+
+type A = 1;
+
+=======
+
+
+(statement
+  (type_alias
+    (ident: "A")
+    (expr
+      (number: "1")
+    )
+  )
+)
