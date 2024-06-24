@@ -774,6 +774,11 @@ mod tests {
     }
 
     #[test]
+    fn bin_ops_pipe_literal() {
+        assert_typescript!(Rule::program, r#"type A = Y<1>;"#, r#"type A = 1 |> Y"#);
+    }
+
+    #[test]
     fn bin_ops_pipe_into_call_with_args() {
         assert_typescript!(
             Rule::program,

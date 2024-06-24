@@ -221,7 +221,8 @@ template_string = @{ "`" ~ (!"`" ~ ANY)* ~ "`" }
 ident = @{ !keyword ~ !(ASCII_DIGIT) ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
 
 keyword = _{
-    "any"
+    "as"
+  | "any"
   | "class"
   | "for"
   | "else"
