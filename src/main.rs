@@ -111,7 +111,7 @@ pub mod test_support {
         };
 
         ($expected:expr, $source:expr) => {
-            assert_typescript!(crate::parser::Rule::statement, $expected, $source);
+            assert_typescript!(crate::parser::Rule::program, $expected, $source);
         };
     }
 
