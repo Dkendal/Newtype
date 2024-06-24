@@ -1,6 +1,11 @@
+use std::collections::HashMap;
+use std::default;
+use std::iter::FilterMap;
+
 use crate::ast::*;
 use crate::simplify::*;
 use crate::to_typescript::ToTypescript;
+use itertools::Itertools;
 use pest::error::{Error, ErrorVariant};
 use pest::iterators::{Pair, Pairs};
 use pest::pratt_parser::PrattParser;
@@ -273,22 +278,30 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             let inner = pair.into_inner();
 
             let else_ = inner
-                .find_first_tagged("else")
+                .clone()
+                .find_next_tagged_child("else")
                 .and_then(|p| p.into_inner().find_first_tagged("body"))
                 .map(parse_node)
                 .map(boxed)
                 .unwrap_or(boxed(Node::Never));
 
             let arms: Vec<CondArm> = inner
-                .find_tagged("arm")
+                .clone()
+                .find_all_tagged_children("arm")
                 .map(|arm| {
-                    let inner = arm.into_inner();
+                    let mut inner = arm.into_inner();
+
                     let condition = inner
-                        .find_first_tagged("condition")
+                        .find_next_tagged_child("condition")
                         .map(|p| p.into_inner())
                         .map(parse_extends_condition)
                         .unwrap();
-                    let body = inner.find_first_tagged("body").map(parse_node).unwrap();
+
+                    let body = inner
+                        .find_next_tagged_child("body")
+                        .map(parse_node)
+                        .unwrap();
+
                     CondArm { condition, body }
                 })
                 .collect();
@@ -299,6 +312,36 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             "Condition arms must be used in a condition expression".to_string(),
             pair,
         ),
+        Rule::for_expr => {
+            let mut inner = pair.into_inner();
+
+            let index = inner
+                .find_next_tagged_child("index")
+                .unwrap()
+                .as_str()
+                .to_string();
+
+            let iterable = inner
+                .find_next_tagged_child("iterable")
+                .map(parse_node)
+                .map(boxed)
+                .unwrap();
+
+            let body = inner
+                .find_next_tagged_child("body")
+                .map(parse_node)
+                .map(boxed)
+                .unwrap();
+
+            Node::MappedType {
+                index,
+                iterable,
+                body,
+                remapped_as: None,
+                readonly_mod: None,
+                optional_mod: None,
+            }
+        }
         _ => {
             let positives: Vec<Rule> = vec![];
             let negatives: Vec<Rule> = vec![pair.as_rule()];
@@ -316,22 +359,21 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
 }
 
 fn parse_if_expr(pair: Pair<Rule>) -> Node {
-    let inner = pair.into_inner();
+    let mut inner = pair.into_inner();
 
     let condition = inner
-        .find_first_tagged("condition")
+        .find_next_tagged_child("condition")
         .map(|p| boxed(parse_extends_condition(p.into_inner())))
         .unwrap();
 
     let then = inner
-        .find_first_tagged("then")
+        .find_next_tagged_child("then")
         .map(parse_node)
         .map(boxed)
         .unwrap();
 
     let else_ = inner
-        .clone()
-        .find(|p| p.as_node_tag() == Some("else"))
+        .find_next_tagged_child("else")
         .map(parse_node)
         .unwrap_or_else(|| Node::Never);
 
@@ -405,7 +447,7 @@ fn parse_object_literal(pair: Pair<Rule>) -> Node {
 }
 
 fn parse_type_alias(pair: Pair<Rule>) -> Node {
-    let inner = pair.into_inner();
+    let inner = pair.clone().into_inner();
 
     let export = inner.find_first_tagged("export").is_some();
 
@@ -415,20 +457,80 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
         .as_str()
         .to_string();
 
-    let params = inner
-        .find_first_tagged("parameters")
-        .map(|p| p.into_inner().map(parse_node).collect())
-        .unwrap_or_else(Vec::new);
-
     let body = inner
         .find_first_tagged("body")
         .map(parse_node)
         .map(boxed)
         .unwrap();
 
-    dbg!(inner
-        .find_tagged("constraint")
-        .collect::<Vec<_>>());
+    let mut constraints: HashMap<&str, Node> = HashMap::new();
+
+    inner.clone().find_tagged("constraint").for_each(|pair| {
+        let mut inner = pair.clone().into_inner();
+        let name = inner.next().unwrap();
+        assert_eq!(name.as_node_tag(), Some("constraint_name"));
+        assert_eq!(name.as_rule(), Rule::ident);
+        let name_str = name.as_str();
+
+        let op = inner.next().unwrap();
+        assert_eq!(op.as_rule(), Rule::extends);
+        let op = InfixOp::Extends;
+
+        let body = inner.next().unwrap();
+
+        assert_eq!(body.as_node_tag(), Some("constraint_body"));
+        assert_eq!(body.as_rule(), Rule::expr);
+        let body = parse_node(body);
+
+        let node = Node::ExtendsBinOp {
+            lhs: boxed(Node::Ident(name_str.to_string())),
+            op,
+            rhs: boxed(body),
+        };
+
+        if constraints.contains_key(name_str) {
+            let error = Error::<Rule>::new_from_span(
+                ErrorVariant::CustomError {
+                    message: format!("Duplicate constraint: {}", name_str),
+                },
+                pair.clone().as_span(),
+            );
+
+            panic!("{error}")
+        }
+
+        constraints.insert(name_str, node);
+    });
+
+    let params = inner
+        .find_first_tagged("parameters")
+        .map(|p| {
+            let idents: Vec<Node> = p
+                .into_inner()
+                .map(|node| {
+                    assert_eq!(node.as_rule(), Rule::ident);
+
+                    match constraints.remove(node.as_str()) {
+                        Some(constraint) => constraint,
+                        None => Node::Ident(node.as_str().to_string()),
+                    }
+                })
+                .collect();
+
+            idents
+        })
+        .unwrap_or_else(Vec::new);
+
+    for (name, _) in constraints {
+        let error = Error::<Rule>::new_from_span(
+            ErrorVariant::CustomError {
+                message: format!("Unused constraint: {}", name),
+            },
+            pair.clone().as_span(),
+        );
+
+        panic!("{error}")
+    }
 
     Node::TypeAlias {
         export,
@@ -440,6 +542,42 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
 
 fn text(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
+}
+
+/// Trait for extending the `Pairs` iterator with additional methods.
+trait PairsExt<'i> {
+    fn find_next_tagged_child(&mut self, tag: &str) -> Option<Pair<Rule>>;
+
+    fn find_all_tagged_children(
+        &mut self,
+        tag: &str,
+    ) -> FilterMap<&mut Pairs<'i, Rule>, impl FnMut(Pair<'i, Rule>) -> Option<Pair<'i, Rule>>>;
+}
+
+impl<'i> PairsExt<'i> for Pairs<'i, Rule> {
+    fn find_next_tagged_child(&mut self, tag: &str) -> Option<Pair<Rule>> {
+        self.find(|pair| pair.as_node_tag() == Some(tag))
+    }
+
+    fn find_all_tagged_children(
+        &mut self,
+        tag: &str,
+    ) -> FilterMap<&mut Pairs<'i, Rule>, impl FnMut(Pair<'i, Rule>) -> Option<Pair<'i, Rule>>> {
+        self.filter_map(|pair| {
+            if pair.as_node_tag() == Some(tag) {
+                Some(pair)
+            } else {
+                None
+            }
+        })
+    }
+}
+
+/**
+* Returns a predicate that matches a pair with the given tag.
+*/
+fn tag_eq<'a>(tag: &'a str) -> impl FnMut(&Pair<'a, Rule>) -> bool {
+    |pair: &Pair<Rule>| pair.as_node_tag() == Some(tag)
 }
 
 #[cfg(test)]
@@ -619,7 +757,7 @@ mod tests {
     fn if_expr_simple_if_else() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : 0;",
-            "type A = if 1 <: number then 1 else 0"
+            "type A = if 1 <: number then 1 else 0 end"
         );
     }
 
@@ -627,15 +765,26 @@ mod tests {
     fn if_expr_if_without_else() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : never;",
-            "type A = if 1 <: number then 1"
+            "type A = if 1 <: number then 1 end"
         );
     }
 
     #[test]
     fn if_expr_nested_if() {
         assert_typescript!(
-            "type A = 1 extends number ? 2 extends number ? 3 : never : never;",
-            "type A = if 1 <: number then if 2 <: number then 3"
+            expr,
+            r#"
+            1 extends number
+                ? 2 extends number
+                    ? 3
+                    : never
+                : never
+            "#,
+            r#"
+            if 1 <: number then
+                if 2 <: number then 3 end
+            end
+            "#
         );
     }
 
@@ -652,7 +801,10 @@ mod tests {
             "#,
             r#"
             if a <: b then
-                if c <: d then x
+                if c <: d then
+                    x
+                end
+            end
             "#
         );
 
@@ -667,8 +819,32 @@ mod tests {
             "#,
             r#"
             if a <: b then
-                if c <: d then x
-                else y
+                if c <: d then
+                    x
+                else
+                    y
+                end
+            end
+            "#
+        );
+
+        assert_typescript!(
+            expr,
+            r#"
+            a extends b
+                ? c extends d
+                    ? x
+                    : never
+                : z
+            "#,
+            r#"
+            if a <: b then
+                if c <: d then
+                    x
+                end
+            else
+                z
+            end
             "#
         );
 
@@ -683,9 +859,14 @@ mod tests {
             "#,
             r#"
             if a <: b then
-                if c <: d then x
-                else y
-            else z
+                if c <: d then
+                    x
+                else
+                    y
+                end
+            else
+                z
+            end
             "#
         );
     }
@@ -694,7 +875,13 @@ mod tests {
     fn if_not_extends() {
         assert_typescript!(
             "type A = a extends b ? d : c;",
-            "type A = if not a <: b then c else d"
+            r#"
+            type A = if not a <: b then
+                c
+            else
+                d
+            end
+            "#
         );
     }
 
@@ -702,7 +889,7 @@ mod tests {
     fn if_and() {
         assert_typescript!(
             "type A = a extends b ? c extends d ? e : f : f;",
-            "type A = if a <: b and c <: d then e else f"
+            "type A = if a <: b and c <: d then e else f end"
         );
     }
 
@@ -710,7 +897,33 @@ mod tests {
     fn if_expr_joined_conditions() {
         assert_typescript!(
             "type A = 1 extends number ? 1 : 0;",
-            "type A = if 1 <: number then 1 else 0"
+            r#"type A = if 1 <: number then 1 else 0 end"#
+        );
+    }
+
+    #[test]
+    fn if_keyof() {
+        assert_typescript!(
+            expr,
+            r#"
+            x extends keyof y
+                ? 1
+                : never
+            "#,
+            "if x <: keyof(y) then 1 end"
+        );
+    }
+
+    #[test]
+    fn for_in() {
+        assert_typescript!(
+            expr,
+            r#"
+            { [k in t]: 1 }
+            "#,
+            r#"
+            for k in t do 1 end
+            "#
         );
     }
 
@@ -845,19 +1058,6 @@ mod tests {
     }
 
     #[test]
-    fn if_keyof() {
-        assert_typescript!(
-            expr,
-            r#"
-            x extends keyof y
-                ? 1
-                : never
-            "#,
-            "if x <: keyof(y) then 1"
-        );
-    }
-
-    #[test]
     fn match_expr() {
         assert_typescript!(
             r#"
@@ -912,18 +1112,35 @@ mod tests {
     }
 
     // #[test]
-    // fn ts_toolbelt_1() {
-    //     assert_typescript!(
-    //         expr,
-    //         r#"
-    //         "#,
-    //         r#"
-    //         if number <: A.length then
-    //             if K <: number | `${number}` then
-    //                 A[never] | undefined
-    //             else 1
-    //         "#
-    //     );
+    // fn cond_expr_tokens() {
+    //     parses_to! {
+    //         parser: NewtypeParser,
+    //         input: r#"cond do x <: y => a, else => b end"#,
+    //         rule: Rule::cond_expr,
+    //         tokens: [
+    //             cond_expr(0, 34, [
+    //                 cond_arm(8, 19, [
+    //                     extends_condition(8, 15, [
+    //                         expr(8, 10, [
+    //                             ident(8, 9)
+    //                         ]),
+    //                         extends(10, 12),
+    //                         expr(13, 15, [
+    //                             ident(13, 14)
+    //                         ]),
+    //                     ]),
+    //                     expr(18, 19, [
+    //                         ident(18, 19)
+    //                     ])
+    //                 ]),
+    //                 else_arm(21, 31, [
+    //                     expr(29, 31, [
+    //                         ident(29, 30)
+    //                     ])
+    //                 ])
+    //             ])
+    //         ]
+    //     }
     // }
 
     #[test]
@@ -947,20 +1164,71 @@ mod tests {
                             : undefined;
             "#,
             r#"
-            export type At(A, K) where A <: any, K <: Key =
-                if A <: List then
-                    if number <: A.length then
-                        if K <: number | `${number}` then
-                            A[never] | undefined
-                        else undefined
-                    else
-                        if K <: keyof(A) then A[K]
-                        else undefined
-                else
-                    if unknown <: A then unknown
-                    else if K <: keyof(A) then A[K]
-                    else undefined
+            export type At(A, K) where
+                A <: any,
+                K <: Key =
+                    cond do
+                        A <: List =>
+                            if number <: A.length then
+                                if K <: number | `${number}` then
+                                    A[never] | undefined
+                                else
+                                    undefined
+                                end
+                            else
+                                if K <: keyof(A) then
+                                    A[K]
+                                else
+                                    undefined
+                                end
+                            end,
 
+                        unknown <: A => unknown,
+
+                        else =>
+                            if K <: keyof(A) then
+                                A[K]
+                            else
+                                undefined
+                            end
+                    end
+
+            "#
+        );
+    }
+
+    #[test]
+    fn ts_toolbelt_function_exact() {
+        assert_typescript!(
+            statement,
+            r#"
+            type Exact<A, W> =
+                W extends unknown
+                    ? A extends W
+                        ? A extends Narrowable
+                            ? A
+                            : {
+                                [K in keyof A]:
+                                    K extends keyof W
+                                        ? Exact<A[K], W[K]>
+                                        : never
+                            }
+                        : W
+                    : never;
+            "#,
+            r#"
+            type Exact(A, W) =
+                if W <: unknown then
+                    if A <: W then
+                        if A <: Narrowable then A
+                        else
+                            for K in keyof(A) do
+                                if K <: keyof(W) then Exact(A[K], W[K]) end
+                            end
+                        end
+                    else W
+                    end
+                end
             "#
         );
     }

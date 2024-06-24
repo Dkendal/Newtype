@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn simplify_basic() {
         assert_eq!(
-            parse!(expr, "if a <: b then c else d").simplify(),
+            parse!(expr, "if a <: b then c else d end").simplify(),
             ExtendsExpr(
                 Box::new(Ident("a".to_string())),
                 Box::new(Ident("b".to_string())),
@@ -143,23 +143,68 @@ mod tests {
     #[test]
     fn simplify_not() {
         assert_eq!(
-            parse!(expr, "if not a <: b then c else d").simplify(),
-            parse!(expr, "if a <: b then d else c").simplify(),
+            parse!(
+                expr,
+                r#"
+                if not a <: b then c
+                else d
+                end
+                "#
+            )
+            .simplify(),
+            parse!(
+                expr,
+                r#"
+                if a <: b then d
+                else c
+                end
+                "#
+            )
+            .simplify(),
         )
     }
 
     #[test]
     fn simplify_and() {
         assert_eq!(
-            parse!(expr, "if a <: b and c <: d then e else f").simplify(),
-            parse!(expr, "if a <: b then if c <: d then e else f else f").simplify(),
+            parse!(
+                expr,
+                r#"
+                if a <: b and c <: d
+                then e
+                else f
+                end
+                "#
+            )
+            .simplify(),
+            parse!(
+                expr,
+                r#"
+                if a <: b then
+                    if c <: d then e
+                    else f
+                    end
+                else f
+                end
+                "#
+            )
+            .simplify(),
         )
     }
 
     #[test]
     fn simplify_or() {
         assert_eq!(
-            parse!(expr, "if a <: b or c <: d then e else f").simplify(),
+            parse!(
+                expr,
+                r#"
+                if a <: b or c <: d
+                then e
+                else f
+                end
+                "#
+            )
+            .simplify(),
             parse!(
                 expr,
                 r#"
@@ -167,6 +212,8 @@ mod tests {
                 else
                     if c <: d then e
                     else f
+                    end
+                end
                 "#
             )
             .simplify(),
@@ -191,8 +238,11 @@ mod tests {
                 expr,
                 r#"
                 if A <: number then 1
-                else if A <: string then 2
-                  else 3
+                else
+                    if A <: string then 2
+                    else 3
+                    end
+                end
                 "#
             )
         )

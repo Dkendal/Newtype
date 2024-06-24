@@ -11,7 +11,7 @@ where_clause = {
 }
 
 type_constraint = {
-    #name = ident ~ extends ~ #constraint = expr
+    #constraint_name = ident ~ extends ~ #constraint_body = expr
 }
 
 type_parameters = { ident ~ ("," ~ ident)* }
@@ -22,6 +22,7 @@ expr1 = _{ prefix* ~ primary ~ postfix* }
 
 primary = _{
     if_expr
+  | for_expr
   | match_expr
   | cond_expr
   | builtin
@@ -96,8 +97,12 @@ object_property = {
     (#readonly = readonly_modifier)? ~ #key = ident ~ (#optional = optional_modifier)? ~ ":" ~ #value = expr
 }
 
+for_expr = {
+    "for" ~ #index = ident ~ "in" ~ #iterable = expr ~ "do" ~ #body = expr ~ "end"
+}
+
 if_expr = {
-    "if" ~ #condition = extends_condition ~ "then" ~ #then = expr ~ ("else" ~ #else = expr)?
+    "if" ~ #condition = extends_condition ~ "then" ~ #then = expr ~ ("else" ~ #else = expr)? ~ "end"
 }
 
 match_expr = {
@@ -200,6 +205,7 @@ ident = @{ !keyword ~ !(ASCII_DIGIT) ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
 keyword = _{
     "any"
   | "class"
+  | "for"
   | "else"
   | "extends"
   | "false"
@@ -221,6 +227,8 @@ keyword = _{
   | "keyof"
   | "typeof"
   | "in"
+  | "if"
+  | "end"
 }
 
 number = @{

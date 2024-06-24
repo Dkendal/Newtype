@@ -149,6 +149,22 @@ impl Transform for Node {
                 argument: transform_and_box(argument),
             },
             Node::Statement(node) => Node::Statement(Box::new(node.transform(f))),
+
+            Node::MappedType {
+                index,
+                iterable,
+                remapped_as,
+                readonly_mod,
+                optional_mod,
+                body,
+            } => Node::MappedType {
+                index: index.clone(),
+                iterable: Box::new(iterable.transform(f)),
+                remapped_as: remapped_as.clone(),
+                readonly_mod: readonly_mod.clone(),
+                optional_mod: optional_mod.clone(),
+                body: Box::new(body.transform(f)),
+            },
         };
 
         f(&out)

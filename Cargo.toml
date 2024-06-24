@@ -9,6 +9,7 @@ default = []
 
 [dependencies]
 clap = { version = "4.2.7", features = ["derive", "env", "wrap_help"] }
+itertools = "0.13.0"
 lazy_static = "1.4.0"
 logos = "0.13.0"
 nom = "7.1.3"

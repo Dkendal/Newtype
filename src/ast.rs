@@ -25,6 +25,14 @@ pub enum Node {
         Box<Node>,         // then
         Option<Box<Node>>, // else
     ),
+    MappedType {
+        index: String,
+        iterable: Box<Node>,
+        remapped_as: Option<Box<Node>>,
+        readonly_mod: Option<MappingModifier>,
+        optional_mod: Option<MappingModifier>,
+        body: Box<Node>,
+    },
     MatchExpr {
         value: Box<Node>,
         arms: Vec<MatchArm>,
@@ -133,6 +141,12 @@ pub enum InfixOp {
     StrictNotEquals,
     And,
     Or,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum MappingModifier {
+    Add,
+    Remove,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

@@ -109,7 +109,7 @@ impl ToTypescript for Node {
                 .append(rhs.to_ts())
                 .append(RcDoc::text("]"))
                 .group(),
-            Node::Error(_) => todo!(),
+            Node::Error(_) => unreachable!("Error should be handled before this point"),
             Node::ObjectLiteral(props) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
@@ -196,6 +196,18 @@ impl ToTypescript for Node {
 
                 condition_doc.append(then_doc).append(else_doc)
             }
+            Node::ExtendsBinOp {
+                lhs,
+                op: InfixOp::Extends,
+                rhs,
+            } => lhs
+                .to_ts()
+                .append(RcDoc::space())
+                .append("extends")
+                .append(RcDoc::space())
+                .append(rhs.to_ts())
+                .group(),
+
             Node::ExtendsBinOp { .. } => {
                 unreachable!("ExtendsBinOp should be desugared before this point")
             }
@@ -209,6 +221,65 @@ impl ToTypescript for Node {
                 unreachable!("CondExpr should be desugared before this point")
             }
             Node::Statement(stmnt) => stmnt.to_ts().append(RcDoc::text(";")),
+            Node::MappedType {
+                index: key,
+                iterable,
+                remapped_as,
+                readonly_mod,
+                optional_mod,
+                body,
+            } => {
+                let remapped_as_doc = match remapped_as {
+                    Some(remapped_as) => RcDoc::space()
+                        .append("as")
+                        .append(RcDoc::space())
+                        .append(remapped_as.to_ts()),
+                    None => RcDoc::nil(),
+                };
+
+                let lhs_doc = RcDoc::nil()
+                    .append(key)
+                    .append(RcDoc::space())
+                    .append("in")
+                    .append(RcDoc::space())
+                    .append(iterable.to_ts())
+                    .append(remapped_as_doc)
+                    .group();
+
+                let rhs_doc = body.to_ts();
+
+                let rhs_doc = RcDoc::line().append(rhs_doc).nest(4).group();
+
+                let readonly_doc = match readonly_mod {
+                    Some(MappingModifier::Add) => RcDoc::text("readonly"),
+                    Some(MappingModifier::Remove) => RcDoc::text("-readonly"),
+                    None => RcDoc::nil(),
+                };
+
+                let optional_doc = match optional_mod {
+                    Some(MappingModifier::Add) => RcDoc::text("?"),
+                    Some(MappingModifier::Remove) => RcDoc::text("-?"),
+                    None => RcDoc::nil(),
+                };
+
+                let inner_doc = RcDoc::line()
+                    .append(readonly_doc)
+                    .append("[")
+                    .append(lhs_doc)
+                    .append("]")
+                    .append(optional_doc)
+                    .append(":")
+                    .append(rhs_doc)
+                    .append(RcDoc::line())
+                    .nest(4)
+                    .group();
+
+                RcDoc::nil()
+                    .append("{")
+                    .append(inner_doc)
+                    .append("}")
+                    .group()
+            }
         }
     }
 }
