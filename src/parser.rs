@@ -210,7 +210,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             let identifier = inner.next().map(text).unwrap();
 
             let arguments_pair = inner
-                .find_first_tagged("arguments")
+                .find(tag_eq("arguments"))
                 .expect("application missing arguments");
 
             let arguments = arguments_pair.into_inner().map(parse_node).collect();
@@ -218,9 +218,9 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             Node::Application(identifier, arguments)
         }
         Rule::builtin => {
-            let inner = pair.into_inner();
+            let mut inner = pair.into_inner();
 
-            let name = inner.find_first_tagged("name").unwrap();
+            let name = inner.find(tag_eq("name")).unwrap();
 
             let name = match name.as_rule() {
                 Rule::keyof => BuiltInKeyword::Keyof,
@@ -230,7 +230,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                 ),
             };
 
-            let argument = inner.find_first_tagged("argument").map(parse_node).unwrap();
+            let argument = inner.find(tag_eq("argument")).map(parse_node).unwrap();
 
             Node::Builtin {
                 name,
@@ -244,29 +244,31 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             pair,
         ),
         Rule::match_expr => {
-            let inner = pair.into_inner();
+            let mut inner = pair.into_inner();
+
             let value = inner
-                .find_first_tagged("value")
+                .find(tag_eq("value"))
                 .map(parse_node)
                 .map(boxed)
                 .unwrap();
 
-            let else_ = inner
-                .find_first_tagged("else")
-                .and_then(|p| p.into_inner().find_first_tagged("body"))
-                .map(parse_node)
-                .map(boxed)
-                .unwrap_or(boxed(Node::Never));
-
             let arms: Vec<MatchArm> = inner
-                .find_tagged("arm")
+                .clone()
+                .filter(tag_eq("arm"))
                 .map(|arm| {
-                    let inner = arm.into_inner();
-                    let pattern = inner.find_first_tagged("pattern").map(parse_node).unwrap();
-                    let body = inner.find_first_tagged("body").map(parse_node).unwrap();
+                    let mut inner = arm.into_inner();
+                    let pattern = inner.find(tag_eq("pattern")).map(parse_node).unwrap();
+                    let body = inner.find(tag_eq("body")).map(parse_node).unwrap();
                     MatchArm { pattern, body }
                 })
                 .collect();
+
+            let else_ = inner
+                .find(tag_eq("else"))
+                .and_then(|p| p.into_inner().find(tag_eq("body")))
+                .map(parse_node)
+                .map(boxed)
+                .unwrap_or(boxed(Node::Never));
 
             Node::MatchExpr { value, arms, else_ }
         }
@@ -405,20 +407,20 @@ fn parse_object_literal(pair: Pair<Rule>) -> Node {
     while let Some(prop_pair) = object_property_rules.next() {
         match prop_pair.as_rule() {
             Rule::object_property => {
-                let inner = prop_pair.into_inner();
+                let mut inner = prop_pair.into_inner();
 
-                let readonly = inner.find_first_tagged("readonly").is_some();
+                let readonly = inner.clone().find(tag_eq("readonly")).is_some();
 
                 let key = inner
-                    .find_first_tagged("key")
+                    .find(tag_eq("key"))
                     .expect("object property missing key")
                     .as_str()
                     .to_string();
 
-                let optional = inner.find_first_tagged("optional").is_some();
+                let optional = inner.clone().find(tag_eq("optional")).is_some();
 
                 let value = inner
-                    .find_first_tagged("value")
+                    .find(tag_eq("value"))
                     .map(parse_node)
                     .expect("object property missing value");
 
@@ -440,24 +442,27 @@ fn parse_object_literal(pair: Pair<Rule>) -> Node {
 }
 
 fn parse_type_alias(pair: Pair<Rule>) -> Node {
-    let inner = pair.clone().into_inner();
+    let mut inner = pair.clone().into_inner();
 
-    let export = inner.find_first_tagged("export").is_some();
+    let export = inner.clone().find(tag_eq("export")).is_some();
 
     let name = inner
-        .find_first_tagged("name")
-        .expect("type alias missing name")
+        .clone()
+        .find(tag_eq("name"))
+        .unwrap()
         .as_str()
         .to_string();
 
     let body = inner
-        .find_first_tagged("body")
+        .clone()
+        .find(tag_eq("body"))
         .map(parse_node)
         .map(boxed)
         .unwrap();
 
     let mut constraints: HashMap<&str, Node> = HashMap::new();
 
+    // FIXME: rewrite with filter(..)
     inner.clone().find_tagged("constraint").for_each(|pair| {
         let mut inner = pair.clone().into_inner();
         let name = inner.next().unwrap();
@@ -496,7 +501,8 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
     });
 
     let params = inner
-        .find_first_tagged("parameters")
+        .clone()
+        .find(tag_eq("parameters"))
         .map(|p| {
             let idents: Vec<Node> = p
                 .into_inner()
