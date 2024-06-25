@@ -1,33 +1,15 @@
+use std::collections::HashMap;
+
 use itertools::Itertools;
 
 use crate::ast::*;
 
-pub trait Transform {
-    fn transform<T>(&self, f: &T) -> Self
-    where
-        T: Fn(&Self) -> Self;
-}
-
-impl Transform for Expr {
-    fn transform<T>(&self, _f: &T) -> Self
-    where
-        Self: Clone,
-        T: Fn(&Self) -> Self,
-    {
-        self.clone()
-    }
-}
-
-impl Transform for Node {
+impl Node {
     /**
      * Recursively transform a node and all of its children. There is no generalize
      * tree walk method in Rust to deal with ADTs, so we have to implement it manually.
      */
-    fn transform<T>(&self, f: &T) -> Self
-    where
-        Self: Clone,
-        T: Fn(&Self) -> Self,
-    {
+    pub fn transform(&self, f: &impl Fn(&Self) -> Self) -> Self {
         let transform = |node: &Node| node.transform(f);
 
         let transform_and_box = |node: &Node| Box::new(node.transform(f));
@@ -179,8 +161,43 @@ impl Transform for Node {
                 optional_mod: optional_mod.clone(),
                 body: Box::new(body.transform(f)),
             },
+            Node::LetExpr { bindings, body } => (**body)
+                .clone()
+                .transform(&resolve_let_bindings(bindings))
+                .transform(f),
         };
 
         f(&out)
+    }
+}
+
+fn resolve_let_bindings<'a>(bindings: &'a HashMap<Identifier, Node>) -> impl Fn(&Node) -> Node + 'a {
+    |node: &Node| -> Node {
+        match node {
+            Node::Ident(name) => {
+                if let Some(value) = bindings.get(&Identifier(name.clone())) {
+                    value.clone()
+                } else {
+                    node.clone()
+                }
+            }
+            Node::LetExpr {
+                bindings: new_bindings,
+                body,
+            } => {
+                let nested_bindings: HashMap<Identifier, Node> = bindings
+                    .iter()
+                    .chain(new_bindings.iter())
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+
+                dbg!(&nested_bindings);
+
+                let f = resolve_let_bindings(&nested_bindings);
+
+                body.transform(&f)
+            }
+            _ => node.clone(),
+        }
     }
 }

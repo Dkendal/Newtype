@@ -24,7 +24,6 @@ mod simplify;
 mod to_typescript;
 mod transform;
 
-use crate::simplify::Simplify;
 use crate::to_typescript::ToTypescript;
 use clap::Parser;
 use std::io::Read;

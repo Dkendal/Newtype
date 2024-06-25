@@ -287,6 +287,7 @@ impl ToTypescript for Node {
                     .append("}")
                     .group()
             }
+            Node::LetExpr { bindings, body } => todo!(),
         }
     }
 }

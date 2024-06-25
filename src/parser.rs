@@ -20,15 +20,24 @@ pub struct NewtypeParser;
 pub type ParserError = pest::error::Error<Rule>;
 
 macro_rules! parse_error {
-    ($span:expr, $positives:expr, $negatives:expr) => {{
+    ($pair:expr, $message:expr) => {{
+        let error = Error::<Rule>::new_from_span(
+            ErrorVariant::CustomError { message: $message },
+            $pair.as_span(),
+        );
+
+        panic!("{error}");
+    }};
+
+    ($pair:expr, $positives:expr, $negatives:expr) => {{
         let error = Error::<Rule>::new_from_span(
             ErrorVariant::ParsingError {
                 positives: $positives,
                 negatives: $negatives,
             },
-            $span,
+            $pair.as_span(),
         );
-        panic!("{}", error);
+        panic!("{error}");
     }};
 }
 
@@ -237,7 +246,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                 Rule::atom_string => pair.as_str().trim_start_matches(':').to_string(),
                 Rule::double_quote_string => pair.as_str().trim_matches('"').to_string(),
                 Rule::single_quote_string => pair.as_str().trim_matches('\'').to_string(),
-                _ => parse_error!(pair.as_span(), vec![], vec![]),
+                _ => unreachable!(),
             };
 
             Node::String(content)
@@ -285,7 +294,6 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                 argument: boxed(argument),
             }
         }
-        Rule::EOI => unreachable!("unexpected end of input"),
         Rule::expr => parse_expr(pair.into_inner()),
         Rule::infer => new_error(
             "Infer operator must be used in an extends expression".to_string(),
@@ -320,10 +328,6 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
 
             Node::MatchExpr { value, arms, else_ }
         }
-        Rule::match_arm => new_error(
-            "Match arms must be used in a match expression".to_string(),
-            pair,
-        ),
         Rule::cond_expr => {
             let inner = pair.into_inner();
 
@@ -355,10 +359,6 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
 
             Node::CondExpr { arms, else_ }
         }
-        Rule::cond_arm => new_error(
-            "Condition arms must be used in a condition expression".to_string(),
-            pair,
-        ),
         Rule::for_expr => {
             let mut inner = pair.into_inner();
 
@@ -385,18 +385,40 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                 optional_mod: None,
             }
         }
-        _ => {
-            let positives: Vec<Rule> = vec![];
-            let negatives: Vec<Rule> = vec![pair.as_rule()];
-            let error = Error::new_from_span(
-                ErrorVariant::ParsingError {
-                    positives,
-                    negatives,
-                },
-                pair.as_span(),
-            );
+        Rule::let_expr => {
+            let bindings: HashMap<_, _> = pair
+                .clone()
+                .into_inner()
+                .filter(tag_eq("binding"))
+                .map(|pair| {
+                    let mut inner = pair.into_inner();
+                    let name = inner.next().unwrap();
+                    assert_eq!(name.as_rule(), Rule::ident);
 
-            panic!("{error}")
+                    let name = name.as_str().to_string();
+                    let value = inner.next().unwrap();
+                    assert_eq!(value.as_rule(), Rule::expr);
+                    let value = parse_node(value);
+
+                    (Identifier(name), value)
+                })
+                .collect();
+
+            let body: Box<Node> = pair
+                .clone()
+                .into_inner()
+                .find(tag_eq("body"))
+                .map(parse_node)
+                .map(boxed)
+                .unwrap();
+
+            Node::LetExpr { bindings, body }
+        }
+        Rule::EOI => {
+            parse_error!(pair, format!("Unexpected end of input"));
+        }
+        _ => {
+            parse_error!(pair, format!("Unexpected rule: {:?}", rule));
         }
     }
 }
@@ -638,6 +660,8 @@ fn tag_eq<'a>(tag: &'a str) -> impl FnMut(&Pair<'a, Rule>) -> bool {
 mod parser_tests {
     use super::*;
     use crate::test_support::*;
+    use pest::consumes_to;
+    use pest::parses_to;
     use pretty_assertions::{assert_eq, assert_ne};
     use std::assert_matches::assert_matches;
     use textwrap_macros::dedent;
@@ -679,67 +703,67 @@ mod parser_tests {
 
     #[test]
     fn primitive_number() {
-        assert_typescript!("type A = number;","type A as number");
+        assert_typescript!("type A = number;", "type A as number");
     }
 
     #[test]
     fn primitive_boolean() {
-        assert_typescript!("type A = boolean;","type A as boolean");
+        assert_typescript!("type A = boolean;", "type A as boolean");
     }
 
     #[test]
     fn primitive_never() {
-        assert_typescript!("type A = never;","type A as never");
+        assert_typescript!("type A = never;", "type A as never");
     }
 
     #[test]
     fn primitive_any() {
-        assert_typescript!("type A = any;","type A as any");
+        assert_typescript!("type A = any;", "type A as any");
     }
 
     #[test]
     fn primitive_unknown() {
-        assert_typescript!("type A = unknown;","type A as unknown");
+        assert_typescript!("type A = unknown;", "type A as unknown");
     }
 
     #[test]
     fn number_literal_positive_integer() {
-        assert_typescript!("type A = 1;","type A as 1");
+        assert_typescript!("type A = 1;", "type A as 1");
     }
 
     #[test]
     fn number_literal_negative_integer() {
-        assert_typescript!("type A = -1;","type A as -1");
+        assert_typescript!("type A = -1;", "type A as -1");
     }
 
     #[test]
     fn number_literal_negative_integer_with_space() {
-        assert_typescript!("type A = - 1;","type A as - 1");
+        assert_typescript!("type A = - 1;", "type A as - 1");
     }
 
     #[test]
     fn number_literal_large_integer() {
-        assert_typescript!("type A = 100;","type A as 100");
+        assert_typescript!("type A = 100;", "type A as 100");
     }
 
     #[test]
     fn number_literal_integer_with_underscore() {
-        assert_typescript!("type A = 1_000;","type A as 1_000");
+        assert_typescript!("type A = 1_000;", "type A as 1_000");
     }
 
     #[test]
     fn number_literal_decimal_without_fraction() {
-        assert_typescript!("type A = 100.;","type A as 100.");
+        assert_typescript!("type A = 100.;", "type A as 100.");
     }
 
     #[test]
     fn number_literal_decimal_with_fraction() {
-        assert_typescript!("type A = 100.0;","type A as 100.0");
+        assert_typescript!("type A = 100.0;", "type A as 100.0");
     }
 
     #[test]
     fn number_literal_decimal_with_fraction_and_underscore() {
-        assert_typescript!("type A = 100.000_000;","type A as 100.000_000");
+        assert_typescript!("type A = 100.000_000;", "type A as 100.000_000");
     }
 
     #[test]
@@ -769,22 +793,22 @@ mod parser_tests {
 
     #[test]
     fn literal_true() {
-        assert_typescript!("type A = true;","type A as true");
+        assert_typescript!("type A = true;", "type A as true");
     }
 
     #[test]
     fn literal_false() {
-        assert_typescript!("type A = false;","type A as false");
+        assert_typescript!("type A = false;", "type A as false");
     }
 
     #[test]
     fn literal_null() {
-        assert_typescript!("type A = null;","type A as null");
+        assert_typescript!("type A = null;", "type A as null");
     }
 
     #[test]
     fn literal_undefined() {
-        assert_typescript!("type A = undefined;","type A as undefined");
+        assert_typescript!("type A = undefined;", "type A as undefined");
     }
 
     #[test]
@@ -817,27 +841,27 @@ mod parser_tests {
 
     #[test]
     fn bin_ops_union() {
-        assert_typescript!("type A = 1 | 2;","type A as 1 | 2");
+        assert_typescript!("type A = 1 | 2;", "type A as 1 | 2");
     }
 
     #[test]
     fn bin_ops_intersection() {
-        assert_typescript!("type A = 1 & 2;","type A as 1 & 2");
+        assert_typescript!("type A = 1 & 2;", "type A as 1 & 2");
     }
 
     #[test]
     fn bin_ops_union_with_intersection() {
-        assert_typescript!("type A = 1 | (2 & 3);","type A as 1 | 2 & 3");
+        assert_typescript!("type A = 1 | (2 & 3);", "type A as 1 | 2 & 3");
     }
 
     #[test]
     fn bin_ops_intersection_with_union() {
-        assert_typescript!("type A = 1 & (2 | 3);","type A as 1 & 2 | 3");
+        assert_typescript!("type A = 1 & (2 | 3);", "type A as 1 & 2 | 3");
     }
 
     #[test]
     fn bin_ops_grouped_union_and_intersection() {
-        assert_typescript!("type A = (1 | 2) & 3;","type A as (1 | 2) & 3");
+        assert_typescript!("type A = (1 | 2) & 3;", "type A as (1 | 2) & 3");
     }
 
     // If case
@@ -1019,12 +1043,12 @@ mod parser_tests {
 
     #[test]
     fn object_object_literal_empty() {
-        assert_typescript!("type A = {};","type A as {}");
+        assert_typescript!("type A = {};", "type A as {}");
     }
 
     #[test]
     fn object_literal_one_key() {
-        assert_typescript!("type A = {x: 1};","type A as {x: 1}");
+        assert_typescript!("type A = {x: 1};", "type A as {x: 1}");
     }
 
     #[test]
@@ -1037,22 +1061,22 @@ mod parser_tests {
 
     #[test]
     fn object_literal_readonly_modifier() {
-        assert_typescript!("type A = {readonly x: 1};","type A as {readonly x: 1}");
+        assert_typescript!("type A = {readonly x: 1};", "type A as {readonly x: 1}");
     }
 
     #[test]
     fn object_literal_optional_modifier() {
-        assert_typescript!("type A = {x?: 1};","type A as {x?: 1}");
+        assert_typescript!("type A = {x?: 1};", "type A as {x?: 1}");
     }
 
     #[test]
     fn tuple_empty() {
-        assert_typescript!("type A = [];","type A as []");
+        assert_typescript!("type A = [];", "type A as []");
     }
 
     #[test]
     fn tuple_single_element() {
-        assert_typescript!("type A = [1];","type A as [1]");
+        assert_typescript!("type A = [1];", "type A as [1]");
     }
 
     #[test]
@@ -1226,6 +1250,64 @@ mod parser_tests {
     }
 
     #[test]
+    fn let_expr() {
+        assert_typescript!(
+            r#"
+            type A = 1;
+            "#,
+            r#"
+            type A as let a = 1 in a
+            "#
+        );
+    }
+
+    #[test]
+    fn let_expr_multi_definitions() {
+        assert_typescript!(
+            r#"
+            type A = [1, 2];
+            "#,
+            r#"
+            type A as
+                let a = 1,
+                    b = 2,
+                in [a, b]
+            "#
+        );
+    }
+
+    #[test]
+    fn let_expr_no_self_reference() {
+        assert_typescript!(
+            r#"
+            type A = [1, a];
+            "#,
+            r#"
+            type A as
+                let a = 1,
+                    b = a,
+                in [a, b]
+            "#
+        );
+    }
+
+    #[test]
+    fn let_expr_nested() {
+        assert_typescript!(
+            r#"
+            type A = [[1, 1], [1, 1]];
+            "#,
+            r#"
+            type A as
+                let a = 1 in
+                let b = [a, a] in
+                let c = [b, b] in
+                c
+            "#
+        );
+    }
+
+    #[test]
     fn ts_toolbelt_any_at() {
         assert_typescript!(
             statement,
@@ -1251,6 +1333,14 @@ mod parser_tests {
                     A <: any,
                     K <: Key
                 as
+                    let a_k =
+                        if K <: keyof(A) then
+                            A[K]
+                        else
+                            undefined
+                        end
+                    in
+
                     cond do
                         A <: List =>
                             if number <: A.length then
@@ -1260,21 +1350,12 @@ mod parser_tests {
                                     undefined
                                 end
                             else
-                                if K <: keyof(A) then
-                                    A[K]
-                                else
-                                    undefined
-                                end
+                                a_k
                             end,
 
                         unknown <: A => unknown,
 
-                        else =>
-                            if K <: keyof(A) then
-                                A[K]
-                            else
-                                undefined
-                            end
+                        else => a_k
                     end
 
             "#

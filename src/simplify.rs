@@ -5,12 +5,9 @@ use crate::transform::*;
  * Simplification is a desugaring process that removes newtype specific language features,
  * replacing them with typescript compatible constructs.
  */
-pub trait Simplify {
-    fn simplify(&self) -> Self;
-}
 
-impl Simplify for Node {
-    fn simplify(&self) -> Self {
+impl Node {
+    pub fn simplify(&self) -> Self {
         self.transform(&|node| match node {
             // Replace all instances of `IfExpr` with `ExtendsExpr`
             Node::IfExpr(op, then, else_) => {

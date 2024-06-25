@@ -33,6 +33,7 @@ primary = _{
   | for_expr
   | match_expr
   | cond_expr
+  | let_expr
   | builtin
   | application
   | term
@@ -105,6 +106,14 @@ object_literal = {
 
 object_property = {
     (#readonly = readonly_modifier)? ~ #key = ident ~ (#optional = optional_modifier)? ~ ":" ~ #value = expr
+}
+
+let_expr = {
+    "let" ~ #binding = let_binding ~ ("," ~ #binding = let_binding)* ~ ","? ~ "in" ~ #body = expr
+}
+
+let_binding = {
+    ident ~ "=" ~ expr
 }
 
 for_expr = {
@@ -217,31 +226,33 @@ ident = @{ !keyword ~ !ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
 keyword = _{
     "as"
   | "any"
+  | "boolean"
   | "class"
-  | "for"
+  | "const"
   | "else"
+  | "end"
   | "extends"
   | "false"
+  | "for"
   | "function"
+  | "if"
+  | "in"
   | "infer"
   | "interface"
+  | "keyof"
+  | "let"
   | "never"
   | "null"
+  | "number"
+  | "string"
+  | "symbol"
   | "then"
   | "true"
   | "type"
+  | "typeof"
   | "undefined"
   | "unknown"
   | "void"
-  | "number"
-  | "string"
-  | "boolean"
-  | "symbol"
-  | "keyof"
-  | "typeof"
-  | "in"
-  | "if"
-  | "end"
 }
 
 number = @{

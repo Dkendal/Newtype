@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::parser::ParserError;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -41,6 +43,10 @@ pub enum Node {
     CondExpr {
         arms: Vec<CondArm>,
         else_: Box<Node>,
+    },
+    LetExpr {
+        bindings: HashMap<Identifier, Node>,
+        body: Box<Node>
     },
     ExtendsPrefixOp {
         op: PrefixOp,
@@ -168,6 +174,9 @@ pub struct ObjectProperty {
     pub key: String,
     pub value: Node,
 }
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct Identifier(pub String);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypeParameter {
