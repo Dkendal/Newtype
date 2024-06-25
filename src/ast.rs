@@ -6,6 +6,10 @@ use crate::parser::ParserError;
 pub enum Node {
     Program(Vec<Node>),
     Statement(Box<Node>),
+    ImportStatement {
+        import_clause: ImportClause,
+        module: String,
+    },
     TypeAlias {
         export: bool,
         name: String,
@@ -46,7 +50,7 @@ pub enum Node {
     },
     LetExpr {
         bindings: HashMap<Identifier, Node>,
-        body: Box<Node>
+        body: Box<Node>,
     },
     ExtendsPrefixOp {
         op: PrefixOp,
@@ -84,6 +88,18 @@ pub enum Node {
     Undefined,
     False,
     True,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ImportClause {
+    Named(Vec<ImportSpecifier>),
+    Namespace { alias: Identifier },
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ImportSpecifier {
+    pub module_export_name: Identifier,
+    pub alias: Option<Identifier>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

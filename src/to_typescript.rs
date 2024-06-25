@@ -88,9 +88,7 @@ impl ToTypescript for Node {
                 PrimitiveType::Number => "number",
                 PrimitiveType::String => "string",
             }),
-            Node::String(string) => RcDoc::text("\'")
-                .append(RcDoc::text(string.replace("\'", "\\\'")))
-                .append(RcDoc::text("\'")),
+            Node::String(string) => string_literal(string),
             Node::TemplateString(string) => RcDoc::text(string),
             Node::IfExpr(_cond, _then, _els) => {
                 unreachable!("IfExpr should be desugared before this point");
@@ -287,9 +285,31 @@ impl ToTypescript for Node {
                     .append("}")
                     .group()
             }
-            Node::LetExpr { bindings, body } => todo!(),
+            Node::LetExpr { .. } => {
+                unreachable!("LetExpr should be desugared before this point")
+            }
+            Node::ImportStatement {
+                import_clause,
+                module,
+            } => {
+                let import_clause = import_clause.to_ts();
+
+                RcDoc::text("import type")
+                    .append(RcDoc::space())
+                    .append(import_clause)
+                    .append(RcDoc::space())
+                    .append("from")
+                    .append(RcDoc::space())
+                    .append(string_literal(module))
+            }
         }
     }
+}
+
+fn string_literal(string: &String) -> RcDoc<()> {
+    RcDoc::text("\'")
+        .append(RcDoc::text(string.replace("\'", "\\\'")))
+        .append(RcDoc::text("\'"))
 }
 
 impl ToTypescript for TypeParameter {
@@ -328,6 +348,56 @@ impl ToTypescript for BuiltInKeyword {
     fn to_ts(&self) -> RcDoc<()> {
         match self {
             BuiltInKeyword::Keyof => RcDoc::text("keyof"),
+        }
+    }
+}
+
+impl ToTypescript for Identifier {
+    fn to_ts(&self) -> RcDoc<()> {
+        RcDoc::text(self.0.clone())
+    }
+}
+
+impl ToTypescript for ImportSpecifier {
+    fn to_ts(&self) -> RcDoc<()> {
+        let alias_doc = match &self.alias {
+            Some(alias) => RcDoc::space()
+                .append("as")
+                .append(RcDoc::space())
+                .append(alias.to_ts()),
+
+            None => RcDoc::nil(),
+        };
+
+        self.module_export_name.to_ts().append(alias_doc)
+    }
+}
+
+impl ToTypescript for ImportClause {
+    fn to_ts(&self) -> RcDoc<()> {
+        match self {
+            ImportClause::Named(specifiers) => {
+                let sep = RcDoc::text(",").append(RcDoc::line());
+
+                let specifiers =
+                    RcDoc::intersperse(specifiers.iter().map(ToTypescript::to_ts), sep);
+
+                RcDoc::text("{")
+                    .append(
+                        RcDoc::nil()
+                            .append(RcDoc::line())
+                            .append(specifiers)
+                            .append(RcDoc::line())
+                            .nest(4),
+                    )
+                    .append(RcDoc::text("}"))
+                    .group()
+            }
+            ImportClause::Namespace { alias } => RcDoc::text("*")
+                .append(RcDoc::space())
+                .append("as")
+                .append(RcDoc::space())
+                .append(alias.to_ts()),
         }
     }
 }

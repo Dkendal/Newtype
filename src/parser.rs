@@ -19,11 +19,26 @@ pub struct NewtypeParser;
 
 pub type ParserError = pest::error::Error<Rule>;
 
+macro_rules! assert_ast {
+    ($pair:expr, $rule:expr) => {
+        assert_eq!($pair.clone().as_rule(), $rule, "Rule mismatch");
+    };
+
+    ($pair:expr, $tag:expr => $rule:expr) => {
+        assert_eq!($pair.clone().as_rule(), $rule, "Rule mismatch");
+        assert_eq!($pair.clone().as_node_tag(), Some($tag), "Node tag mismatch")
+    };
+}
+
 macro_rules! parse_error {
+    ($pair:expr) => {{
+        parse_error!($pair, vec![], vec![$pair.clone().as_rule()]);
+    }};
+
     ($pair:expr, $message:expr) => {{
         let error = Error::<Rule>::new_from_span(
             ErrorVariant::CustomError { message: $message },
-            $pair.as_span(),
+            $pair.clone().as_span(),
         );
 
         panic!("{error}");
@@ -35,7 +50,7 @@ macro_rules! parse_error {
                 positives: $positives,
                 negatives: $negatives,
             },
-            $pair.as_span(),
+            $pair.clone().as_span(),
         );
         panic!("{error}");
     }};
@@ -105,15 +120,11 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
                 }
             }
             rule => {
-                let error = Error::new_from_span(
-                    ErrorVariant::ParsingError {
-                        positives: vec![indexed_access, array_modifier, dot_access],
-                        negatives: vec![rule],
-                    },
-                    op.as_span(),
+                parse_error!(
+                    op,
+                    vec![indexed_access, array_modifier, dot_access],
+                    vec![rule]
                 );
-
-                panic!("{error}")
             }
         })
         .map_infix(|lhs, op, rhs| {
@@ -225,6 +236,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             Node::Statement(boxed(inner))
         }
         Rule::type_alias => parse_type_alias(pair),
+        Rule::import_statement => parse_import_statement(pair),
         Rule::if_expr => parse_if_expr(pair),
         Rule::object_literal => parse_object_literal(pair),
         Rule::primitive => {
@@ -241,16 +253,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             Node::Primitive(primitive)
         }
         Rule::number => Node::Number(text(pair)),
-        Rule::string => {
-            let content = match pair.clone().into_inner().next().unwrap().as_rule() {
-                Rule::atom_string => pair.as_str().trim_start_matches(':').to_string(),
-                Rule::double_quote_string => pair.as_str().trim_matches('"').to_string(),
-                Rule::single_quote_string => pair.as_str().trim_matches('\'').to_string(),
-                _ => unreachable!(),
-            };
-
-            Node::String(content)
-        }
+        Rule::string => parse_string(pair),
         Rule::template_string => Node::TemplateString(text(pair)),
         Rule::ident => Node::Ident(text(pair)),
         Rule::never => Node::Never,
@@ -420,6 +423,67 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
         _ => {
             parse_error!(pair, format!("Unexpected rule: {:?}", rule));
         }
+    }
+}
+
+fn pair_as_identifier(pair: Pair<Rule>) -> Identifier {
+    assert_ast!(pair, Rule::ident);
+    Identifier(pair.as_str().to_string())
+}
+
+fn pair_as_string_literal(pair: Pair<Rule>) -> String {
+    assert_ast!(pair, Rule::string);
+
+    match pair.clone().into_inner().next().unwrap().as_rule() {
+        Rule::atom_string => pair.as_str().trim_start_matches(':').to_string(),
+        Rule::double_quote_string => pair.as_str().trim_matches('"').to_string(),
+        Rule::single_quote_string => pair.as_str().trim_matches('\'').to_string(),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_string(pair: Pair<Rule>) -> Node {
+    Node::String(pair_as_string_literal(pair))
+}
+
+fn parse_import_statement(pair: Pair<Rule>) -> Node {
+    let mut inner = pair.clone().into_inner();
+
+    let import_clause = inner.next().unwrap();
+
+    dbg!(&import_clause);
+
+    let import_clause = match import_clause.as_rule() {
+        Rule::named_import => {
+            let specs = import_clause
+                .into_inner()
+                .find_tagged("import_specifier")
+                .map(|pair| {
+                    let mut inner = pair.into_inner();
+                    let name = inner.next().unwrap();
+                    let name = pair_as_identifier(name);
+                    let alias = inner.next().map(pair_as_identifier);
+
+                    ImportSpecifier {
+                        module_export_name: name,
+                        alias,
+                    }
+                })
+                .collect_vec();
+
+            ImportClause::Named(specs)
+        }
+        Rule::namespace_import => {
+            todo!()
+        }
+        _ => parse_error!(pair),
+    };
+
+    let module = inner.next().map(pair_as_string_literal).unwrap();
+
+    Node::ImportStatement {
+        import_clause,
+        module,
     }
 }
 
@@ -666,6 +730,14 @@ mod parser_tests {
     use std::assert_matches::assert_matches;
     use textwrap_macros::dedent;
     use Rule::*;
+
+    #[test]
+    fn import_statement_named_imports() {
+        assert_typescript!(
+            r#"import type { A, B, C, D as D1 } from 'a';"#,
+            r#"import { A, B, C, D as D1 } from :a"#
+        );
+    }
 
     #[test]
     fn array_access_single_quote() {
@@ -1132,7 +1204,7 @@ mod parser_tests {
     }
 
     #[test]
-    fn type_where_clause() {
+    fn type_alias_where_clause() {
         assert_typescript!(
             r#"type A<x extends number> = x;"#,
             r#"type A(x) where x <: number as x"#
@@ -1140,7 +1212,7 @@ mod parser_tests {
     }
 
     #[test]
-    fn type_defaults_clause() {
+    fn type_alias_defaults_clause() {
         assert_typescript!(
             r#"type A<x = number> = x;"#,
             r#"type A(x) defaults x = number as x"#
@@ -1148,7 +1220,7 @@ mod parser_tests {
     }
 
     #[test]
-    fn type_where_and_defaults_clause() {
+    fn type_alias_where_and_defaults_clause() {
         assert_typescript!(
             r#"type A<x extends number = number> = x;"#,
             r#"type A(x) defaults x = number where x <: number as x"#

@@ -33,6 +33,7 @@ impl Node {
             | Node::Number { .. }
             | Node::Primitive { .. }
             | Node::String { .. }
+            | Node::ImportStatement { .. }
             | Node::TemplateString { .. } => self.clone(),
 
             // For all other nodes, we recursively transform
@@ -171,7 +172,9 @@ impl Node {
     }
 }
 
-fn resolve_let_bindings<'a>(bindings: &'a HashMap<Identifier, Node>) -> impl Fn(&Node) -> Node + 'a {
+fn resolve_let_bindings<'a>(
+    bindings: &'a HashMap<Identifier, Node>,
+) -> impl Fn(&Node) -> Node + 'a {
     |node: &Node| -> Node {
         match node {
             Node::Ident(name) => {

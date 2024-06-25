@@ -1,6 +1,34 @@
 program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 
-statement = { type_alias }
+statement = {
+    type_alias
+  | import_statement
+}
+
+import_statement = {
+    "import" ~ import_clause ~ from_clause
+}
+
+from_clause = _{
+    "from" ~ string
+}
+
+import_clause = _{
+    named_import
+  | namespace_import
+}
+
+namespace_import = {
+    "*" ~ "as" ~ #alias = ident
+}
+
+named_import = {
+    "{" ~ (#import_specifier = import_specifier ~ ("," ~ #import_specifier = import_specifier)*)? ~ "}"
+}
+
+import_specifier = {
+    #name = ident ~ ("as" ~ #alias = ident)?
+}
 
 type_alias = {
     (#export = export)? ~ "type" ~ #name = ident ~ ("(" ~ #parameters = type_parameters ~ ")")? ~ #defaults = defaults_caluse? ~ #where = where_clause? ~ "as" ~ #body = expr
@@ -161,6 +189,7 @@ extends_infix = _{
     extends
   | not_extends
   | equals
+  | not_equals
   | strict_equals
   | strict_not_equals
   | and
@@ -213,7 +242,7 @@ optional_modifier = @{ "?" }
 
 string = { atom_string | double_quote_string | single_quote_string }
 
-atom_string = @{ ":" ~ (!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_" | "-"))+ }
+atom_string = @{ ":" ~ (!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_" | "-" | "/" | "\\"))+ }
 
 double_quote_string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
