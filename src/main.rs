@@ -21,19 +21,11 @@ extern crate quickcheck_macros;
 mod ast;
 mod parser;
 mod pretty;
+mod typescript;
 
 use clap::Parser;
 use std::io::Read;
-
-pub trait ToTypescript {
-    fn to_pretty_ts(&self, width: usize) -> String {
-        let mut w = Vec::new();
-        self.to_ts().render(width, &mut w).unwrap();
-        String::from_utf8(w).unwrap()
-    }
-
-    fn to_ts(&self) -> ::pretty::RcDoc<()>;
-}
+use typescript::Pretty;
 
 #[derive(Debug, Parser)]
 #[clap(name = "newtype compiler")]
@@ -61,7 +53,7 @@ fn main() {
         Ok(result) => {
             let simplified = result.simplify();
 
-            let out = simplified.to_pretty_ts(120);
+            let out = simplified.render_pretty_ts(120);
 
             if let Some(output_filename) = args.output {
                 std::fs::write(output_filename, out).unwrap();
@@ -112,7 +104,7 @@ pub mod test_support {
 
             let simplified = pairs.simplify();
 
-            let actual = simplified.to_pretty_ts(80);
+            let actual = simplified.render_pretty_ts(80);
             assert_eq!(expected, actual.trim());
         };
 

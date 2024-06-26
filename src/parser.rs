@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     ast::{macros::*, *},
-    ToTypescript,
+    typescript,
 };
 
 use itertools::Itertools;
@@ -684,6 +684,7 @@ fn tag_eq<'a>(tag: &'a str) -> impl FnMut(&Pair<'a, Rule>) -> bool {
 mod parser_tests {
     use super::*;
     use crate::test_support::*;
+    use crate::typescript::Pretty;
     use pest::consumes_to;
     use pest::parses_to;
     use pretty_assertions::{assert_eq, assert_ne};

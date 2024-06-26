@@ -6,7 +6,7 @@ use pretty::RcDoc;
 use crate::{
     parser::ParserError,
     pretty::{parens, string_literal},
-    ToTypescript,
+    typescript,
 };
 
 pub(crate) mod macros;
@@ -546,7 +546,7 @@ fn resolve_let_bindings(bindings: &HashMap<Identifier, Node>) -> impl Fn(&Node) 
     }
 }
 
-impl ToTypescript for Node {
+impl typescript::Pretty for Node {
     fn to_ts<'a>(&self) -> RcDoc<()> {
         match self {
             Node::Program(stmnts) => {
@@ -826,14 +826,14 @@ pub enum ImportClause {
     Namespace { alias: Identifier },
 }
 
-impl ToTypescript for ImportClause {
+impl typescript::Pretty for ImportClause {
     fn to_ts(&self) -> RcDoc<()> {
         match self {
             ImportClause::Named(specifiers) => {
                 let sep = RcDoc::text(",").append(RcDoc::line());
 
                 let specifiers =
-                    RcDoc::intersperse(specifiers.iter().map(ToTypescript::to_ts), sep);
+                    RcDoc::intersperse(specifiers.iter().map(typescript::Pretty::to_ts), sep);
 
                 RcDoc::text("{")
                     .append(
@@ -861,7 +861,7 @@ pub struct ImportSpecifier {
     pub alias: Option<Identifier>,
 }
 
-impl ToTypescript for ImportSpecifier {
+impl typescript::Pretty for ImportSpecifier {
     fn to_ts(&self) -> RcDoc<()> {
         let alias_doc = match &self.alias {
             Some(alias) => RcDoc::space()
@@ -881,7 +881,7 @@ pub enum BuiltInKeyword {
     Keyof,
 }
 
-impl ToTypescript for BuiltInKeyword {
+impl typescript::Pretty for BuiltInKeyword {
     fn to_ts(&self) -> RcDoc<()> {
         match self {
             BuiltInKeyword::Keyof => RcDoc::text("keyof"),
@@ -956,7 +956,7 @@ pub struct ObjectProperty {
     pub value: Node,
 }
 
-impl ToTypescript for ObjectProperty {
+impl typescript::Pretty for ObjectProperty {
     fn to_ts(&self) -> RcDoc<()> {
         let readonly = if self.readonly {
             RcDoc::text("readonly").append(RcDoc::space())
@@ -984,7 +984,7 @@ impl ToTypescript for ObjectProperty {
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Identifier(pub String);
 
-impl ToTypescript for Identifier {
+impl typescript::Pretty for Identifier {
     fn to_ts(&self) -> RcDoc<()> {
         RcDoc::text(self.0.clone())
     }
@@ -1014,7 +1014,7 @@ impl TypeParameter {
     }
 }
 
-impl ToTypescript for TypeParameter {
+impl typescript::Pretty for TypeParameter {
     fn to_ts(&self) -> RcDoc<()> {
         let rest = if self.rest {
             RcDoc::text("...")
