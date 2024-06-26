@@ -13,33 +13,57 @@ pub(crate) mod macros;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Node {
-    Program(Vec<Node>),
-    Statement(Box<Node>),
-    ImportStatement {
-        import_clause: ImportClause,
-        module: String,
+    Access {
+        lhs: Box<Node>,
+        rhs: Box<Node>,
+        is_dot: bool,
     },
-    TypeAlias {
-        export: bool,
-        name: String,
-        params: Vec<TypeParameter>,
-        body: Box<Node>,
-    },
+    Any,
+    Application(String, Vec<Node>),
+    Array(Box<Node>),
     BinOp {
         lhs: Box<Node>,
         op: Op,
         rhs: Box<Node>,
     },
+    Builtin {
+        name: BuiltInKeyword,
+        argument: Box<Node>,
+    },
+    CondExpr {
+        arms: Vec<CondArm>,
+        else_: Box<Node>,
+    },
+    ExtendsBinOp {
+        lhs: Box<Node>,
+        op: InfixOp,
+        rhs: Box<Node>,
+    },
+    ExtendsExpr(
+        Box<Node>, // lhs
+        Box<Node>, // rhs
+        Box<Node>, // then
+        Box<Node>, // else
+    ),
+    ExtendsPrefixOp {
+        op: PrefixOp,
+        value: Box<Node>,
+    },
+    False,
     Ident(String),
-    Number(String),
-    Primitive(PrimitiveType),
-    String(String),
-    TemplateString(String),
     IfExpr(
         Box<Node>,         // condition, must be ExtendsBinOp
         Box<Node>,         // then
         Option<Box<Node>>, // else
     ),
+    ImportStatement {
+        import_clause: ImportClause,
+        module: String,
+    },
+    LetExpr {
+        bindings: HashMap<Identifier, Node>,
+        body: Box<Node>,
+    },
     MappedType {
         index: String,
         iterable: Box<Node>,
@@ -53,50 +77,25 @@ pub enum Node {
         arms: Vec<MatchArm>,
         else_: Box<Node>,
     },
-    CondExpr {
-        arms: Vec<CondArm>,
-        else_: Box<Node>,
-    },
-    LetExpr {
-        bindings: HashMap<Identifier, Node>,
+    Never,
+    Null,
+    Number(String),
+    ObjectLiteral(Vec<ObjectProperty>),
+    Primitive(PrimitiveType),
+    Program(Vec<Node>),
+    Statement(Box<Node>),
+    String(String),
+    TemplateString(String),
+    True,
+    Tuple(Vec<Node>),
+    TypeAlias {
+        export: bool,
+        name: String,
+        params: Vec<TypeParameter>,
         body: Box<Node>,
     },
-    ExtendsPrefixOp {
-        op: PrefixOp,
-        value: Box<Node>,
-    },
-    ExtendsBinOp {
-        lhs: Box<Node>,
-        op: InfixOp,
-        rhs: Box<Node>,
-    },
-    ExtendsExpr(
-        Box<Node>, // lhs
-        Box<Node>, // rhs
-        Box<Node>, // then
-        Box<Node>, // else
-    ),
-    Builtin {
-        name: BuiltInKeyword,
-        argument: Box<Node>,
-    },
-    Error(ParserError),
-    ObjectLiteral(Vec<ObjectProperty>),
-    Application(String, Vec<Node>),
-    Never,
-    Any,
-    Unknown,
-    Tuple(Vec<Node>),
-    Array(Box<Node>),
-    Access {
-        lhs: Box<Node>,
-        rhs: Box<Node>,
-        is_dot: bool,
-    },
-    Null,
     Undefined,
-    False,
-    True,
+    Unknown,
 }
 
 impl Node {
@@ -109,15 +108,13 @@ impl Node {
 
         let transform_and_box = |node: &Node| Box::new(node.transform(f));
 
-        let transform_each =
-            |nodes: &Vec<Node>| nodes.into_iter().map(transform).collect::<Vec<_>>();
+        let transform_each = |nodes: &Vec<Node>| nodes.iter().map(transform).collect::<Vec<_>>();
 
         // For all nodes that are not a leaf node,
         // we need to recursively simplify
         let out = match self {
             // Leaf nodes are not transformed
-            Node::Error { .. }
-            | Node::Never
+            Node::Never
             | Node::Any
             | Node::Unknown
             | Node::Null
@@ -192,7 +189,7 @@ impl Node {
             ),
             Node::ObjectLiteral(props) => Node::ObjectLiteral(
                 props
-                    .into_iter()
+                    .iter()
                     .map(|prop| {
                         let mut p = prop.clone();
                         p.value = transform(&prop.value);
@@ -206,7 +203,7 @@ impl Node {
                 let value = transform_and_box(value);
 
                 let arms = arms
-                    .into_iter()
+                    .iter()
                     .map(|arm| {
                         let mut a = arm.clone();
                         a.pattern = transform(&arm.pattern);
@@ -222,7 +219,7 @@ impl Node {
 
             Node::CondExpr { arms, else_ } => {
                 let arms = arms
-                    .into_iter()
+                    .iter()
                     .map(|arm| {
                         let mut a = arm.clone();
                         a.condition = transform(&arm.condition);
@@ -359,7 +356,7 @@ fn simplify_match_expr(node: &Node) -> Node {
 
     let init_else: Node = (**else_).clone();
 
-    let out: Node = arms.into_iter().rev().fold(init_else, |acc, arm| -> Node {
+    let out: Node = arms.iter().rev().fold(init_else, |acc, arm| -> Node {
         let MatchArm { pattern, body } = arm;
 
         Node::ExtendsExpr(
@@ -505,9 +502,7 @@ mod simplify_tests {
     }
 }
 
-fn resolve_let_bindings<'a>(
-    bindings: &'a HashMap<Identifier, Node>,
-) -> impl Fn(&Node) -> Node + 'a {
+fn resolve_let_bindings(bindings: &HashMap<Identifier, Node>) -> impl Fn(&Node) -> Node + '_ {
     |node: &Node| -> Node {
         match node {
             Node::Ident(name) => {
@@ -563,7 +558,7 @@ impl ToTypescript for Node {
                 };
 
                 let params_doc = match params {
-                    list if list.len() == 0 => RcDoc::nil(),
+                    list if list.is_empty() => RcDoc::nil(),
                     list => {
                         let seperator = RcDoc::text(",").append(RcDoc::line());
 
@@ -621,7 +616,6 @@ impl ToTypescript for Node {
                 .append(rhs.to_ts())
                 .append(RcDoc::text("]"))
                 .group(),
-            Node::Error(_) => unreachable!("Error should be handled before this point"),
             Node::ObjectLiteral(props) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
@@ -884,10 +878,7 @@ impl ToTypescript for BuiltInKeyword {
 
 impl Node {
     pub fn is_bin_op(&self) -> bool {
-        match self {
-            Node::BinOp { .. } => true,
-            _ => false,
-        }
+        matches!(self, Node::BinOp { .. })
     }
 
     pub fn as_ident(&self) -> Option<&String> {

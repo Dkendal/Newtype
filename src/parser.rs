@@ -4,7 +4,10 @@ use std::{
     iter::FilterMap,
 };
 
-use crate::{ast::{macros::*, *}, ToTypescript};
+use crate::{
+    ast::{macros::*, *},
+    ToTypescript,
+};
 
 use itertools::Itertools;
 
@@ -62,9 +65,7 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
     use Rule::*;
     EXPR_PARSER
         .map_primary(parse_node)
-        .map_prefix(|op, _rhs| match op.as_rule() {
-            _ => unreachable!("Expected prefix operator, found {:?}", op.as_rule()),
-        })
+        .map_prefix(|op, _rhs| unreachable!("Expected prefix operator, found {:?}", op.as_rule()))
         .map_postfix(|lhs, op| match op.as_rule() {
             indexed_access => {
                 let inner = op.into_inner().next().unwrap();
@@ -130,24 +131,17 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
         .parse(pairs)
 }
 
-pub fn parse_newtype(source: &str) -> Result<Node, Error<Rule>> {
+pub fn parse_newtype(source: &str) -> Result<Node, Box<Error<Rule>>> {
     let pair = NewtypeParser::parse(Rule::program, source)?.next().unwrap();
 
     Ok(parse_node(pair))
 }
 
-fn new_error(message: String, pair: Pair<Rule>) -> Node {
-    return Node::Error(Error::new_from_span(
-        ErrorVariant::CustomError { message },
-        pair.as_span(),
-    ));
-}
-
 fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
     EXTENDS_PARSER
         .map_primary(parse_node)
-        .map_postfix(|_lhs, op| match op.as_rule() {
-            rule => unreachable!("Expected postfix operation, found {:?}", rule),
+        .map_postfix(|_lhs, op| {
+            unreachable!("Expected postfix operation, found {:?}", op.as_rule())
         })
         .map_prefix(|op, primary_node| {
             let op = match op.as_rule() {
@@ -263,9 +257,9 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             }
         }
         Rule::expr => parse_expr(pair.into_inner()),
-        Rule::infer => new_error(
-            "Infer operator must be used in an extends expression".to_string(),
+        Rule::infer => parse_error!(
             pair,
+            format!("Infer operator must be used in an extends expression")
         ),
         Rule::match_expr => {
             let mut inner = pair.into_inner();
@@ -500,23 +494,24 @@ fn boxed(lhs: Node) -> Box<Node> {
 }
 
 fn parse_object_literal(pair: Pair<Rule>) -> Node {
-    let mut object_property_rules = pair.into_inner();
+    let object_property_rules = pair.into_inner();
     let mut properties = Vec::new();
 
-    while let Some(prop_pair) = object_property_rules.next() {
+    for prop_pair in object_property_rules {
         match prop_pair.as_rule() {
             Rule::object_property => {
                 let mut inner = prop_pair.into_inner();
 
-                let readonly = inner.clone().find(tag_eq("readonly")).is_some();
+                let readonly = inner.clone().any(|p| tag_eq("readonly")(&p));
 
                 let key = inner
                     .find(tag_eq("key"))
                     .expect("object property missing key")
                     .as_str()
-                    .to_string();
+                    .to_string()
+                    .clone();
 
-                let optional = inner.clone().find(tag_eq("optional")).is_some();
+                let optional = inner.clone().any(|p| tag_eq("optional")(&p));
 
                 let value = inner
                     .find(tag_eq("value"))

@@ -1,8 +1,7 @@
 /// Utility functions for pretty printing
-
 use pretty::RcDoc;
 
-pub(crate) fn string_literal(string: &String) -> RcDoc<()> {
+pub(crate) fn string_literal(string: &str) -> RcDoc<()> {
     RcDoc::text("\'")
         .append(RcDoc::text(string.replace("\'", "\\\'")))
         .append(RcDoc::text("\'"))
