@@ -21,7 +21,6 @@ extern crate quickcheck_macros;
 mod ast;
 mod parser;
 mod pretty;
-mod simplify;
 
 use clap::Parser;
 use std::io::Read;
