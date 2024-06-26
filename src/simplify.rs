@@ -1,5 +1,4 @@
 use crate::ast::*;
-use crate::transform::*;
 
 /**
  * Simplification is a desugaring process that removes newtype specific language features,

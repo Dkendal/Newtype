@@ -20,13 +20,21 @@ extern crate quickcheck_macros;
 
 mod ast;
 mod parser;
+mod pretty;
 mod simplify;
-mod to_typescript;
-mod transform;
 
-use crate::to_typescript::ToTypescript;
 use clap::Parser;
 use std::io::Read;
+
+pub trait ToTypescript {
+    fn to_pretty_ts(&self, width: usize) -> String {
+        let mut w = Vec::new();
+        self.to_ts().render(width, &mut w).unwrap();
+        String::from_utf8(w).unwrap()
+    }
+
+    fn to_ts(&self) -> ::pretty::RcDoc<()>;
+}
 
 #[derive(Debug, Parser)]
 #[clap(name = "newtype compiler")]

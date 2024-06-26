@@ -1,17 +1,19 @@
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::default;
-use std::iter::FilterMap;
+use std::{
+    collections::{BTreeSet, HashMap},
+    default,
+    iter::FilterMap,
+};
 
-use crate::ast::*;
-use crate::simplify::*;
-use crate::to_typescript::ToTypescript;
+use crate::{ast::*, ToTypescript};
+
 use itertools::Itertools;
-use pest::error::{Error, ErrorVariant};
-use pest::iterators::{Pair, Pairs};
-use pest::pratt_parser::PrattParser;
-use pest::Parser;
+
+use pest::{
+    error::{Error, ErrorVariant},
+    iterators::{Pair, Pairs},
+    pratt_parser::PrattParser,
+    Parser,
+};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -756,11 +758,11 @@ mod parser_tests {
 
     #[test]
     fn dot_access() {
-        assert_typescript!(expr, r#"A["x"]"#, r#"A.x"#);
+        assert_typescript!(expr, r#"A['x']"#, r#"A.x"#);
     }
 
     fn chained_dot_access() {
-        assert_typescript!(expr, r#"A["x"]["y"]["z"]"#, r#"A.x.y.z"#);
+        assert_typescript!(expr, r#"A['x']['y']['z']"#, r#"A.x.y.z"#);
     }
 
     #[test]
@@ -1386,7 +1388,7 @@ mod parser_tests {
             r#"
             export type At<A extends any, K extends Key> =
                 A extends List
-                    ? number extends A["length"]
+                    ? number extends A['length']
                         ? K extends number | `${number}`
                             ? A[never] | undefined
                             : undefined
