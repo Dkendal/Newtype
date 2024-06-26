@@ -61,7 +61,7 @@ lazy_static::lazy_static! {
     };
 }
 
-pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
+pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> Node {
     use Rule::*;
     EXPR_PARSER
         .map_primary(parse_node)
@@ -131,13 +131,13 @@ pub fn parse_expr(pairs: Pairs<Rule>) -> Node {
         .parse(pairs)
 }
 
-pub fn parse_newtype(source: &str) -> Result<Node, Box<Error<Rule>>> {
+pub(crate) fn parse_newtype_program(source: &str) -> Result<Node, Box<Error<Rule>>> {
     let pair = NewtypeParser::parse(Rule::program, source)?.next().unwrap();
 
     Ok(parse_node(pair))
 }
 
-fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
+pub(crate) fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
     EXTENDS_PARSER
         .map_primary(parse_node)
         .map_postfix(|_lhs, op| {
@@ -211,10 +211,10 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
             };
             Node::Primitive(primitive)
         }
-        Rule::number => Node::Number(text(pair)),
+        Rule::number => Node::Number(node_as_string(pair)),
         Rule::string => parse_string(pair),
-        Rule::template_string => Node::TemplateString(text(pair)),
-        Rule::ident => Node::Ident(text(pair)),
+        Rule::template_string => Node::TemplateString(node_as_string(pair)),
+        Rule::ident => Node::Ident(node_as_string(pair)),
         Rule::never => Node::Never,
         Rule::any => Node::Any,
         Rule::unknown => Node::Unknown,
@@ -222,11 +222,11 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
         Rule::literal_false => Node::False,
         Rule::null => Node::Null,
         Rule::undefined => Node::Undefined,
-        Rule::tuple => tuple(pair),
+        Rule::tuple => parse_tuple(pair),
         Rule::application => {
             let mut inner = pair.into_inner();
 
-            let identifier = inner.next().map(text).unwrap();
+            let identifier = inner.next().map(node_as_string).unwrap();
 
             let arguments_pair = inner
                 .find(tag_eq("arguments"))
@@ -483,7 +483,7 @@ fn parse_if_expr(pair: Pair<Rule>) -> Node {
     }
 }
 
-fn tuple(pair: Pair<Rule>) -> Node {
+fn parse_tuple(pair: Pair<Rule>) -> Node {
     let items = pair.into_inner().map(parse_node).collect();
 
     Node::Tuple(items)
@@ -666,7 +666,7 @@ fn parse_type_alias(pair: Pair<Rule>) -> Node {
     }
 }
 
-fn text(pair: Pair<Rule>) -> String {
+fn node_as_string(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
 }
 

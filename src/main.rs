@@ -55,7 +55,7 @@ fn main() {
         input
     };
 
-    let result = parser::parse_newtype(&input_source);
+    let result = parser::parse_newtype_program(&input_source);
 
     match result {
         Ok(result) => {
@@ -77,7 +77,7 @@ fn main() {
 
 #[cfg(test)]
 pub mod test_support {
-    use crate::{ast::Node, parser::parse_newtype};
+    use crate::{ast::Node, parser::parse_newtype_program};
 
     macro_rules! parse {
         ($rule:expr, $source:expr) => {{

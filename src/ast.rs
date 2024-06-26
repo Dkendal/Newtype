@@ -99,6 +99,18 @@ pub enum Node {
 }
 
 impl Node {
+    pub fn is_bin_op(&self) -> bool {
+        matches!(self, Node::BinOp { .. })
+    }
+
+    pub fn as_ident(&self) -> Option<&String> {
+        if let Self::Ident(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
     /**
      * Recursively transform a node and all of its children. There is no generalize
      * tree walk method in Rust to deal with ADTs, so we have to implement it manually.
@@ -272,46 +284,70 @@ impl Node {
                     None => Box::new(Node::Never),
                 };
 
-                simplify_if_expr(op, then, &else_)
+                expand_if_expr(op, then, &else_)
             }
             Node::Access { lhs, rhs, is_dot } => Node::Access {
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
                 is_dot: *is_dot,
             },
-            Node::MatchExpr { .. } => simplify_match_expr(node),
-            Node::CondExpr { .. } => simplify_cond_expr(node),
+            Node::MatchExpr { .. } => node.simplify_match_expr(),
+            Node::CondExpr { .. } => node.simplify_cond_expr(),
             _ => node.clone(),
         })
     }
+
+    // Convert match arms to a series of extends expressions.
+    // Allows for a single wildcard pattern ("_") to be used as the default case.
+    fn simplify_match_expr(&self) -> Node {
+        let Node::MatchExpr { value, arms, else_ } = self else {
+            panic!("Expected MatchExpr, found {self:#?}");
+        };
+
+        let init_else: Node = (**else_).clone();
+
+        let out: Node = arms.iter().rev().fold(init_else, |acc, arm| -> Node {
+            let MatchArm { pattern, body } = arm;
+
+            Node::ExtendsExpr(
+                value.clone(),
+                Box::new(pattern.clone()),
+                Box::new(body.clone()),
+                Box::new(acc),
+            )
+        });
+
+        out
+    }
+
+    fn simplify_cond_expr(&self) -> Node {
+        // Convert a CondExpr to a series of nested ternary expressions
+        let Node::CondExpr { arms, else_ } = self else {
+            panic!("Expected CondExpr, found {self:#?}");
+        };
+
+        let init_else: Node = (**else_).clone();
+
+        let acc: Node = arms.iter().rev().fold(init_else, |else_, arm| {
+            let CondArm {
+                condition,
+                body: then,
+            } = arm;
+            expand_if_expr(condition, then, &else_)
+        });
+
+        acc
+    }
 }
 
-fn simplify_cond_expr(node: &Node) -> Node {
-    // Convert a CondExpr to a series of nested ternary expressions
-    let Node::CondExpr { arms, else_ } = node else {
-        panic!("Expected CondExpr, found {node:#?}");
-    };
-
-    let init_else: Node = (**else_).clone();
-
-    let acc: Node = arms.iter().rev().fold(init_else, |else_, arm| {
-        let CondArm {
-            condition,
-            body: then,
-        } = arm;
-        simplify_if_expr(condition, then, &else_)
-    });
-
-    acc
-}
-
-fn simplify_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
+/// Expands an if expression into a series of nested ternary expressions
+fn expand_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
     match condition {
         // Unary operators
         Node::ExtendsPrefixOp { op, value } => {
             match op {
                 // Swap `then` and `else` branches
-                PrefixOp::Not => simplify_if_expr(value, else_, then),
+                PrefixOp::Not => expand_if_expr(value, else_, then),
                 _ => todo!(),
             }
         }
@@ -335,39 +371,16 @@ fn simplify_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
             InfixOp::StrictEquals => todo!(),
             InfixOp::StrictNotEquals => todo!(),
             InfixOp::And => {
-                let then = simplify_if_expr(rhs, then, else_);
-                simplify_if_expr(lhs, &then, else_)
+                let then = expand_if_expr(rhs, then, else_);
+                expand_if_expr(lhs, &then, else_)
             }
             InfixOp::Or => {
-                let else_ = simplify_if_expr(rhs, then, else_);
-                simplify_if_expr(lhs, then, &else_)
+                let else_ = expand_if_expr(rhs, then, else_);
+                expand_if_expr(lhs, then, &else_)
             }
         },
         _ => panic!("Expected extends operator, found {condition:#?}"),
     }
-}
-
-// Convert match arms to a series of extends expressions.
-// Allows for a single wildcard pattern ("_") to be used as the default case.
-fn simplify_match_expr(node: &Node) -> Node {
-    let Node::MatchExpr { value, arms, else_ } = node else {
-        panic!("Expected MatchExpr, found {node:#?}");
-    };
-
-    let init_else: Node = (**else_).clone();
-
-    let out: Node = arms.iter().rev().fold(init_else, |acc, arm| -> Node {
-        let MatchArm { pattern, body } = arm;
-
-        Node::ExtendsExpr(
-            value.clone(),
-            Box::new(pattern.clone()),
-            Box::new(body.clone()),
-            Box::new(acc),
-        )
-    });
-
-    out
 }
 
 #[cfg(test)]
@@ -872,20 +885,6 @@ impl ToTypescript for BuiltInKeyword {
     fn to_ts(&self) -> RcDoc<()> {
         match self {
             BuiltInKeyword::Keyof => RcDoc::text("keyof"),
-        }
-    }
-}
-
-impl Node {
-    pub fn is_bin_op(&self) -> bool {
-        matches!(self, Node::BinOp { .. })
-    }
-
-    pub fn as_ident(&self) -> Option<&String> {
-        if let Self::Ident(v) = self {
-            Some(v)
-        } else {
-            None
         }
     }
 }
