@@ -32,24 +32,24 @@ pub(crate) trait Sexpr {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NamespaceAccess {
-    pub lhs: Box<Node>,
-    pub rhs: Box<Node>,
+    pub lhs: Box<AST>,
+    pub rhs: Box<AST>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ExtendsExpr {
-    pub lhs: Box<Node>,
-    pub rhs: Box<Node>,
-    pub then_branch: Box<Node>,
-    pub else_branch: Box<Node>,
+    pub lhs: Box<AST>,
+    pub rhs: Box<AST>,
+    pub then_branch: Box<AST>,
+    pub else_branch: Box<AST>,
 }
 
 impl ExtendsExpr {
     pub fn new(
-        lhs: Box<Node>,
-        rhs: Box<Node>,
-        then_branch: Box<Node>,
-        else_branch: Box<Node>,
+        lhs: Box<AST>,
+        rhs: Box<AST>,
+        then_branch: Box<AST>,
+        else_branch: Box<AST>,
     ) -> Self {
         if !lhs.is_typescript_feature() {
             dbg!(&lhs);
@@ -78,16 +78,16 @@ impl ExtendsExpr {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct IfExpr {
-    pub condition: Box<Node>,
-    pub then_branch: Box<Node>,
-    pub else_branch: Option<Box<Node>>,
+    pub condition: Box<AST>,
+    pub then_branch: Box<AST>,
+    pub else_branch: Option<Box<AST>>,
 }
 
 impl IfExpr {
-    fn simplify(&self) -> Node {
+    fn simplify(&self) -> AST {
         let else_branch = match &self.else_branch {
             Some(v) => v.clone(),
-            None => Box::new(Node::Never),
+            None => Box::new(AST::Never),
         };
 
         expand_if_expr(&self.condition, &self.then_branch, &else_branch)
@@ -95,37 +95,37 @@ impl IfExpr {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Node {
+pub enum AST {
     Access {
-        lhs: Box<Node>,
-        rhs: Box<Node>,
+        lhs: Box<AST>,
+        rhs: Box<AST>,
         is_dot: bool,
     },
     Any,
-    Application(String, Vec<Node>),
-    Array(Box<Node>),
+    Application(String, Vec<AST>),
+    Array(Box<AST>),
     BinOp {
-        lhs: Box<Node>,
+        lhs: Box<AST>,
         op: Op,
-        rhs: Box<Node>,
+        rhs: Box<AST>,
     },
     Builtin {
         name: BuiltInKeyword,
-        argument: Box<Node>,
+        argument: Box<AST>,
     },
     CondExpr {
         arms: Vec<CondArm>,
-        else_: Box<Node>,
+        else_: Box<AST>,
     },
     ExtendsBinOp {
-        lhs: Box<Node>,
+        lhs: Box<AST>,
         op: InfixOp,
-        rhs: Box<Node>,
+        rhs: Box<AST>,
     },
     ExtendsExpr(ExtendsExpr),
     ExtendsPrefixOp {
         op: PrefixOp,
-        value: Box<Node>,
+        value: Box<AST>,
     },
     False,
     Ident(String),
@@ -135,21 +135,21 @@ pub enum Node {
         module: String,
     },
     LetExpr {
-        bindings: HashMap<Identifier, Node>,
-        body: Box<Node>,
+        bindings: HashMap<Identifier, AST>,
+        body: Box<AST>,
     },
     MappedType {
         index: String,
-        iterable: Box<Node>,
-        remapped_as: Option<Box<Node>>,
+        iterable: Box<AST>,
+        remapped_as: Option<Box<AST>>,
         readonly_mod: Option<MappingModifier>,
         optional_mod: Option<MappingModifier>,
-        body: Box<Node>,
+        body: Box<AST>,
     },
     MatchExpr {
-        value: Box<Node>,
+        value: Box<AST>,
         arms: Vec<MatchArm>,
-        else_: Box<Node>,
+        else_: Box<AST>,
     },
     NamespaceAccess(NamespaceAccess),
     Never,
@@ -158,34 +158,34 @@ pub enum Node {
     Number(String),
     ObjectLiteral(Vec<ObjectProperty>),
     Primitive(PrimitiveType),
-    Program(Vec<Node>),
-    Statement(Box<Node>),
+    Program(Vec<AST>),
+    Statement(Box<AST>),
     String(String),
     TemplateString(String),
     True,
-    Tuple(Vec<Node>),
+    Tuple(Vec<AST>),
     TypeAlias {
         export: bool,
         name: String,
         params: Vec<TypeParameter>,
-        body: Box<Node>,
+        body: Box<AST>,
     },
     Undefined,
     Unknown,
 }
 
-impl From<IfExpr> for Node {
+impl From<IfExpr> for AST {
     fn from(v: IfExpr) -> Self {
         Self::IfExpr(v)
     }
 }
 
-impl Node {
+impl AST {
     /// Operators that the `not` prefix operator can be applied to.
     pub fn is_compatible_with_not_prefix_op(&self) -> bool {
         match self {
-            Node::ExtendsPrefixOp { op, .. } if op.is_not() => true,
-            Node::ExtendsBinOp { .. } => true,
+            AST::ExtendsPrefixOp { op, .. } if op.is_not() => true,
+            AST::ExtendsBinOp { .. } => true,
             _ => false,
         }
     }
@@ -193,44 +193,44 @@ impl Node {
     /// Anything that's false is a feature that needs to be desugared.
     pub fn is_typescript_feature(&self) -> bool {
         match self {
-            Node::Access { .. } => true,
-            Node::Any => true,
-            Node::Application(_, _) => true,
-            Node::Array(_) => true,
-            Node::BinOp { .. } => false,
-            Node::Builtin { .. } => true,
-            Node::CondExpr { .. } => false,
-            Node::ExtendsBinOp { .. } => false,
-            Node::ExtendsExpr(_) => true,
-            Node::ExtendsPrefixOp { .. } => false,
-            Node::False => true,
-            Node::Ident(_) => true,
-            Node::IfExpr(IfExpr { .. }) => false,
-            Node::ImportStatement { .. } => true,
-            Node::LetExpr { .. } => false,
-            Node::MappedType { .. } => true,
-            Node::MatchExpr { .. } => false,
-            Node::NamespaceAccess(_) => true,
-            Node::Never => true,
-            Node::NoOp => false,
-            Node::Null => true,
-            Node::Number(_) => true,
-            Node::ObjectLiteral(_) => true,
-            Node::Primitive(_) => true,
-            Node::Program(_) => true,
-            Node::Statement(_) => true,
-            Node::String(_) => true,
-            Node::TemplateString(_) => true,
-            Node::True => true,
-            Node::Tuple(_) => true,
-            Node::TypeAlias { .. } => false,
-            Node::Undefined => true,
-            Node::Unknown => true,
+            AST::Access { .. } => true,
+            AST::Any => true,
+            AST::Application(_, _) => true,
+            AST::Array(_) => true,
+            AST::BinOp { .. } => false,
+            AST::Builtin { .. } => true,
+            AST::CondExpr { .. } => false,
+            AST::ExtendsBinOp { .. } => false,
+            AST::ExtendsExpr(_) => true,
+            AST::ExtendsPrefixOp { .. } => false,
+            AST::False => true,
+            AST::Ident(_) => true,
+            AST::IfExpr(IfExpr { .. }) => false,
+            AST::ImportStatement { .. } => true,
+            AST::LetExpr { .. } => false,
+            AST::MappedType { .. } => true,
+            AST::MatchExpr { .. } => false,
+            AST::NamespaceAccess(_) => true,
+            AST::Never => true,
+            AST::NoOp => false,
+            AST::Null => true,
+            AST::Number(_) => true,
+            AST::ObjectLiteral(_) => true,
+            AST::Primitive(_) => true,
+            AST::Program(_) => true,
+            AST::Statement(_) => true,
+            AST::String(_) => true,
+            AST::TemplateString(_) => true,
+            AST::True => true,
+            AST::Tuple(_) => true,
+            AST::TypeAlias { .. } => false,
+            AST::Undefined => true,
+            AST::Unknown => true,
         }
     }
 
     pub fn is_bin_op(&self) -> bool {
-        matches!(self, Node::BinOp { .. })
+        matches!(self, AST::BinOp { .. })
     }
 
     pub fn as_ident(&self) -> Option<&String> {
@@ -246,33 +246,33 @@ impl Node {
      * tree walk method in Rust to deal with ADTs, so we have to implement it manually.
      */
     pub fn transform(&self, f: &impl Fn(&Self) -> Self) -> Self {
-        let transform = |node: &Node| node.transform(f);
+        let transform = |node: &AST| node.transform(f);
 
-        let transform_and_box = |node: &Node| Box::new(node.transform(f));
+        let transform_and_box = |node: &AST| Box::new(node.transform(f));
 
-        let transform_each = |nodes: &Vec<Node>| nodes.iter().map(transform).collect::<Vec<_>>();
+        let transform_each = |nodes: &Vec<AST>| nodes.iter().map(transform).collect::<Vec<_>>();
 
         // For all nodes that are not a leaf node,
         // we need to recursively simplify
         let out = match self {
             // Leaf nodes are not transformed
-            Node::Never
-            | Node::Any
-            | Node::Unknown
-            | Node::Null
-            | Node::Undefined
-            | Node::False
-            | Node::True
-            | Node::Ident { .. }
-            | Node::Number { .. }
-            | Node::Primitive { .. }
-            | Node::String { .. }
-            | Node::ImportStatement { .. }
-            | Node::TemplateString { .. } => self.clone(),
+            AST::Never
+            | AST::Any
+            | AST::Unknown
+            | AST::Null
+            | AST::Undefined
+            | AST::False
+            | AST::True
+            | AST::Ident { .. }
+            | AST::Number { .. }
+            | AST::Primitive { .. }
+            | AST::String { .. }
+            | AST::ImportStatement { .. }
+            | AST::TemplateString { .. } => self.clone(),
 
             // For all other nodes, we recursively transform
-            Node::Program(vec) => Node::Program(transform_each(vec)),
-            Node::TypeAlias {
+            AST::Program(vec) => AST::Program(transform_each(vec)),
+            AST::TypeAlias {
                 export,
                 name,
                 params,
@@ -288,57 +288,57 @@ impl Node {
                     })
                     .collect_vec();
 
-                Node::TypeAlias {
+                AST::TypeAlias {
                     export: *export,
                     name: name.clone(),
                     params,
                     body: Box::new(body.transform(f)),
                 }
             }
-            Node::Tuple(vec) => Node::Tuple(transform_each(vec)),
-            Node::Array(vec) => Node::Array(transform_and_box(vec)),
-            Node::Access { lhs, rhs, is_dot } => Node::Access {
+            AST::Tuple(vec) => AST::Tuple(transform_each(vec)),
+            AST::Array(vec) => AST::Array(transform_and_box(vec)),
+            AST::Access { lhs, rhs, is_dot } => AST::Access {
                 lhs: transform_and_box(lhs),
                 rhs: transform_and_box(rhs),
                 is_dot: *is_dot,
             },
-            Node::IfExpr(IfExpr {
+            AST::IfExpr(IfExpr {
                 condition: cond,
                 then_branch: then,
                 else_branch: els,
-            }) => Node::from(IfExpr {
+            }) => AST::from(IfExpr {
                 condition: transform_and_box(cond),
                 then_branch: transform_and_box(then),
                 else_branch: els.as_ref().map(|v| transform_and_box(v)),
             }),
-            Node::BinOp { lhs, op, rhs } => Node::BinOp {
+            AST::BinOp { lhs, op, rhs } => AST::BinOp {
                 lhs: transform_and_box(lhs),
                 op: op.clone(),
                 rhs: transform_and_box(rhs),
             },
-            Node::ExtendsBinOp { lhs, op, rhs } => Node::ExtendsBinOp {
+            AST::ExtendsBinOp { lhs, op, rhs } => AST::ExtendsBinOp {
                 lhs: transform_and_box(lhs),
                 op: op.clone(),
                 rhs: transform_and_box(rhs),
             },
 
-            Node::ExtendsPrefixOp { op, value } => Node::ExtendsPrefixOp {
+            AST::ExtendsPrefixOp { op, value } => AST::ExtendsPrefixOp {
                 op: op.clone(),
                 value: transform_and_box(value),
             },
 
-            Node::ExtendsExpr(ExtendsExpr {
+            AST::ExtendsExpr(ExtendsExpr {
                 lhs,
                 rhs,
                 then_branch: then,
                 else_branch: els,
-            }) => Node::from(ExtendsExpr::new(
+            }) => AST::from(ExtendsExpr::new(
                 transform_and_box(lhs),
                 transform_and_box(rhs),
                 transform_and_box(then),
                 transform_and_box(els),
             )),
-            Node::ObjectLiteral(props) => Node::ObjectLiteral(
+            AST::ObjectLiteral(props) => AST::ObjectLiteral(
                 props
                     .iter()
                     .map(|prop| {
@@ -348,9 +348,9 @@ impl Node {
                     })
                     .collect(),
             ),
-            Node::Application(name, args) => Node::Application(name.clone(), transform_each(args)),
+            AST::Application(name, args) => AST::Application(name.clone(), transform_each(args)),
 
-            Node::MatchExpr { value, arms, else_ } => {
+            AST::MatchExpr { value, arms, else_ } => {
                 let value = transform_and_box(value);
 
                 let arms = arms
@@ -365,10 +365,10 @@ impl Node {
 
                 let else_ = Box::new(transform(else_));
 
-                Node::MatchExpr { value, arms, else_ }
+                AST::MatchExpr { value, arms, else_ }
             }
 
-            Node::CondExpr { arms, else_ } => {
+            AST::CondExpr { arms, else_ } => {
                 let arms = arms
                     .iter()
                     .map(|arm| {
@@ -381,23 +381,23 @@ impl Node {
 
                 let else_ = Box::new(transform(else_));
 
-                Node::CondExpr { arms, else_ }
+                AST::CondExpr { arms, else_ }
             }
 
-            Node::Builtin { name, argument } => Node::Builtin {
+            AST::Builtin { name, argument } => AST::Builtin {
                 name: name.clone(),
                 argument: transform_and_box(argument),
             },
-            Node::Statement(node) => Node::Statement(Box::new(node.transform(f))),
+            AST::Statement(node) => AST::Statement(Box::new(node.transform(f))),
 
-            Node::MappedType {
+            AST::MappedType {
                 index,
                 iterable,
                 remapped_as,
                 readonly_mod,
                 optional_mod,
                 body,
-            } => Node::MappedType {
+            } => AST::MappedType {
                 index: index.clone(),
                 iterable: Box::new(iterable.transform(f)),
                 remapped_as: remapped_as.clone(),
@@ -405,12 +405,12 @@ impl Node {
                 optional_mod: optional_mod.clone(),
                 body: Box::new(body.transform(f)),
             },
-            Node::LetExpr { bindings, body } => (**body)
+            AST::LetExpr { bindings, body } => (**body)
                 .clone()
                 .transform(&resolve_let_bindings(bindings))
                 .transform(f),
-            Node::NamespaceAccess(_) => self.clone(),
-            Node::NoOp => todo!(),
+            AST::NamespaceAccess(_) => self.clone(),
+            AST::NoOp => todo!(),
         };
 
         f(&out)
@@ -419,26 +419,26 @@ impl Node {
     pub fn simplify(&self) -> Self {
         self.transform(&|node| match node {
             // Replace all instances of `IfExpr` with `ExtendsExpr`
-            Node::IfExpr(if_expr) => if_expr.simplify(),
-            Node::MatchExpr { .. } => node.simplify_match_expr(),
-            Node::CondExpr { .. } => node.simplify_cond_expr(),
+            AST::IfExpr(if_expr) => if_expr.simplify(),
+            AST::MatchExpr { .. } => node.simplify_match_expr(),
+            AST::CondExpr { .. } => node.simplify_cond_expr(),
             _ => node.clone(),
         })
     }
 
     // Convert match arms to a series of extends expressions.
     // Allows for a single wildcard pattern ("_") to be used as the default case.
-    fn simplify_match_expr(&self) -> Node {
-        let Node::MatchExpr { value, arms, else_ } = self else {
+    fn simplify_match_expr(&self) -> AST {
+        let AST::MatchExpr { value, arms, else_ } = self else {
             panic!("Expected MatchExpr, found {self:#?}");
         };
 
-        let init_else: Node = (**else_).clone();
+        let init_else: AST = (**else_).clone();
 
-        let out: Node = arms.iter().rev().fold(init_else, |acc, arm| -> Node {
+        let out: AST = arms.iter().rev().fold(init_else, |acc, arm| -> AST {
             let MatchArm { pattern, body } = arm;
 
-            Node::from(ExtendsExpr::new(
+            AST::from(ExtendsExpr::new(
                 value.clone(),
                 Box::new(pattern.clone()),
                 Box::new(body.clone()),
@@ -449,15 +449,15 @@ impl Node {
         out
     }
 
-    fn simplify_cond_expr(&self) -> Node {
+    fn simplify_cond_expr(&self) -> AST {
         // Convert a CondExpr to a series of nested ternary expressions
-        let Node::CondExpr { arms, else_ } = self else {
+        let AST::CondExpr { arms, else_ } = self else {
             panic!("Expected CondExpr, found {self:#?}");
         };
 
-        let init_else: Node = (**else_).clone();
+        let init_else: AST = (**else_).clone();
 
-        let acc: Node = arms.iter().rev().fold(init_else, |else_, arm| {
+        let acc: AST = arms.iter().rev().fold(init_else, |else_, arm| {
             let CondArm {
                 condition,
                 body: then,
@@ -477,33 +477,33 @@ impl Node {
     }
 }
 
-impl From<ExtendsExpr> for Node {
+impl From<ExtendsExpr> for AST {
     fn from(v: ExtendsExpr) -> Self {
         Self::ExtendsExpr(v)
     }
 }
 
-impl Sexpr for Node {
+impl Sexpr for AST {
     fn pretty_sexpr(&self) -> RcDoc {
         match self {
-            Node::Access { lhs, rhs, is_dot } => {
+            AST::Access { lhs, rhs, is_dot } => {
                 let op = if *is_dot { "." } else { ".[]" };
 
-                Node::sexpr(vec![
+                AST::sexpr(vec![
                     RcDoc::text(op),
                     lhs.pretty_sexpr(),
                     rhs.pretty_sexpr(),
                 ])
             }
-            Node::Any => RcDoc::text("any"),
-            Node::Application(name, args) => Node::sexpr(
+            AST::Any => RcDoc::text("any"),
+            AST::Application(name, args) => AST::sexpr(
                 vec![RcDoc::text(name)]
                     .into_iter()
-                    .chain(args.iter().map(Node::pretty_sexpr))
+                    .chain(args.iter().map(AST::pretty_sexpr))
                     .collect_vec(),
             ),
-            Node::Array(value) => Node::sexpr(vec![RcDoc::text("[]"), value.pretty_sexpr()]),
-            Node::BinOp { lhs, op, rhs } => Node::sexpr(vec![
+            AST::Array(value) => AST::sexpr(vec![RcDoc::text("[]"), value.pretty_sexpr()]),
+            AST::BinOp { lhs, op, rhs } => AST::sexpr(vec![
                 RcDoc::text(match op {
                     Op::Union => "&",
                     Op::Intersection => "|",
@@ -512,15 +512,15 @@ impl Sexpr for Node {
                 rhs.pretty_sexpr(),
             ]),
 
-            Node::Builtin { name, argument } => {
+            AST::Builtin { name, argument } => {
                 let name = match name {
                     BuiltInKeyword::Keyof => "keyof",
                 };
 
-                Node::sexpr(vec![RcDoc::text(name), argument.pretty_sexpr()])
+                AST::sexpr(vec![RcDoc::text(name), argument.pretty_sexpr()])
             }
-            Node::CondExpr { arms, else_ } => todo!(),
-            Node::ExtendsBinOp { lhs, op, rhs } => {
+            AST::CondExpr { arms, else_ } => todo!(),
+            AST::ExtendsBinOp { lhs, op, rhs } => {
                 let op = match op {
                     InfixOp::Extends => "<:",
                     InfixOp::NotExtends => "</",
@@ -532,39 +532,39 @@ impl Sexpr for Node {
                     InfixOp::Or => "or",
                 };
 
-                Node::sexpr(vec![
+                AST::sexpr(vec![
                     RcDoc::text(op),
                     lhs.pretty_sexpr(),
                     rhs.pretty_sexpr(),
                 ])
             }
-            Node::ExtendsExpr(ExtendsExpr {
+            AST::ExtendsExpr(ExtendsExpr {
                 lhs: _,
                 rhs: _,
                 then_branch: _,
                 else_branch: _,
             }) => todo!(),
-            Node::ExtendsPrefixOp { op, value } => {
+            AST::ExtendsPrefixOp { op, value } => {
                 let op = match op {
                     PrefixOp::Not => "not",
                     PrefixOp::Infer => "infer",
                 };
 
-                Node::sexpr(vec![RcDoc::text(op), value.pretty_sexpr()])
+                AST::sexpr(vec![RcDoc::text(op), value.pretty_sexpr()])
             }
-            Node::False => todo!(),
-            Node::Ident(ident) => RcDoc::text(ident),
-            Node::IfExpr(IfExpr {
+            AST::False => todo!(),
+            AST::Ident(ident) => RcDoc::text(ident),
+            AST::IfExpr(IfExpr {
                 condition,
                 then_branch,
                 else_branch,
             }) => todo!(),
-            Node::ImportStatement {
+            AST::ImportStatement {
                 import_clause,
                 module,
             } => todo!(),
-            Node::LetExpr { bindings, body } => todo!(),
-            Node::MappedType {
+            AST::LetExpr { bindings, body } => todo!(),
+            AST::MappedType {
                 index,
                 iterable,
                 remapped_as,
@@ -572,38 +572,38 @@ impl Sexpr for Node {
                 optional_mod,
                 body,
             } => todo!(),
-            Node::MatchExpr { value, arms, else_ } => todo!(),
-            Node::NamespaceAccess(_) => todo!(),
-            Node::Never => todo!(),
-            Node::NoOp => todo!(),
-            Node::Null => todo!(),
-            Node::Number(_) => todo!(),
-            Node::ObjectLiteral(_) => todo!(),
-            Node::Primitive(_) => todo!(),
-            Node::Program(_) => todo!(),
-            Node::Statement(_) => todo!(),
-            Node::String(_) => todo!(),
-            Node::TemplateString(_) => todo!(),
-            Node::True => todo!(),
-            Node::Tuple(_) => todo!(),
-            Node::TypeAlias {
+            AST::MatchExpr { value, arms, else_ } => todo!(),
+            AST::NamespaceAccess(_) => todo!(),
+            AST::Never => todo!(),
+            AST::NoOp => todo!(),
+            AST::Null => todo!(),
+            AST::Number(_) => todo!(),
+            AST::ObjectLiteral(_) => todo!(),
+            AST::Primitive(_) => todo!(),
+            AST::Program(_) => todo!(),
+            AST::Statement(_) => todo!(),
+            AST::String(_) => todo!(),
+            AST::TemplateString(_) => todo!(),
+            AST::True => todo!(),
+            AST::Tuple(_) => todo!(),
+            AST::TypeAlias {
                 export,
                 name,
                 params,
                 body,
             } => todo!(),
-            Node::Undefined => todo!(),
-            Node::Unknown => todo!(),
+            AST::Undefined => todo!(),
+            AST::Unknown => todo!(),
         }
     }
 }
 
 /// Expands an if expression into a series of nested ternary expressions
-fn expand_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
+fn expand_if_expr(condition: &AST, then: &AST, else_: &AST) -> AST {
     // Recursive operations
     let out = match condition {
         // Unary operators
-        Node::ExtendsPrefixOp { op, value } => {
+        AST::ExtendsPrefixOp { op, value } => {
             match op {
                 // Swap `then` and `else` branches
                 PrefixOp::Not if value.is_compatible_with_not_prefix_op() => {
@@ -615,7 +615,7 @@ fn expand_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
                 }
             }
         }
-        Node::ExtendsBinOp { lhs, op, rhs } => match op {
+        AST::ExtendsBinOp { lhs, op, rhs } => match op {
             InfixOp::And => {
                 let then = expand_if_expr(rhs, then, else_);
                 Some(expand_if_expr(lhs, &then, else_))
@@ -636,7 +636,7 @@ fn expand_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
     // Terminal nodes
     match condition {
         // Binary operators
-        Node::ExtendsBinOp { lhs, op, rhs } => {
+        AST::ExtendsBinOp { lhs, op, rhs } => {
             // TODO report a syntax error here
             // need to include spans in Node
             if !lhs.is_typescript_feature() {
@@ -651,13 +651,13 @@ fn expand_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
 
             match op {
                 // Equivalent to `lhs extends rhs ? then : else`
-                InfixOp::Extends => Node::from(ExtendsExpr::new(
+                InfixOp::Extends => AST::from(ExtendsExpr::new(
                     lhs.clone(),
                     rhs.clone(),
                     Box::new(then.clone()),
                     Box::new(else_.clone()),
                 )),
-                InfixOp::NotExtends => Node::from(ExtendsExpr::new(
+                InfixOp::NotExtends => AST::from(ExtendsExpr::new(
                     lhs.clone(),
                     rhs.clone(),
                     Box::new(else_.clone()),
@@ -681,7 +681,7 @@ mod simplify_tests {
     use crate::{
         ast::{
             self,
-            Node::{self, *},
+            AST::{self, *},
         },
         parser::Rule::expr,
         pest::Parser,
@@ -693,7 +693,7 @@ mod simplify_tests {
     fn simplify_basic() {
         assert_eq!(
             parse!(expr, "if a <: b then c else d end").simplify(),
-            Node::from(ast::ExtendsExpr::new(
+            AST::from(ast::ExtendsExpr::new(
                 Box::new(Ident("a".to_string())),
                 Box::new(Ident("b".to_string())),
                 Box::new(Ident("c".to_string())),
@@ -819,21 +819,21 @@ mod simplify_tests {
     }
 }
 
-fn resolve_let_bindings(bindings: &HashMap<Identifier, Node>) -> impl Fn(&Node) -> Node + '_ {
-    |node: &Node| -> Node {
+fn resolve_let_bindings(bindings: &HashMap<Identifier, AST>) -> impl Fn(&AST) -> AST + '_ {
+    |node: &AST| -> AST {
         match node {
-            Node::Ident(name) => {
+            AST::Ident(name) => {
                 if let Some(value) = bindings.get(&Identifier(name.clone())) {
                     value.clone()
                 } else {
                     node.clone()
                 }
             }
-            Node::LetExpr {
+            AST::LetExpr {
                 bindings: new_bindings,
                 body,
             } => {
-                let nested_bindings: HashMap<Identifier, Node> = bindings
+                let nested_bindings: HashMap<Identifier, AST> = bindings
                     .iter()
                     .chain(new_bindings.iter())
                     .map(|(k, v)| (k.clone(), v.clone()))
@@ -850,17 +850,17 @@ fn resolve_let_bindings(bindings: &HashMap<Identifier, Node>) -> impl Fn(&Node) 
     }
 }
 
-impl typescript::Pretty for Node {
+impl typescript::Pretty for AST {
     fn to_ts<'a>(&self) -> RcDoc<()> {
         match self {
-            node @ (Node::ExtendsPrefixOp { .. }
-            | Node::MatchExpr { .. }
-            | Node::CondExpr { .. }
-            | Node::ExtendsBinOp { .. }) => {
+            node @ (AST::ExtendsPrefixOp { .. }
+            | AST::MatchExpr { .. }
+            | AST::CondExpr { .. }
+            | AST::ExtendsBinOp { .. }) => {
                 unreachable!("Node should be desugared before this point {:#?}", node)
             }
 
-            Node::Program(stmnts) => {
+            AST::Program(stmnts) => {
                 let mut doc = RcDoc::nil();
                 for stmnt in stmnts {
                     doc = doc
@@ -870,7 +870,7 @@ impl typescript::Pretty for Node {
                 }
                 doc
             }
-            Node::TypeAlias {
+            AST::TypeAlias {
                 export,
                 name,
                 params,
@@ -910,19 +910,19 @@ impl typescript::Pretty for Node {
                     .append(RcDoc::line().append(body).nest(4))
                     .group()
             }
-            Node::Ident(ident) => RcDoc::text(ident),
-            Node::Number(number) => RcDoc::text(number),
-            Node::Primitive(primitive) => RcDoc::text(match primitive {
+            AST::Ident(ident) => RcDoc::text(ident),
+            AST::Number(number) => RcDoc::text(number),
+            AST::Primitive(primitive) => RcDoc::text(match primitive {
                 PrimitiveType::Boolean => "boolean",
                 PrimitiveType::Number => "number",
                 PrimitiveType::String => "string",
             }),
-            Node::String(string) => string_literal(string),
-            Node::TemplateString(string) => RcDoc::text(string),
-            Node::IfExpr(IfExpr { .. }) => {
+            AST::String(string) => string_literal(string),
+            AST::TemplateString(string) => RcDoc::text(string),
+            AST::IfExpr(IfExpr { .. }) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
-            Node::Access {
+            AST::Access {
                 lhs,
                 rhs,
                 is_dot: true,
@@ -937,34 +937,34 @@ impl typescript::Pretty for Node {
                     .append(RcDoc::text("]"))
                     .group()
             }
-            Node::Access { lhs, rhs, .. } => lhs
+            AST::Access { lhs, rhs, .. } => lhs
                 .to_ts()
                 .append(RcDoc::text("["))
                 .append(rhs.to_ts())
                 .append(RcDoc::text("]"))
                 .group(),
-            Node::ObjectLiteral(props) => {
+            AST::ObjectLiteral(props) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
                 let props = RcDoc::intersperse(props.iter().map(|prop| prop.to_ts()), sep);
 
                 RcDoc::text("{").append(props).append(RcDoc::text("}"))
             }
-            Node::Application(ident, params) => {
+            AST::Application(ident, params) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
                 let params = RcDoc::intersperse(params.iter().map(|param| param.to_ts()), sep);
 
                 RcDoc::text(ident).append(RcDoc::text("<").append(params).append(RcDoc::text(">")))
             }
-            Node::Tuple(items) => {
+            AST::Tuple(items) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
                 let items = RcDoc::intersperse(items.iter().map(|item| item.to_ts()), sep);
 
                 RcDoc::text("[").append(items).append(RcDoc::text("]"))
             }
-            Node::Array(value) => {
+            AST::Array(value) => {
                 let doc = if value.is_bin_op() {
                     parens(value.to_ts())
                 } else {
@@ -973,18 +973,18 @@ impl typescript::Pretty for Node {
 
                 doc.append(RcDoc::text("[]"))
             }
-            Node::Null => RcDoc::text("null"),
-            Node::Undefined => RcDoc::text("undefined"),
-            Node::Never => RcDoc::text("never"),
-            Node::Any => RcDoc::text("any"),
-            Node::Unknown => RcDoc::text("unknown"),
-            Node::True => RcDoc::text("true"),
-            Node::False => RcDoc::text("false"),
+            AST::Null => RcDoc::text("null"),
+            AST::Undefined => RcDoc::text("undefined"),
+            AST::Never => RcDoc::text("never"),
+            AST::Any => RcDoc::text("any"),
+            AST::Unknown => RcDoc::text("unknown"),
+            AST::True => RcDoc::text("true"),
+            AST::False => RcDoc::text("false"),
 
-            Node::BinOp { lhs, op, rhs } => {
-                fn fmt(v: &Node) -> RcDoc<()> {
+            AST::BinOp { lhs, op, rhs } => {
+                fn fmt(v: &AST) -> RcDoc<()> {
                     match v {
-                        Node::BinOp { .. } => parens(v.to_ts()),
+                        AST::BinOp { .. } => parens(v.to_ts()),
                         _ => v.to_ts(),
                     }
                 }
@@ -1005,9 +1005,9 @@ impl typescript::Pretty for Node {
                     .append(rhs)
             }
 
-            Node::Builtin { name, argument } => name.to_ts().append(" ").append(argument.to_ts()),
+            AST::Builtin { name, argument } => name.to_ts().append(" ").append(argument.to_ts()),
 
-            Node::ExtendsExpr(ExtendsExpr {
+            AST::ExtendsExpr(ExtendsExpr {
                 lhs,
                 rhs,
                 then_branch: then,
@@ -1034,7 +1034,7 @@ impl typescript::Pretty for Node {
 
                 condition_doc.append(then_doc).append(else_doc)
             }
-            Node::ExtendsBinOp {
+            AST::ExtendsBinOp {
                 lhs,
                 op: InfixOp::Extends,
                 rhs,
@@ -1045,8 +1045,8 @@ impl typescript::Pretty for Node {
                 .append(RcDoc::space())
                 .append(rhs.to_ts())
                 .group(),
-            Node::Statement(stmnt) => stmnt.to_ts().append(RcDoc::text(";")),
-            Node::MappedType {
+            AST::Statement(stmnt) => stmnt.to_ts().append(RcDoc::text(";")),
+            AST::MappedType {
                 index: key,
                 iterable,
                 remapped_as,
@@ -1105,10 +1105,10 @@ impl typescript::Pretty for Node {
                     .append("}")
                     .group()
             }
-            Node::LetExpr { .. } => {
+            AST::LetExpr { .. } => {
                 unreachable!("LetExpr should be desugared before this point")
             }
-            Node::ImportStatement {
+            AST::ImportStatement {
                 import_clause,
                 module,
             } => {
@@ -1122,10 +1122,10 @@ impl typescript::Pretty for Node {
                     .append(RcDoc::space())
                     .append(string_literal(module))
             }
-            Node::NamespaceAccess(NamespaceAccess { lhs, rhs }) => {
+            AST::NamespaceAccess(NamespaceAccess { lhs, rhs }) => {
                 lhs.to_ts().append(".").append(rhs.to_ts())
             }
-            Node::NoOp => todo!(),
+            AST::NoOp => todo!(),
         }
     }
 }
@@ -1201,7 +1201,7 @@ impl typescript::Pretty for BuiltInKeyword {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expr {
-    Value(Box<Node>),
+    Value(Box<AST>),
     BinOp {
         lhs: Box<Expr>,
         op: Op,
@@ -1258,14 +1258,14 @@ pub enum MappingModifier {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MatchArm {
-    pub pattern: Node,
-    pub body: Node,
+    pub pattern: AST,
+    pub body: AST,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CondArm {
-    pub condition: Node,
-    pub body: Node,
+    pub condition: AST,
+    pub body: AST,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -1273,7 +1273,7 @@ pub struct ObjectProperty {
     pub readonly: bool,
     pub optional: bool,
     pub key: String,
-    pub value: Node,
+    pub value: AST,
 }
 
 impl typescript::Pretty for ObjectProperty {
@@ -1313,16 +1313,16 @@ impl typescript::Pretty for Identifier {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypeParameter {
     pub name: String,
-    pub constraint: Option<Box<Node>>,
-    pub default: Option<Box<Node>>,
+    pub constraint: Option<Box<AST>>,
+    pub default: Option<Box<AST>>,
     pub rest: bool,
 }
 
 impl TypeParameter {
     pub fn new(
         name: String,
-        constraint: Option<Box<Node>>,
-        default: Option<Box<Node>>,
+        constraint: Option<Box<AST>>,
+        default: Option<Box<AST>>,
         rest: bool,
     ) -> Self {
         Self {
