@@ -23,6 +23,9 @@ mod parser;
 mod pretty;
 mod typescript;
 
+#[cfg(test)]
+mod test_support;
+
 use clap::Parser;
 use std::io::Read;
 use typescript::Pretty;
@@ -64,62 +67,5 @@ fn main() {
         Err(error) => {
             eprintln!("{}", error);
         }
-    }
-}
-
-#[cfg(test)]
-pub mod test_support {
-    use crate::{ast::Node, parser::parse_newtype_program};
-
-    macro_rules! parse {
-        ($rule:expr, $source:expr) => {{
-            let pair = crate::parser::NewtypeParser::parse($rule, $source)
-                .unwrap_or_else(|e| panic!("{}", e))
-                .next()
-                .unwrap_or_else(|| panic!("No parse result"));
-
-            assert_eq!(
-                pair.as_span().as_str(),
-                $source,
-                "Rule did not consume entire input"
-            );
-
-            let out = crate::parser::parse_node(pair);
-
-            out
-        }};
-        ($source:expr) => {
-            parse!(crate::parser::Rule::program, $source)
-        };
-    }
-
-    pub(crate) use parse;
-
-    macro_rules! assert_typescript {
-        ($rule:expr, $expected:expr, $source:expr) => {
-            let source = dedent!($source).trim();
-            let expected = dedent!($expected).trim();
-
-            let pairs = parse!($rule, source);
-
-            let simplified = pairs.simplify();
-
-            let actual = simplified.render_pretty_ts(80);
-            assert_eq!(expected, actual.trim());
-        };
-
-        ($expected:expr, $source:expr) => {
-            assert_typescript!(crate::parser::Rule::program, $expected, $source);
-        };
-    }
-
-    pub(crate) use assert_typescript;
-
-    macro_rules! assert_parse_failure {
-        ($source:expr) => {
-            let node = parse_newtype($source.to_string())
-            println!("{:#?}", node);
-            assert!(node.is_err());
-        };
     }
 }

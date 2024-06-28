@@ -11,6 +11,89 @@ use crate::{
 
 pub(crate) mod macros;
 
+pub(crate) trait Sexpr {
+    fn to_sexpr(&self, width: usize) -> String {
+        let mut w = Vec::new();
+        self.pretty_sexpr().render(width, &mut w).unwrap();
+        String::from_utf8(w).unwrap()
+    }
+
+    fn pretty_sexpr(&self) -> RcDoc;
+
+    fn sexpr(items: Vec<RcDoc>) -> RcDoc {
+        let sep = RcDoc::line();
+
+        RcDoc::text("(")
+            .append(RcDoc::intersperse(items, sep).nest(4))
+            .append(RcDoc::text(")"))
+            .group()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct NamespaceAccess {
+    pub lhs: Box<Node>,
+    pub rhs: Box<Node>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ExtendsExpr {
+    pub lhs: Box<Node>,
+    pub rhs: Box<Node>,
+    pub then_branch: Box<Node>,
+    pub else_branch: Box<Node>,
+}
+
+impl ExtendsExpr {
+    pub fn new(
+        lhs: Box<Node>,
+        rhs: Box<Node>,
+        then_branch: Box<Node>,
+        else_branch: Box<Node>,
+    ) -> Self {
+        if !lhs.is_typescript_feature() {
+            dbg!(&lhs);
+            unreachable!("value must be desugared before this point");
+        }
+        if !rhs.is_typescript_feature() {
+            dbg!(&rhs);
+            unreachable!("value must be desugared before this point");
+        }
+        if !then_branch.is_typescript_feature() {
+            dbg!(&then_branch);
+            unreachable!("value must be desugared before this point");
+        }
+        if !else_branch.is_typescript_feature() {
+            dbg!(&else_branch);
+            unreachable!("value must be desugared before this point");
+        }
+        Self {
+            lhs,
+            rhs,
+            then_branch,
+            else_branch,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct IfExpr {
+    pub condition: Box<Node>,
+    pub then_branch: Box<Node>,
+    pub else_branch: Option<Box<Node>>,
+}
+
+impl IfExpr {
+    fn simplify(&self) -> Node {
+        let else_branch = match &self.else_branch {
+            Some(v) => v.clone(),
+            None => Box::new(Node::Never),
+        };
+
+        expand_if_expr(&self.condition, &self.then_branch, &else_branch)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Node {
     Access {
@@ -39,23 +122,14 @@ pub enum Node {
         op: InfixOp,
         rhs: Box<Node>,
     },
-    ExtendsExpr(
-        Box<Node>, // lhs
-        Box<Node>, // rhs
-        Box<Node>, // then
-        Box<Node>, // else
-    ),
+    ExtendsExpr(ExtendsExpr),
     ExtendsPrefixOp {
         op: PrefixOp,
         value: Box<Node>,
     },
     False,
     Ident(String),
-    IfExpr(
-        Box<Node>,         // condition, must be ExtendsBinOp
-        Box<Node>,         // then
-        Option<Box<Node>>, // else
-    ),
+    IfExpr(IfExpr),
     ImportStatement {
         import_clause: ImportClause,
         module: String,
@@ -77,7 +151,9 @@ pub enum Node {
         arms: Vec<MatchArm>,
         else_: Box<Node>,
     },
+    NamespaceAccess(NamespaceAccess),
     Never,
+    NoOp,
     Null,
     Number(String),
     ObjectLiteral(Vec<ObjectProperty>),
@@ -98,7 +174,61 @@ pub enum Node {
     Unknown,
 }
 
+impl From<IfExpr> for Node {
+    fn from(v: IfExpr) -> Self {
+        Self::IfExpr(v)
+    }
+}
+
 impl Node {
+    /// Operators that the `not` prefix operator can be applied to.
+    pub fn is_compatible_with_not_prefix_op(&self) -> bool {
+        match self {
+            Node::ExtendsPrefixOp { op, .. } if op.is_not() => true,
+            Node::ExtendsBinOp { .. } => true,
+            _ => false,
+        }
+    }
+    /// Anything that returns true is a feature that has a direct equivalent in TypeScript.
+    /// Anything that's false is a feature that needs to be desugared.
+    pub fn is_typescript_feature(&self) -> bool {
+        match self {
+            Node::Access { .. } => true,
+            Node::Any => true,
+            Node::Application(_, _) => true,
+            Node::Array(_) => true,
+            Node::BinOp { .. } => false,
+            Node::Builtin { .. } => true,
+            Node::CondExpr { .. } => false,
+            Node::ExtendsBinOp { .. } => false,
+            Node::ExtendsExpr(_) => true,
+            Node::ExtendsPrefixOp { .. } => false,
+            Node::False => true,
+            Node::Ident(_) => true,
+            Node::IfExpr(IfExpr { .. }) => false,
+            Node::ImportStatement { .. } => true,
+            Node::LetExpr { .. } => false,
+            Node::MappedType { .. } => true,
+            Node::MatchExpr { .. } => false,
+            Node::NamespaceAccess(_) => true,
+            Node::Never => true,
+            Node::NoOp => false,
+            Node::Null => true,
+            Node::Number(_) => true,
+            Node::ObjectLiteral(_) => true,
+            Node::Primitive(_) => true,
+            Node::Program(_) => true,
+            Node::Statement(_) => true,
+            Node::String(_) => true,
+            Node::TemplateString(_) => true,
+            Node::True => true,
+            Node::Tuple(_) => true,
+            Node::TypeAlias { .. } => false,
+            Node::Undefined => true,
+            Node::Unknown => true,
+        }
+    }
+
     pub fn is_bin_op(&self) -> bool {
         matches!(self, Node::BinOp { .. })
     }
@@ -172,11 +302,15 @@ impl Node {
                 rhs: transform_and_box(rhs),
                 is_dot: *is_dot,
             },
-            Node::IfExpr(cond, then, els) => Node::IfExpr(
-                transform_and_box(cond),
-                transform_and_box(then),
-                els.as_ref().map(|v| transform_and_box(v)),
-            ),
+            Node::IfExpr(IfExpr {
+                condition: cond,
+                then_branch: then,
+                else_branch: els,
+            }) => Node::from(IfExpr {
+                condition: transform_and_box(cond),
+                then_branch: transform_and_box(then),
+                else_branch: els.as_ref().map(|v| transform_and_box(v)),
+            }),
             Node::BinOp { lhs, op, rhs } => Node::BinOp {
                 lhs: transform_and_box(lhs),
                 op: op.clone(),
@@ -193,12 +327,17 @@ impl Node {
                 value: transform_and_box(value),
             },
 
-            Node::ExtendsExpr(lhs, rhs, then, els) => Node::ExtendsExpr(
+            Node::ExtendsExpr(ExtendsExpr {
+                lhs,
+                rhs,
+                then_branch: then,
+                else_branch: els,
+            }) => Node::from(ExtendsExpr::new(
                 transform_and_box(lhs),
                 transform_and_box(rhs),
                 transform_and_box(then),
                 transform_and_box(els),
-            ),
+            )),
             Node::ObjectLiteral(props) => Node::ObjectLiteral(
                 props
                     .iter()
@@ -270,6 +409,8 @@ impl Node {
                 .clone()
                 .transform(&resolve_let_bindings(bindings))
                 .transform(f),
+            Node::NamespaceAccess(_) => self.clone(),
+            Node::NoOp => todo!(),
         };
 
         f(&out)
@@ -278,19 +419,7 @@ impl Node {
     pub fn simplify(&self) -> Self {
         self.transform(&|node| match node {
             // Replace all instances of `IfExpr` with `ExtendsExpr`
-            Node::IfExpr(op, then, else_) => {
-                let else_ = match else_ {
-                    Some(v) => v.clone(),
-                    None => Box::new(Node::Never),
-                };
-
-                expand_if_expr(op, then, &else_)
-            }
-            Node::Access { lhs, rhs, is_dot } => Node::Access {
-                lhs: lhs.clone(),
-                rhs: rhs.clone(),
-                is_dot: *is_dot,
-            },
+            Node::IfExpr(if_expr) => if_expr.simplify(),
             Node::MatchExpr { .. } => node.simplify_match_expr(),
             Node::CondExpr { .. } => node.simplify_cond_expr(),
             _ => node.clone(),
@@ -309,12 +438,12 @@ impl Node {
         let out: Node = arms.iter().rev().fold(init_else, |acc, arm| -> Node {
             let MatchArm { pattern, body } = arm;
 
-            Node::ExtendsExpr(
+            Node::from(ExtendsExpr::new(
                 value.clone(),
                 Box::new(pattern.clone()),
                 Box::new(body.clone()),
                 Box::new(acc),
-            )
+            ))
         });
 
         out
@@ -338,47 +467,209 @@ impl Node {
 
         acc
     }
+
+    /// Returns `true` if the node is [`ExtendsPrefixOp`].
+    ///
+    /// [`ExtendsPrefixOp`]: Node::ExtendsPrefixOp
+    #[must_use]
+    pub fn is_extends_prefix_op(&self) -> bool {
+        matches!(self, Self::ExtendsPrefixOp { .. })
+    }
+}
+
+impl From<ExtendsExpr> for Node {
+    fn from(v: ExtendsExpr) -> Self {
+        Self::ExtendsExpr(v)
+    }
+}
+
+impl Sexpr for Node {
+    fn pretty_sexpr(&self) -> RcDoc {
+        match self {
+            Node::Access { lhs, rhs, is_dot } => {
+                let op = if *is_dot { "." } else { ".[]" };
+
+                Node::sexpr(vec![
+                    RcDoc::text(op),
+                    lhs.pretty_sexpr(),
+                    rhs.pretty_sexpr(),
+                ])
+            }
+            Node::Any => RcDoc::text("any"),
+            Node::Application(name, args) => Node::sexpr(
+                vec![RcDoc::text(name)]
+                    .into_iter()
+                    .chain(args.iter().map(Node::pretty_sexpr))
+                    .collect_vec(),
+            ),
+            Node::Array(value) => Node::sexpr(vec![RcDoc::text("[]"), value.pretty_sexpr()]),
+            Node::BinOp { lhs, op, rhs } => Node::sexpr(vec![
+                RcDoc::text(match op {
+                    Op::Union => "&",
+                    Op::Intersection => "|",
+                }),
+                lhs.pretty_sexpr(),
+                rhs.pretty_sexpr(),
+            ]),
+
+            Node::Builtin { name, argument } => {
+                let name = match name {
+                    BuiltInKeyword::Keyof => "keyof",
+                };
+
+                Node::sexpr(vec![RcDoc::text(name), argument.pretty_sexpr()])
+            }
+            Node::CondExpr { arms, else_ } => todo!(),
+            Node::ExtendsBinOp { lhs, op, rhs } => {
+                let op = match op {
+                    InfixOp::Extends => "<:",
+                    InfixOp::NotExtends => "</",
+                    InfixOp::Equals => "==",
+                    InfixOp::NotEquals => "!=",
+                    InfixOp::StrictEquals => "===",
+                    InfixOp::StrictNotEquals => "!==",
+                    InfixOp::And => "and",
+                    InfixOp::Or => "or",
+                };
+
+                Node::sexpr(vec![
+                    RcDoc::text(op),
+                    lhs.pretty_sexpr(),
+                    rhs.pretty_sexpr(),
+                ])
+            }
+            Node::ExtendsExpr(ExtendsExpr {
+                lhs: _,
+                rhs: _,
+                then_branch: _,
+                else_branch: _,
+            }) => todo!(),
+            Node::ExtendsPrefixOp { op, value } => {
+                let op = match op {
+                    PrefixOp::Not => "not",
+                    PrefixOp::Infer => "infer",
+                };
+
+                Node::sexpr(vec![RcDoc::text(op), value.pretty_sexpr()])
+            }
+            Node::False => todo!(),
+            Node::Ident(ident) => RcDoc::text(ident),
+            Node::IfExpr(IfExpr {
+                condition,
+                then_branch,
+                else_branch,
+            }) => todo!(),
+            Node::ImportStatement {
+                import_clause,
+                module,
+            } => todo!(),
+            Node::LetExpr { bindings, body } => todo!(),
+            Node::MappedType {
+                index,
+                iterable,
+                remapped_as,
+                readonly_mod,
+                optional_mod,
+                body,
+            } => todo!(),
+            Node::MatchExpr { value, arms, else_ } => todo!(),
+            Node::NamespaceAccess(_) => todo!(),
+            Node::Never => todo!(),
+            Node::NoOp => todo!(),
+            Node::Null => todo!(),
+            Node::Number(_) => todo!(),
+            Node::ObjectLiteral(_) => todo!(),
+            Node::Primitive(_) => todo!(),
+            Node::Program(_) => todo!(),
+            Node::Statement(_) => todo!(),
+            Node::String(_) => todo!(),
+            Node::TemplateString(_) => todo!(),
+            Node::True => todo!(),
+            Node::Tuple(_) => todo!(),
+            Node::TypeAlias {
+                export,
+                name,
+                params,
+                body,
+            } => todo!(),
+            Node::Undefined => todo!(),
+            Node::Unknown => todo!(),
+        }
+    }
 }
 
 /// Expands an if expression into a series of nested ternary expressions
 fn expand_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
-    match condition {
+    // Recursive operations
+    let out = match condition {
         // Unary operators
         Node::ExtendsPrefixOp { op, value } => {
             match op {
                 // Swap `then` and `else` branches
-                PrefixOp::Not => expand_if_expr(value, else_, then),
-                _ => todo!(),
+                PrefixOp::Not if value.is_compatible_with_not_prefix_op() => {
+                    Some(expand_if_expr(value, else_, then))
+                }
+                PrefixOp::Infer => todo!(),
+                _ => {
+                    unreachable!("Expected `not` or `infer` prefix operator, found {condition:#?}")
+                }
             }
         }
-        // Binary operators
         Node::ExtendsBinOp { lhs, op, rhs } => match op {
-            // Equivalent to `lhs extends rhs ? then : else`
-            InfixOp::Extends => Node::ExtendsExpr(
-                lhs.clone(),
-                rhs.clone(),
-                Box::new(then.clone()),
-                Box::new(else_.clone()),
-            ),
-            InfixOp::NotExtends => Node::ExtendsExpr(
-                lhs.clone(),
-                rhs.clone(),
-                Box::new(else_.clone()),
-                Box::new(then.clone()),
-            ),
-            InfixOp::Equals => todo!(),
-            InfixOp::NotEquals => todo!(),
-            InfixOp::StrictEquals => todo!(),
-            InfixOp::StrictNotEquals => todo!(),
             InfixOp::And => {
                 let then = expand_if_expr(rhs, then, else_);
-                expand_if_expr(lhs, &then, else_)
+                Some(expand_if_expr(lhs, &then, else_))
             }
             InfixOp::Or => {
                 let else_ = expand_if_expr(rhs, then, else_);
-                expand_if_expr(lhs, then, &else_)
+                Some(expand_if_expr(lhs, then, &else_))
             }
+            _ => None,
         },
+        _ => panic!("Expected extends operator, found {condition:#?}"),
+    };
+
+    if let Some(v) = out {
+        return v;
+    }
+
+    // Terminal nodes
+    match condition {
+        // Binary operators
+        Node::ExtendsBinOp { lhs, op, rhs } => {
+            // TODO report a syntax error here
+            // need to include spans in Node
+            if !lhs.is_typescript_feature() {
+                dbg!(&lhs);
+                unreachable!("value must be desugared before this point");
+            }
+
+            if !rhs.is_typescript_feature() {
+                dbg!(&rhs);
+                unreachable!("value must be desugared before this point");
+            }
+
+            match op {
+                // Equivalent to `lhs extends rhs ? then : else`
+                InfixOp::Extends => Node::from(ExtendsExpr::new(
+                    lhs.clone(),
+                    rhs.clone(),
+                    Box::new(then.clone()),
+                    Box::new(else_.clone()),
+                )),
+                InfixOp::NotExtends => Node::from(ExtendsExpr::new(
+                    lhs.clone(),
+                    rhs.clone(),
+                    Box::new(else_.clone()),
+                    Box::new(then.clone()),
+                )),
+                InfixOp::Equals => todo!(),
+                InfixOp::NotEquals => todo!(),
+                InfixOp::StrictEquals => todo!(),
+                InfixOp::StrictNotEquals => todo!(),
+                _ => unreachable!(),
+            }
+        }
         _ => panic!("Expected extends operator, found {condition:#?}"),
     }
 }
@@ -387,22 +678,27 @@ fn expand_if_expr(condition: &Node, then: &Node, else_: &Node) -> Node {
 mod simplify_tests {
 
     use super::*;
-    use crate::ast::Node::*;
-    use crate::parser::Rule::expr;
-    use crate::pest::Parser;
-    use crate::test_support::parse;
+    use crate::{
+        ast::{
+            self,
+            Node::{self, *},
+        },
+        parser::Rule::expr,
+        pest::Parser,
+        test_support::parse,
+    };
     use pretty_assertions::{assert_eq, assert_ne};
 
     #[test]
     fn simplify_basic() {
         assert_eq!(
             parse!(expr, "if a <: b then c else d end").simplify(),
-            ExtendsExpr(
+            Node::from(ast::ExtendsExpr::new(
                 Box::new(Ident("a".to_string())),
                 Box::new(Ident("b".to_string())),
                 Box::new(Ident("c".to_string())),
-                Box::new(Ident("d".to_string())),
-            )
+                Box::new(Ident("d".to_string()))
+            ))
         )
     }
 
@@ -412,8 +708,10 @@ mod simplify_tests {
             parse!(
                 expr,
                 r#"
-                if not a <: b then c
-                else d
+                if a <: b then
+                    d
+                else
+                    c
                 end
                 "#
             )
@@ -421,8 +719,10 @@ mod simplify_tests {
             parse!(
                 expr,
                 r#"
-                if a <: b then d
-                else c
+                if not (a <: b) then
+                    c
+                else
+                    d
                 end
                 "#
             )
@@ -436,9 +736,10 @@ mod simplify_tests {
             parse!(
                 expr,
                 r#"
-                if a <: b and c <: d
-                then e
-                else f
+                if a <: b and c <: d then
+                    e
+                else
+                    f
                 end
                 "#
             )
@@ -447,10 +748,13 @@ mod simplify_tests {
                 expr,
                 r#"
                 if a <: b then
-                    if c <: d then e
-                    else f
+                    if c <: d then
+                        e
+                    else
+                        f
                     end
-                else f
+                else
+                    f
                 end
                 "#
             )
@@ -549,10 +853,20 @@ fn resolve_let_bindings(bindings: &HashMap<Identifier, Node>) -> impl Fn(&Node) 
 impl typescript::Pretty for Node {
     fn to_ts<'a>(&self) -> RcDoc<()> {
         match self {
+            node @ (Node::ExtendsPrefixOp { .. }
+            | Node::MatchExpr { .. }
+            | Node::CondExpr { .. }
+            | Node::ExtendsBinOp { .. }) => {
+                unreachable!("Node should be desugared before this point {:#?}", node)
+            }
+
             Node::Program(stmnts) => {
                 let mut doc = RcDoc::nil();
                 for stmnt in stmnts {
-                    doc = doc.append(stmnt.to_ts()).append(RcDoc::hardline());
+                    doc = doc
+                        .append(stmnt.to_ts())
+                        .append(RcDoc::hardline())
+                        .append(RcDoc::hardline());
                 }
                 doc
             }
@@ -605,7 +919,7 @@ impl typescript::Pretty for Node {
             }),
             Node::String(string) => string_literal(string),
             Node::TemplateString(string) => RcDoc::text(string),
-            Node::IfExpr(_cond, _then, _els) => {
+            Node::IfExpr(IfExpr { .. }) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
             Node::Access {
@@ -693,7 +1007,12 @@ impl typescript::Pretty for Node {
 
             Node::Builtin { name, argument } => name.to_ts().append(" ").append(argument.to_ts()),
 
-            Node::ExtendsExpr(lhs, rhs, then, els) => {
+            Node::ExtendsExpr(ExtendsExpr {
+                lhs,
+                rhs,
+                then_branch: then,
+                else_branch: els,
+            }) => {
                 let condition_doc = lhs
                     .to_ts()
                     .append(RcDoc::space())
@@ -726,19 +1045,6 @@ impl typescript::Pretty for Node {
                 .append(RcDoc::space())
                 .append(rhs.to_ts())
                 .group(),
-
-            Node::ExtendsBinOp { .. } => {
-                unreachable!("ExtendsBinOp should be desugared before this point")
-            }
-            Node::ExtendsPrefixOp { .. } => {
-                unreachable!("ExtendsPrefixOp should be desugared before this point")
-            }
-            Node::MatchExpr { .. } => {
-                unreachable!("MatchExpr should be desugared before this point")
-            }
-            Node::CondExpr { .. } => {
-                unreachable!("CondExpr should be desugared before this point")
-            }
             Node::Statement(stmnt) => stmnt.to_ts().append(RcDoc::text(";")),
             Node::MappedType {
                 index: key,
@@ -816,6 +1122,10 @@ impl typescript::Pretty for Node {
                     .append(RcDoc::space())
                     .append(string_literal(module))
             }
+            Node::NamespaceAccess(NamespaceAccess { lhs, rhs }) => {
+                lhs.to_ts().append(".").append(rhs.to_ts())
+            }
+            Node::NoOp => todo!(),
         }
     }
 }
@@ -916,6 +1226,16 @@ pub enum PrimitiveType {
 pub enum PrefixOp {
     Infer,
     Not,
+}
+
+impl PrefixOp {
+    /// Returns `true` if the prefix op is [`Not`].
+    ///
+    /// [`Not`]: PrefixOp::Not
+    #[must_use]
+    pub fn is_not(&self) -> bool {
+        matches!(self, Self::Not)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

@@ -1,3 +1,5 @@
+pub(crate) mod pratt;
+
 use std::{
     collections::{BTreeSet, HashMap},
     default,
@@ -17,49 +19,15 @@ use pest::{
     pratt_parser::PrattParser,
     Parser,
 };
+use pratt::{EXPR_PARSER, EXTENDS_PARSER};
+use ExtendsExpr;
+use IfExpr;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 pub struct NewtypeParser;
 
 pub type ParserError = pest::error::Error<Rule>;
-
-lazy_static::lazy_static! {
-    static ref EXPR_PARSER: PrattParser<Rule> = {
-        use pest::pratt_parser::{Assoc::*, Op};
-        use Rule::*;
-
-        // Precedence is defined lowest to highest
-        PrattParser::new()
-            .op(Op::infix(union, Right) | Op::infix(intersection, Right))
-            .op(Op::infix(pipe, Left))
-            .op(Op::postfix(array_modifier))
-            .op(Op::postfix(dot_access))
-            .op(Op::postfix(indexed_access))
-    };
-
-    static ref EXTENDS_PARSER: PrattParser<Rule> = {
-        use pest::pratt_parser::{Assoc::*, Op};
-        use Rule::*;
-
-        // Precedence is defined lowest to highest
-        PrattParser::new()
-            .op(Op::prefix(not))
-            .op(
-                Op::infix(or, Left)
-                | Op::infix(and, Left)
-            )
-            .op(
-                Op::infix(extends, Left)
-                | Op::infix(not_extends, Left)
-                | Op::infix(equals, Left)
-                | Op::infix(not_equals, Left)
-                | Op::infix(strict_equals, Left)
-                | Op::infix(strict_not_equals, Left)
-            )
-            .op(Op::prefix(infer))
-    };
-}
 
 pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> Node {
     use Rule::*;
@@ -85,10 +53,17 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> Node {
                     is_dot: true,
                 }
             }
+            namespace_access => {
+                let rhs = op.into_inner().next().map(parse_node).unwrap();
+                Node::NamespaceAccess(NamespaceAccess {
+                    lhs: boxed(lhs),
+                    rhs: boxed(rhs),
+                })
+            }
             rule => {
                 parse_error!(
                     op,
-                    vec![indexed_access, array_modifier, dot_access],
+                    vec![namespace_access, indexed_access, array_modifier, dot_access],
                     vec![rule]
                 );
             }
@@ -137,9 +112,13 @@ pub(crate) fn parse_newtype_program(source: &str) -> Result<Node, Box<Error<Rule
     Ok(parse_node(pair))
 }
 
-pub(crate) fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
+pub(crate) fn parse_extends_expr(pairs: Pairs<Rule>) -> Node {
     EXTENDS_PARSER
-        .map_primary(parse_node)
+        .map_primary(|pair| match pair.as_rule() {
+            Rule::expr => parse_expr(pair.into_inner()),
+            Rule::extends_expr => parse_extends_expr(pair.into_inner()),
+            rule => parse_error!(pair, vec![Rule::expr, Rule::extends_expr], vec![rule]),
+        })
         .map_postfix(|_lhs, op| {
             unreachable!("Expected postfix operation, found {:?}", op.as_rule())
         })
@@ -147,7 +126,7 @@ pub(crate) fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
             let op = match op.as_rule() {
                 Rule::infer => PrefixOp::Infer,
                 Rule::not => PrefixOp::Not,
-                rule => unreachable!("Expected prefix operation, found {:?}", rule),
+                rule => parse_error!(op, vec![Rule::infer, Rule::not], vec![op.as_rule()]),
             };
 
             Node::ExtendsPrefixOp {
@@ -165,7 +144,20 @@ pub(crate) fn parse_extends_condition(pairs: Pairs<Rule>) -> Node {
                 Rule::strict_not_equals => InfixOp::StrictNotEquals,
                 Rule::and => InfixOp::And,
                 Rule::or => InfixOp::Or,
-                rule => unreachable!("Expected infix operation, found {:?}", rule),
+                rule => parse_error!(
+                    op,
+                    vec![
+                        Rule::extends,
+                        Rule::not_extends,
+                        Rule::equals,
+                        Rule::not_equals,
+                        Rule::strict_equals,
+                        Rule::strict_not_equals,
+                        Rule::and,
+                        Rule::or
+                    ],
+                    vec![rule]
+                ),
             };
             Node::ExtendsBinOp {
                 lhs: boxed(lhs),
@@ -310,7 +302,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
                     let condition = inner
                         .find(tag_eq("condition"))
                         .map(|p| p.into_inner())
-                        .map(parse_extends_condition)
+                        .map(parse_extends_expr)
                         .unwrap();
 
                     let body = inner.find(tag_eq("body")).map(parse_node).unwrap();
@@ -379,7 +371,71 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> Node {
         Rule::EOI => {
             parse_error!(pair, format!("Unexpected end of input"));
         }
-        _ => {
+
+        Rule::namespace_access
+        | Rule::from_clause
+        | Rule::import_clause
+        | Rule::namespace_import
+        | Rule::named_import
+        | Rule::import_specifier
+        | Rule::defaults_caluse
+        | Rule::where_clause
+        | Rule::type_parameter_default
+        | Rule::type_constraint
+        | Rule::type_parameters
+        | Rule::expr1
+        | Rule::primary
+        | Rule::prefix
+        | Rule::infix
+        | Rule::postfix
+        | Rule::array_modifier
+        | Rule::indexed_access
+        | Rule::dot_access
+        | Rule::builtin_keyword
+        | Rule::keyof
+        | Rule::argument_list
+        | Rule::neg
+        | Rule::pipe
+        | Rule::union
+        | Rule::intersection
+        | Rule::term
+        | Rule::top_type
+        | Rule::bottom_type
+        | Rule::object_property
+        | Rule::let_binding
+        | Rule::match_arm
+        | Rule::cond_arm
+        | Rule::else_arm
+        | Rule::else_keyword
+        | Rule::end_keyword
+        | Rule::ident_chars
+        | Rule::extends_expr
+        | Rule::extends_primary
+        | Rule::extends_prefix
+        | Rule::extends_infix
+        | Rule::extends
+        | Rule::not_extends
+        | Rule::equals
+        | Rule::not_equals
+        | Rule::strict_equals
+        | Rule::strict_not_equals
+        | Rule::and
+        | Rule::or
+        | Rule::not
+        | Rule::type_string
+        | Rule::type_boolean
+        | Rule::type_number
+        | Rule::readonly_modifier
+        | Rule::export
+        | Rule::optional_modifier
+        | Rule::atom_string
+        | Rule::double_quote_string
+        | Rule::single_quote_string
+        | Rule::keyword
+        | Rule::COMMENT
+        | Rule::BLOCK_COMMENT
+        | Rule::LINE_COMMENT
+        | Rule::WHITESPACE => {
             parse_error!(pair, format!("Unexpected rule: {:?}", rule));
         }
     }
@@ -451,34 +507,29 @@ fn parse_if_expr(pair: Pair<Rule>) -> Node {
 
     let condition = inner
         .find(tag_eq("condition"))
-        .map(|p| boxed(parse_extends_condition(p.into_inner())))
+        .map(|p| boxed(parse_extends_expr(p.into_inner())))
         .unwrap();
 
-    let then = inner
+    let then_branch = inner
         .find(tag_eq("then"))
         .map(parse_node)
         .map(boxed)
         .unwrap();
 
-    let else_ = inner
+    let else_branch = inner
         .find(tag_eq("else"))
         .map(parse_node)
         .unwrap_or_else(|| Node::Never);
 
-    let else_ = boxed(else_);
+    let else_branch = boxed(else_branch);
 
     match *condition {
-        // If the condition is a binary operation, we can desugar it into an extends expression
-        Node::ExtendsBinOp {
-            op: InfixOp::Extends,
-            lhs,
-            rhs,
-        } => Node::ExtendsExpr(lhs, rhs, then, else_),
-
         // Other conditions are desugared later in the simplification step
-        Node::ExtendsBinOp { .. } | Node::ExtendsPrefixOp { .. } => {
-            Node::IfExpr(condition, then, Some(else_))
-        }
+        Node::ExtendsBinOp { .. } | Node::ExtendsPrefixOp { .. } => Node::IfExpr(IfExpr {
+            condition,
+            then_branch,
+            else_branch: Some(else_branch),
+        }),
         _ => unreachable!(),
     }
 }
@@ -686,11 +737,128 @@ mod parser_tests {
     use crate::test_support::*;
     use crate::typescript::Pretty;
     use pest::consumes_to;
+    use pest::fails_with;
     use pest::parses_to;
     use pretty_assertions::{assert_eq, assert_ne};
     use std::assert_matches::assert_matches;
     use textwrap_macros::dedent;
     use Rule::*;
+
+    #[test]
+    fn parses_to_ident() {
+        parses_to! {
+            parser: NewtypeParser,
+            input: "x",
+            rule: Rule::ident,
+            tokens: [ident(0, 1)]
+        };
+    }
+
+    #[test]
+    fn fails_with_else() {
+        fails_with! {
+            parser: NewtypeParser,
+            input: "else",
+            rule: Rule::ident,
+            positives: [ident],
+            negatives: [],
+            pos: 0
+        };
+    }
+
+    #[test]
+    fn extends_expr_parser_extends() {
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "A <: B",
+            "(<: A B)"
+        );
+    }
+
+    #[test]
+    fn extends_expr_parser_extends_parens() {
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "(A <: B)",
+            "(<: A B)"
+        );
+    }
+
+    #[test]
+    fn extends_expr_parser_extends_multiple_parens() {
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "((A <: B))",
+            "(<: A B)"
+        );
+    }
+
+    #[test]
+    fn extends_expr_parser_not_with_parens_extends() {
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "not (A <: B)",
+            "(not (<: A B))"
+        );
+    }
+
+    #[test]
+    fn extends_expr_parser_not_extends() {
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "not A <: B",
+            "(<: (not A) B)"
+        );
+    }
+
+    #[test]
+    fn extends_expr_parser_not() {
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "not A",
+            "(not A)"
+        );
+    }
+
+    #[test]
+    fn extends_expr_parser_and() {
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "A <: B and C <: D",
+            "(and (<: A B) (<: C D))"
+        );
+    }
+
+    #[test]
+    fn extends_expr_parser_not_and() {
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "not (A <: B) and C <: D",
+            "(and (not (<: A B)) (<: C D))"
+        );
+
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "A <: B and (not (C <: D))",
+            "(and (<: A B) (not (<: C D)))"
+        );
+
+        assert_sexpr!(
+            Rule::extends_expr,
+            crate::parser::parse_extends_expr,
+            "not (A <: B) and (not (C <: D))",
+            "(and (not (<: A B)) (not (<: C D)))"
+        );
+    }
 
     #[test]
     fn import_statement_named_imports() {
@@ -902,33 +1070,55 @@ mod parser_tests {
     #[test]
     fn if_expr_simple_if_else() {
         assert_typescript!(
-            "type A = 1 extends number ? 1 : 0;",
-            "type A as if 1 <: number then 1 else 0 end"
+            if_expr,
+            r#"
+            1 extends number
+                ? 1
+                : 0
+            "#,
+            r#"
+            if 1 <: number then
+                1
+            else
+                0
+            end
+            "#
         );
     }
 
     #[test]
     fn if_expr_if_without_else() {
         assert_typescript!(
-            "type A = 1 extends number ? 1 : never;",
-            "type A as if 1 <: number then 1 end"
+            if_expr,
+            r#"
+            1 extends number
+                ? 1
+                : never
+            "#,
+            r#"
+            if 1 <: number then
+                1
+            end
+            "#
         );
     }
 
     #[test]
     fn if_expr_nested_if() {
         assert_typescript!(
-            expr,
+            if_expr,
             r#"
-            1 extends number
-                ? 2 extends number
-                    ? 3
+            a extends b
+                ? c extends d
+                    ? x
                     : never
                 : never
             "#,
             r#"
-            if 1 <: number then
-                if 2 <: number then 3 end
+            if a <: b then
+                if c <: d then
+                    x
+                end
             end
             "#
         );
@@ -937,7 +1127,7 @@ mod parser_tests {
     #[test]
     fn if_expr_nested_if_else() {
         assert_typescript!(
-            expr,
+            if_expr,
             r#"
             a extends b
                 ? c extends d
@@ -955,7 +1145,7 @@ mod parser_tests {
         );
 
         assert_typescript!(
-            expr,
+            if_expr,
             r#"
             a extends b
                 ? c extends d
@@ -975,7 +1165,7 @@ mod parser_tests {
         );
 
         assert_typescript!(
-            expr,
+            if_expr,
             r#"
             a extends b
                 ? c extends d
@@ -995,7 +1185,7 @@ mod parser_tests {
         );
 
         assert_typescript!(
-            expr,
+            if_expr,
             r#"
             a extends b
                 ? c extends d
@@ -1018,22 +1208,155 @@ mod parser_tests {
     }
 
     #[test]
-    fn if_not_extends() {
+    fn if_expr_not_extends() {
         assert_typescript!(
-            "type A = a extends b ? d : c;",
+            if_expr,
             r#"
-            type A as
-                if not a <: b then
-                    c
-                else
-                    d
-                end
+            a extends b
+                ? never
+                : c
+            "#,
+            r#"
+            if not a <: b then
+                c
+            end
             "#
         );
     }
 
     #[test]
-    fn if_and() {
+    fn if_expr_not_extends_else() {
+        assert_typescript!(
+            if_expr,
+            r#"
+            a extends b
+                ? d
+                : c
+            "#,
+            r#"
+            if not a <: b then
+                c
+            else
+                d
+            end
+            "#
+        );
+    }
+
+    #[test]
+    fn if_expr_not_extends_nested() {
+        assert_typescript!(
+            if_expr,
+            r#"
+            a extends b
+                ? c extends d
+                    ? never
+                    : x
+                : never
+            "#,
+            r#"
+            if a <: b then
+                if not c <: d then
+                    x
+                end
+            end
+            "#
+        );
+
+        assert_typescript!(
+            if_expr,
+            r#"
+            a extends b
+                ? c extends d
+                    ? y
+                    : x
+                : never
+            "#,
+            r#"
+            if a <: b then
+                if not c <: d then
+                    x
+                else
+                    y
+                end
+            end
+            "#
+        );
+
+        assert_typescript!(
+            if_expr,
+            r#"
+            a extends b
+                ? never
+                : c extends d
+                    ? x
+                    : never
+            "#,
+            r#"
+            if not a <: b then
+                if c <: d then
+                    x
+                end
+            end
+            "#
+        );
+
+        assert_typescript!(
+            if_expr,
+            r#"
+            a extends b
+                ? never
+                : c extends d
+                    ? never
+                    : x
+            "#,
+            r#"
+            if not a <: b then
+                if not c <: d then
+                    x
+                end
+            end
+            "#
+        );
+    }
+
+    #[test]
+    fn if_expr_and_not() {
+        assert_typescript!(
+            if_expr,
+            r#"
+            a extends b
+                ? never
+                : c extends d
+                    ? x
+                    : never
+            "#,
+            r#"
+            if not(a <: b) and c <: d then
+                x
+            end
+            "#
+        );
+
+        assert_typescript!(
+            if_expr,
+            r#"
+            a extends b
+                ? c extends d
+                    ? never
+                    : x
+                : never
+            "#,
+            r#"
+            if a <: b and not c <: d then
+                x
+            end
+            "#
+        );
+    }
+
+    #[test]
+    fn if_expr_and() {
         assert_typescript!(
             "type A = a extends b ? c extends d ? e : f : f;",
             "type A as if a <: b and c <: d then e else f end"
@@ -1049,9 +1372,9 @@ mod parser_tests {
     }
 
     #[test]
-    fn if_keyof() {
+    fn if_expr_keyof() {
         assert_typescript!(
-            expr,
+            if_expr,
             r#"
             x extends keyof y
                 ? 1
@@ -1064,7 +1387,7 @@ mod parser_tests {
     #[test]
     fn for_in() {
         assert_typescript!(
-            expr,
+            for_expr,
             r#"
             { [k in t]: 1 }
             "#,
@@ -1465,6 +1788,49 @@ mod parser_tests {
                     L
                     |> OAssign(Ls, depth, ignore, fill)
                     |> Cast(List)
+            "#
+        );
+    }
+
+    #[test]
+    fn match_ts() {
+        assert_typescript!(
+            r#"
+            "#,
+            r#"
+            import { A, B, I, M, Union } from :ts-toolbelt
+
+            import { __ } from :.
+
+            import {
+              __capture__,
+              __kind__,
+              any_,
+              bigint_,
+              boolean_,
+              function_,
+              number_,
+              object_,
+              rest_,
+              string_,
+              symbol_,
+            } from :./const
+
+            type True as 1
+
+            type ExtractSubcapture(T) as
+                if T <: M::Primitive | M::BuiltIn and T <: object then
+                    T[ Exclude(keyof(T), keyof([]) | keyof({})) ]
+                end
+
+            type PartialAssignment(K, V) as
+                if not (V <: never) and K <: string then
+                    for k in K do
+                        v
+                    end
+                end
+
+
             "#
         );
     }

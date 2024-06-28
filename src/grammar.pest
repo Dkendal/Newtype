@@ -23,7 +23,7 @@ namespace_import = {
 }
 
 named_import = {
-    "{" ~ (#import_specifier = import_specifier ~ ("," ~ #import_specifier = import_specifier)*)? ~ "}"
+    "{" ~ (#import_specifier = import_specifier ~ ("," ~ #import_specifier = import_specifier)*)? ~ ","? ~ "}"
 }
 
 import_specifier = {
@@ -72,7 +72,9 @@ prefix = _{ infer }
 
 infix = _{ union | intersection | pipe }
 
-postfix = _{ indexed_access | dot_access | array_modifier }
+postfix = _{ namespace_access | indexed_access | dot_access | array_modifier }
+
+namespace_access = { "::" ~ ident }
 
 array_modifier = @{ "[]" }
 
@@ -145,15 +147,15 @@ let_binding = {
 }
 
 for_expr = {
-    "for" ~ #index = ident ~ "in" ~ #iterable = expr ~ "do" ~ #body = expr ~ "end"
+    "for" ~ #index = ident ~ "in" ~ #iterable = expr ~ "do" ~ #body = expr ~ end_keyword
 }
 
 if_expr = {
-    "if" ~ #condition = extends_condition ~ "then" ~ #then = expr ~ ("else" ~ #else = expr)? ~ "end"
+    "if" ~ #condition = extends_expr ~ "then" ~ #then = expr ~ (else_keyword ~ #else = expr)? ~ end_keyword
 }
 
 match_expr = {
-    "match" ~ #value = expr ~ "do" ~ #arm = match_arm ~ ("," ~ #arm = match_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ "end"
+    "match" ~ #value = expr ~ "do" ~ #arm = match_arm ~ ("," ~ #arm = match_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ end_keyword
 }
 
 match_arm = {
@@ -161,20 +163,18 @@ match_arm = {
 }
 
 cond_expr = {
-    "cond" ~ "do" ~ #arm = cond_arm ~ ("," ~ #arm = cond_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ "end"
+    "cond" ~ "do" ~ #arm = cond_arm ~ ("," ~ #arm = cond_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ end_keyword
 }
 
 cond_arm = {
-    #condition = extends_condition ~ "=>" ~ #body = expr
+    #condition = extends_expr ~ "=>" ~ #body = expr
 }
 
 else_arm = {
-    "else" ~ "=>" ~ #body = expr
+    else_keyword ~ "=>" ~ #body = expr
 }
 
-extends_condition = { extends_expr }
-
-extends_expr = _{
+extends_expr = {
     extends_prefix* ~ extends_primary ~ (extends_prefix* ~ extends_infix ~ extends_primary)*
 }
 
@@ -240,9 +240,13 @@ export = @{ "export" }
 
 optional_modifier = @{ "?" }
 
+else_keyword = @{ "else" }
+
+end_keyword = @{ "end" }
+
 string = { atom_string | double_quote_string | single_quote_string }
 
-atom_string = @{ ":" ~ (!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_" | "-" | "/" | "\\"))+ }
+atom_string = @{ ":" ~ (!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_" | "-" | "/" | "\\" | "."))+ }
 
 double_quote_string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
@@ -250,7 +254,9 @@ single_quote_string = @{ "'" ~ (!"'" ~ ANY)* ~ "'" }
 
 template_string = @{ "`" ~ (!"`" ~ ANY)* ~ "`" }
 
-ident = @{ !keyword ~ !ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_")+ }
+ident = @{ !(ASCII_DIGIT | keyword ~ !ident_chars) ~ ident_chars+ }
+
+ident_chars = @{ ASCII_ALPHANUMERIC | "$" | "_" }
 
 keyword = _{
     "as"
@@ -258,19 +264,20 @@ keyword = _{
   | "boolean"
   | "class"
   | "const"
-  | "else"
-  | "end"
+  | "export"
   | "extends"
   | "false"
   | "for"
   | "function"
   | "if"
+  | "import"
   | "in"
   | "infer"
   | "interface"
   | "keyof"
   | "let"
   | "never"
+  | "not"
   | "null"
   | "number"
   | "string"
@@ -282,6 +289,8 @@ keyword = _{
   | "undefined"
   | "unknown"
   | "void"
+  | else_keyword
+  | end_keyword
 }
 
 number = @{
