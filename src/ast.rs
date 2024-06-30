@@ -98,6 +98,164 @@ pub(crate) type AstNodes<'a> = Vec<Node<'a, Ast<'a>>>;
 type Bindings<'a> = HashMap<Identifier, AstNode<'a>>;
 
 impl<'a> AstNode<'a> {
+    pub fn traverse<Context, Pre, Post>(
+        &self,
+        ctx: Context,
+        pre: &Pre,
+        post: &Post,
+    ) -> (Self, Context)
+    where
+        Context: Clone,
+        Pre: Fn((Self, Context)) -> (Self, Context),
+        Post: Fn((Self, Context)) -> (Self, Context),
+    {
+        fn pick_node<T>((node, _ctx): (AstNode, T)) -> AstNode {
+            node
+        }
+
+        let result = |node: Ast<'a>, ctx: Context| (self.clone().replace(node), ctx);
+
+        let red = move |node: &AstNode<'a>, ctx| node.traverse(ctx, pre, post);
+
+        let red_pick_node =
+            move |ctx| move |node: &AstNode<'a>| pick_node(node.traverse(ctx, pre, post));
+
+        let (node, ctx) = pre((self.clone(), ctx));
+
+        let (node, ctx) = match &*self.value {
+            Ast::Access { lhs, rhs, is_dot } => {
+                let (lhs, _) = red(lhs, ctx.clone());
+                let (rhs, _) = red(rhs, ctx.clone());
+
+                let ast = Ast::Access {
+                    lhs,
+                    rhs,
+                    is_dot: *is_dot,
+                };
+
+                (self.clone().replace(ast), ctx)
+            }
+            Ast::Application(_, _) => todo!(),
+            Ast::Array(_) => todo!(),
+            Ast::InfixOp { lhs, op, rhs } => todo!(),
+            Ast::Builtin { name, argument } => todo!(),
+            Ast::CondExpr { arms, else_ } => todo!(),
+            Ast::ExtendsInfixOp { lhs, op, rhs } => {
+                let (lhs, _) = red(lhs, ctx.clone());
+                let (rhs, _) = red(rhs, ctx.clone());
+
+                let ast = Ast::ExtendsInfixOp {
+                    lhs,
+                    op: op.clone(),
+                    rhs,
+                };
+
+                (self.clone().replace(ast), ctx)
+            }
+            Ast::ExtendsExpr(_) => todo!(),
+            Ast::ExtendsPrefixOp { op, value } => todo!(),
+
+            Ast::IfExpr(IfExpr {
+                condition,
+                then_branch,
+                else_branch,
+            }) => {
+                let (condition, _) = red(condition, ctx.clone());
+                let (then_branch, _) = red(then_branch, ctx.clone());
+                let else_branch = else_branch.as_ref().map(red_pick_node(ctx.clone()));
+
+                let ast = Ast::IfExpr(IfExpr {
+                    condition,
+                    then_branch,
+                    else_branch,
+                });
+
+                (self.clone().replace(ast), ctx)
+            }
+
+            Ast::ImportStatement {
+                import_clause,
+                module,
+            } => todo!(),
+            Ast::LetExpr(_) => todo!(),
+            Ast::MappedType {
+                index,
+                iterable,
+                remapped_as,
+                readonly_mod,
+                optional_mod,
+                body,
+            } => todo!(),
+            Ast::MatchExpr { value, arms, else_ } => todo!(),
+            Ast::NamespaceAccess(_) => todo!(),
+            Ast::ObjectLiteral(_) => todo!(),
+            Ast::Program(statements) => {
+                let mut ctx = ctx.clone();
+                let mut statements = statements.clone();
+
+                for statement in &mut statements {
+                    (*statement, ctx) = red(statement, ctx.clone());
+                }
+
+                let ast = Ast::Program(statements);
+
+                result(ast, ctx)
+            }
+            Ast::Statement(inner) => {
+                // Statement MAY propagate context to siblings
+                let (inner, ctx) = red(inner, ctx.clone());
+                let ast = Ast::Statement(inner);
+                result(ast, ctx)
+            }
+            Ast::TemplateString(_) => todo!(),
+            Ast::Tuple(_) => todo!(),
+            Ast::TypeAlias {
+                export,
+                name,
+                params,
+                body,
+            } => {
+                let (body, _) = body.traverse(ctx.clone(), pre, post);
+
+                let params = params
+                    .iter()
+                    .map(
+                        |TypeParameter {
+                             name: param_name,
+                             constraint,
+                             default,
+                             rest,
+                         }| {
+                            let constraint = constraint.as_ref().map(red_pick_node(ctx.clone()));
+                            let default = default.as_ref().map(red_pick_node(ctx.clone()));
+
+                            TypeParameter {
+                                name: param_name.clone(),
+                                constraint,
+                                default,
+                                rest: *rest,
+                            }
+                        },
+                    )
+                    .collect_vec();
+
+                let ast = Ast::TypeAlias {
+                    export: *export,
+                    name: name.clone(),
+                    params,
+                    body,
+                };
+
+                result(ast, ctx)
+            }
+            _ => (node, ctx),
+        };
+
+        let (node, acc) = post((node, ctx));
+
+        (node, acc)
+    }
+
     /**
      * Recursively (depth first) transform a node and all of its children.
      */
@@ -343,6 +501,31 @@ impl<'a> AstNode<'a> {
         });
 
         acc
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{parser::Rule, test_support::parse};
+
+    use super::*;
+
+    #[test]
+    fn traverse() {
+        let tree = parse!(Rule::program, "type A as if a <: b then c else d end");
+        let tree = tree.traverse(
+            (),
+            &|(node, _)| {
+                // dbg!(&node);
+                (node, ())
+            },
+            &|(node, _)| match &*node.value {
+                Ast::IfExpr(if_expr) => (if_expr.simplify(), ()),
+                _ast => (node, ()),
+            },
+        );
+        // dbg!(&tree);
+        assert_eq!("", tree.0.to_sexpr(80));
     }
 }
 
@@ -782,13 +965,42 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::Number(number) => RcDoc::text(number),
             Ast::ObjectLiteral(_) => todo!(),
             Ast::Primitive(primitive) => primitive.pretty_sexpr(),
-            Ast::Program(_) => todo!(),
-            Ast::Statement(_) => todo!(),
+            Ast::Program(statements) => {
+                let mut vec = vec![RcDoc::text("program")];
+
+                vec.extend(statements.iter().map(|s| s.pretty_sexpr()));
+
+                Ast::sexpr(vec)
+            }
+            Ast::Statement(inner) => inner.pretty_sexpr(),
             Ast::String(_) => todo!(),
             Ast::TemplateString(_) => todo!(),
             Ast::True => todo!(),
             Ast::Tuple(tuple) => tuple.pretty_sexpr(),
-            Ast::TypeAlias { .. } => todo!(),
+            Ast::TypeAlias {
+                export,
+                name,
+                params,
+                body,
+            } => {
+                let mut vec = vec![RcDoc::text("type"), RcDoc::text(name)];
+
+                if *export {
+                    vec.push(RcDoc::text(":export"));
+                }
+
+                if !params.is_empty() {
+                    vec.push(Ast::sexpr(
+                        params.iter().map(|p| p.pretty_sexpr()).collect(),
+                    ));
+                }
+
+                vec.push(RcDoc::text("as:"));
+
+                vec.push(body.pretty_sexpr());
+
+                Ast::sexpr(vec)
+            }
             Ast::Undefined => todo!(),
             Ast::Unknown => todo!(),
         }
@@ -1532,6 +1744,19 @@ impl<'a> TypeParameter<'a> {
             default,
             rest,
         }
+    }
+
+    fn pretty_sexpr(&self) -> RcDoc<()> {
+        Ast::sexpr(vec![
+            RcDoc::text("type-parameter"),
+            RcDoc::text(self.name.clone()),
+            self.constraint
+                .as_ref()
+                .map_or_else(|| RcDoc::nil(), |v| v.pretty_sexpr()),
+            self.default
+                .as_ref()
+                .map_or_else(|| RcDoc::nil(), |v| v.pretty_sexpr()),
+        ])
     }
 }
 

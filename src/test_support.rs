@@ -12,6 +12,8 @@ pub(crate) use assert_sexpr;
 
 macro_rules! parse {
     ($rule:expr, $source:expr) => {{
+        use crate::pest::Parser;
+
         let result = crate::parser::NewtypeParser::parse($rule, $source);
 
         let pair = result.unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
