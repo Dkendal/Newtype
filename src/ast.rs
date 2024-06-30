@@ -417,230 +417,22 @@ impl<'a> AstNode<'a> {
         (node, acc)
     }
 
-    /**
-     * Recursively (depth first) transform a node and all of its children.
-     */
-    pub fn transform(&self, f: &impl Fn(&Self) -> Self) -> Self {
-        let transform = |node: &AstNode<'a>| -> Node<Ast> { node.transform(f) };
-
-        let transform_each =
-            |nodes: &AstNodes<'a>| -> AstNodes<'a> { nodes.iter().map(transform).collect() };
-
-        // For all nodes that are not a leaf node,
-        // we need to recursively simplify
-        let new_node = self.map(|ast| {
-            match ast {
-                // Leaf nodes are not transformed
-                Ast::Never
-                | Ast::NamespaceAccess(_)
-                | Ast::Any
-                | Ast::Unknown
-                | Ast::Null
-                | Ast::Undefined
-                | Ast::False
-                | Ast::True
-                | Ast::Ident { .. }
-                | Ast::Number { .. }
-                | Ast::Primitive { .. }
-                | Ast::String { .. }
-                | Ast::ImportStatement { .. }
-                | Ast::TemplateString { .. } => ast.clone(),
-
-                // For all other nodes, we recursively transform
-                Ast::Program(vec) => Ast::Program(transform_each(vec)),
-                Ast::TypeAlias {
-                    export,
-                    name,
-                    params,
-                    body,
-                } => {
-                    let params = params
-                        .iter()
-                        .map(|param| {
-                            let mut param = param.clone();
-                            param.default = param.default.map(|d| d.transform(f));
-                            param.constraint = param.constraint.map(|d| d.transform(f));
-                            param
-                        })
-                        .collect_vec();
-
-                    Ast::TypeAlias {
-                        export: *export,
-                        name: name.clone(),
-                        params,
-                        body: body.transform(f),
-                    }
-                }
-                Ast::Tuple(Tuple { items: vec }) => Ast::Tuple(Tuple {
-                    items: transform_each(vec),
-                }),
-                Ast::Array(vec) => Ast::Array(transform(vec)),
-                Ast::Access { lhs, rhs, is_dot } => Ast::Access {
-                    lhs: transform(lhs),
-                    rhs: transform(rhs),
-                    is_dot: *is_dot,
-                },
-                Ast::IfExpr(if_expr::Expr {
-                    condition,
-                    then_branch,
-                    else_branch,
-                }) => Ast::from(if_expr::Expr {
-                    condition: transform(condition),
-                    then_branch: transform(then_branch),
-                    else_branch: else_branch.as_ref().map(|v| v.transform(f)),
-                }),
-                Ast::InfixOp { lhs, op, rhs } => Ast::InfixOp {
-                    lhs: transform(lhs),
-                    op: op.clone(),
-                    rhs: transform(rhs),
-                },
-                Ast::ExtendsInfixOp { lhs, op, rhs } => Ast::ExtendsInfixOp {
-                    lhs: transform(lhs),
-                    op: op.clone(),
-                    rhs: transform(rhs),
-                },
-
-                Ast::ExtendsPrefixOp { op, value } => Ast::ExtendsPrefixOp {
-                    op: op.clone(),
-                    value: transform(value),
-                },
-
-                Ast::ExtendsExpr(ExtendsExpr {
-                    lhs,
-                    rhs,
-                    then_branch: then,
-                    else_branch: els,
-                }) => Ast::from(ExtendsExpr::new(
-                    transform(lhs),
-                    transform(rhs),
-                    transform(then),
-                    transform(els),
-                )),
-                Ast::ObjectLiteral(ObjectLiteral { properties: props }) => {
-                    Ast::ObjectLiteral(ObjectLiteral {
-                        properties: props
-                            .iter()
-                            .map(|prop| {
-                                let mut p = prop.clone();
-                                p.value = transform(&prop.value);
-                                p
-                            })
-                            .collect(),
-                    })
-                }
-                Ast::Application(Application { name, args }) => Ast::Application(Application {
-                    name: name.clone(),
-                    args: transform_each(args),
-                }),
-
-                Ast::MatchExpr(match_expr::Expr {
-                    value,
-                    arms,
-                    else_arm,
-                }) => {
-                    let value = transform(value);
-
-                    let arms = arms
-                        .iter()
-                        .map(|arm| {
-                            let mut a = arm.clone();
-                            a.pattern = transform(&arm.pattern);
-                            a.body = transform(&arm.body);
-                            a
-                        })
-                        .collect();
-
-                    let else_arm = transform(else_arm);
-
-                    Ast::MatchExpr(match_expr::Expr {
-                        value,
-                        arms,
-                        else_arm,
-                    })
-                }
-
-                Ast::CondExpr(cond_expr::Expr { arms, else_arm }) => {
-                    let arms = arms
-                        .iter()
-                        .map(|arm| {
-                            let mut a = arm.clone();
-                            a.condition = transform(&arm.condition);
-                            a.body = transform(&arm.body);
-                            a
-                        })
-                        .collect();
-
-                    let else_arm = transform(else_arm);
-
-                    Ast::CondExpr(cond_expr::Expr { arms, else_arm })
-                }
-
-                Ast::Builtin { name, argument } => Ast::Builtin {
-                    name: name.clone(),
-                    argument: transform(argument),
-                },
-                Ast::Statement(node) => Ast::Statement(node.transform(f)),
-
-                Ast::MappedType(MappedType {
-                    index,
-                    iterable,
-                    remapped_as,
-                    readonly_mod,
-                    optional_mod,
-                    body,
-                }) => Ast::MappedType(MappedType {
-                    index: index.clone(),
-                    iterable: iterable.transform(f),
-                    remapped_as: remapped_as.clone(),
-                    readonly_mod: readonly_mod.clone(),
-                    optional_mod: optional_mod.clone(),
-                    body: body.transform(f),
-                }),
-                Ast::NoOp => unreachable!(),
-                Ast::LetExpr(let_expr) => *let_expr.resolve_bindings().value,
-            }
-        });
-
-        f(&new_node)
-    }
-
     pub fn simplify(&self) -> Self {
-        self.transform(&|tree| {
-            let bindings: Bindings = Default::default();
-            let (tree, _) = tree.traverse(
-                bindings,
-                &|(node, ctx)| {
-                    // dbg!(&node);
-                    (node, ctx)
-                },
-                &|(node, ctx)| match &*node.value {
-                    Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
-                    Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
-                    Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
-                    _ast => (node, ctx),
-                },
-            );
-            tree
-        })
-    }
-
-    fn simplify_cond_expr(&self) -> AstNode<'a> {
-        // Convert a CondExpr to a series of nested ternary expressions
-        let Ast::CondExpr(cond_expr::Expr { arms, else_arm }) = &*self.value else {
-            panic!("Expected CondExpr, found {self:#?}");
-        };
-
-        let init_else: AstNode<'a> = (else_arm).clone();
-
-        let acc: AstNode<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
-            let cond_expr::Arm {
-                condition,
-                body: then,
-            } = arm;
-            if_expr::expand_to_extends(condition, then, &else_arm)
-        });
-
-        acc
+        let bindings: Bindings = Default::default();
+        let (tree, _) = self.traverse(
+            bindings,
+            &|(node, ctx)| {
+                // dbg!(&node);
+                (node, ctx)
+            },
+            &|(node, ctx)| match &*node.value {
+                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
+                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
+                Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
+                _ast => (node, ctx),
+            },
+        );
+        tree
     }
 }
 
@@ -697,38 +489,6 @@ mod tests {
         assert_eq!("", tree.to_sexpr(80));
     }
 }
-
-// fn resolve_let_bindings<'a>(
-//     bindings: &'a HashMap<Identifier, ASTNode<'a>>,
-// ) -> impl Fn(ASTNode) -> ASTNode + 'a {
-//     move |node| match &*node.value {
-//         Ast::Ident(name) => {
-//             let ident = Identifier(name.clone());
-//
-//             if let Some(value) = bindings.get(&ident) {
-//                 value.to_owned()
-//             } else {
-//                 node.clone()
-//             }
-//         }
-//         Ast::LetExpr {
-//             bindings: new_bindings,
-//             body,
-//         } => {
-//             // let nested_bindings: HashMap<Identifier, _> = bindings
-//             //     .iter()
-//             //     .chain(new_bindings.iter())
-//             //     .map(|(k, v)| (k.clone(), v.clone()))
-//             //     .collect();
-//             //
-//             // // let f = resolve_let_bindings(&nested_bindings);
-//             //
-//             // body.transform(_)
-//             todo!()
-//         }
-//         _ => node.clone(),
-//     }
-// }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NamespaceAccess<'a> {
@@ -2088,3 +1848,36 @@ pub(crate) mod cond_expr {
         }
     }
 }
+
+// fn resolve_let_bindings<'a>(
+//     bindings: &'a HashMap<Identifier, ASTNode<'a>>,
+// ) -> impl Fn(ASTNode) -> ASTNode + 'a {
+//     move |node| match &*node.value {
+//         Ast::Ident(name) => {
+//             let ident = Identifier(name.clone());
+//
+//             if let Some(value) = bindings.get(&ident) {
+//                 value.to_owned()
+//             } else {
+//                 node.clone()
+//             }
+//         }
+//         Ast::LetExpr {
+//             bindings: new_bindings,
+//             body,
+//         } => {
+//             // let nested_bindings: HashMap<Identifier, _> = bindings
+//             //     .iter()
+//             //     .chain(new_bindings.iter())
+//             //     .map(|(k, v)| (k.clone(), v.clone()))
+//             //     .collect();
+//             //
+//             // // let f = resolve_let_bindings(&nested_bindings);
+//             //
+//             // body.transform(_)
+//             todo!()
+//         }
+//         _ => node.clone(),
+//     }
+// }
+
