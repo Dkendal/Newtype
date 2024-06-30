@@ -19,9 +19,8 @@ use pest::{
     pratt_parser::PrattParser,
     Parser,
 };
+
 use pratt::{EXPR_PARSER, EXTENDS_PARSER};
-use ExtendsExpr;
-use IfExpr;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -29,7 +28,7 @@ pub struct NewtypeParser;
 
 pub type ParserError = pest::error::Error<Rule>;
 
-pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> AST {
+pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> AstNode {
     use Rule::*;
     EXPR_PARSER
         .map_primary(parse_node)
@@ -38,27 +37,29 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> AST {
             indexed_access => {
                 let inner = op.into_inner().next().unwrap();
                 let index = parse_node(inner);
-                AST::Access {
-                    lhs: boxed(lhs),
-                    rhs: boxed(index),
+                // FIXME missing span
+                Ast::Access {
+                    lhs,
+                    rhs: index,
                     is_dot: false,
                 }
+                .into()
             }
-            array_modifier => AST::Array(boxed(lhs)),
+            array_modifier => Node::from_pair(&op, Ast::Array(lhs)),
             dot_access => {
                 let index = op.into_inner().next().map(parse_node).unwrap();
-                AST::Access {
-                    lhs: boxed(lhs),
-                    rhs: boxed(index),
+                // FIXME missing span
+                Ast::Access {
+                    lhs,
+                    rhs: (index),
                     is_dot: true,
                 }
+                .into()
             }
             namespace_access => {
                 let rhs = op.into_inner().next().map(parse_node).unwrap();
-                AST::NamespaceAccess(NamespaceAccess {
-                    lhs: boxed(lhs),
-                    rhs: boxed(rhs),
-                })
+                // FIXME missing span
+                Ast::NamespaceAccess(NamespaceAccess { lhs, rhs }).into()
             }
             rule => {
                 parse_error!(
@@ -70,25 +71,7 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> AST {
         })
         .map_infix(|lhs, op, rhs| {
             if op.as_rule() == pipe {
-                return match rhs {
-                    AST::Ident(rhs_name) => AST::Application(rhs_name.clone(), vec![lhs]),
-                    AST::Application(name, params) => {
-                        let mut params = params.clone();
-                        params.insert(0, lhs);
-                        AST::Application(name.clone(), params)
-                    }
-                    _ => {
-                        let error = Error::new_from_span(
-                            ErrorVariant::ParsingError {
-                                positives: vec![ident, application],
-                                // FIXME: don't know what the input rule was
-                                negatives: vec![],
-                            },
-                            op.as_span(),
-                        );
-                        panic!("{}", error);
-                    }
-                };
+                return replace_pipe_with_type_application(rhs, lhs, op);
             }
 
             let op = match op.as_rule() {
@@ -97,22 +80,54 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> AST {
                 rule => unreachable!("Expected infix operator, found {:?}", rule),
             };
 
-            AST::BinOp {
-                lhs: boxed(lhs),
-                op,
-                rhs: boxed(rhs),
-            }
+            // FIXME missing span
+            Ast::InfixOp { lhs, op, rhs }.into()
         })
         .parse(pairs)
 }
 
-pub(crate) fn parse_newtype_program(source: &str) -> Result<AST, Box<Error<Rule>>> {
+/// Replace the pipe operator macro with a type application
+/// ```
+/// A |> B
+/// # B(A)
+/// ```
+fn replace_pipe_with_type_application<'a>(
+    rhs: AstNode<'a>,
+    lhs: AstNode<'a>,
+    op: Pair<'a, Rule>,
+) -> AstNode<'a> {
+    match &*rhs.value {
+        Ast::Ident(rhs_name) => {
+            // FIXME missing span
+            Node::from_pair(&op, Ast::Application(rhs_name.clone(), vec![lhs]))
+        }
+        Ast::Application(name, params) => {
+            let mut params = params.clone();
+            params.insert(0, lhs);
+            // FIXME missing span
+            Node::from_pair(&op, Ast::Application(name.clone(), params))
+        }
+        _ => {
+            let error = Error::new_from_span(
+                ErrorVariant::ParsingError {
+                    positives: vec![Rule::ident, Rule::application],
+                    // FIXME: don't know what the input rule was
+                    negatives: vec![],
+                },
+                op.as_span(),
+            );
+            panic!("{}", error);
+        }
+    }
+}
+
+pub(crate) fn parse_newtype_program(source: &str) -> Result<AstNode<'_>, Box<Error<Rule>>> {
     let pair = NewtypeParser::parse(Rule::program, source)?.next().unwrap();
 
     Ok(parse_node(pair))
 }
 
-pub(crate) fn parse_extends_expr(pairs: Pairs<Rule>) -> AST {
+pub(crate) fn parse_extends_expr(pairs: Pairs<Rule>) -> AstNode {
     EXTENDS_PARSER
         .map_primary(|pair| match pair.as_rule() {
             Rule::expr => parse_expr(pair.into_inner()),
@@ -123,18 +138,47 @@ pub(crate) fn parse_extends_expr(pairs: Pairs<Rule>) -> AST {
             unreachable!("Expected postfix operation, found {:?}", op.as_rule())
         })
         .map_prefix(|op, primary_node| {
+            if op.as_rule() == Rule::not && !primary_node.value.is_extends_infix_op() {
+                let error_not = Error::<Rule>::new_from_span(
+                    ErrorVariant::CustomError {
+                        message: "`not` may only be used with an extends expression".to_string(),
+                    },
+                    op.as_span(),
+                );
+
+                let error_expr = if let Some(span) = primary_node.span {
+                    // FIXME need rule for the primary node for better reporting
+                    let error = Error::<Rule>::new_from_span(
+                        ErrorVariant::ParsingError {
+                            positives: vec![Rule::extends_expr],
+                            negatives: vec![],
+                        },
+                        span,
+                    );
+
+                    format!("{error}")
+                } else {
+                    String::new()
+                };
+
+                panic!("{error_not}\n{error_expr}\nHint: You might have forgotten to wrap the expression in parentheses, `not` has higher precedence than other operators.");
+            }
+
             let op = match op.as_rule() {
                 Rule::infer => PrefixOp::Infer,
                 Rule::not => PrefixOp::Not,
-                rule => parse_error!(op, vec![Rule::infer, Rule::not], vec![op.as_rule()]),
+                rule => parse_error!(op, vec![Rule::infer, Rule::not], vec![rule]),
             };
 
-            AST::ExtendsPrefixOp {
-                op,
-                value: boxed(primary_node),
-            }
+            Node::new(
+                primary_node.span,
+                Ast::ExtendsPrefixOp {
+                    op,
+                    value: primary_node,
+                },
+            )
         })
-        .map_infix(|lhs, op, rhs| {
+        .map_infix(|lhs: Node<Ast>, op: Pair<Rule>, rhs: Node<Ast>| {
             let op = match op.as_rule() {
                 Rule::extends => InfixOp::Extends,
                 Rule::not_extends => InfixOp::NotExtends,
@@ -159,32 +203,32 @@ pub(crate) fn parse_extends_expr(pairs: Pairs<Rule>) -> AST {
                     vec![rule]
                 ),
             };
-            AST::ExtendsBinOp {
-                lhs: boxed(lhs),
-                op,
-                rhs: boxed(rhs),
-            }
+            // FIXME missing span
+            Ast::ExtendsInfixOp { lhs, op, rhs }.into()
         })
         .parse(pairs)
 }
 
-pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
-    let rule = pair.as_rule();
+pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
+    let rule = pair.clone().as_rule();
+    let span = pair.clone().as_span();
+    let mknode = |ast| Node::from_span(span, ast);
 
     match rule {
         Rule::program => {
             let children: Vec<_> = pair
+                .clone()
                 .into_inner()
                 .filter(|pair| pair.as_rule() != Rule::EOI) // Remove the end of input token
                 .map(parse_node)
                 .collect();
 
-            AST::Program(children)
+            mknode(Ast::Program(children))
         }
         Rule::statement => {
             let inner = pair.into_inner().next().unwrap();
             let inner = parse_node(inner);
-            AST::Statement(boxed(inner))
+            mknode(Ast::Statement(inner))
         }
         Rule::type_alias => parse_type_alias(pair),
         Rule::import_statement => parse_import_statement(pair),
@@ -201,19 +245,19 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
                     value.as_rule()
                 ),
             };
-            AST::Primitive(primitive)
+            mknode(Ast::Primitive(primitive))
         }
-        Rule::number => AST::Number(node_as_string(pair)),
+        Rule::number => mknode(Ast::Number(node_as_string(pair))),
         Rule::string => parse_string(pair),
-        Rule::template_string => AST::TemplateString(node_as_string(pair)),
-        Rule::ident => AST::Ident(node_as_string(pair)),
-        Rule::never => AST::Never,
-        Rule::any => AST::Any,
-        Rule::unknown => AST::Unknown,
-        Rule::literal_true => AST::True,
-        Rule::literal_false => AST::False,
-        Rule::null => AST::Null,
-        Rule::undefined => AST::Undefined,
+        Rule::template_string => mknode(Ast::TemplateString(node_as_string(pair))),
+        Rule::ident => mknode(Ast::Ident(node_as_string(pair))),
+        Rule::never => mknode(Ast::Never),
+        Rule::any => mknode(Ast::Any),
+        Rule::unknown => mknode(Ast::Unknown),
+        Rule::literal_true => mknode(Ast::True),
+        Rule::literal_false => mknode(Ast::False),
+        Rule::null => mknode(Ast::Null),
+        Rule::undefined => mknode(Ast::Undefined),
         Rule::tuple => parse_tuple(pair),
         Rule::application => {
             let mut inner = pair.into_inner();
@@ -226,7 +270,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
 
             let arguments = arguments_pair.into_inner().map(parse_node).collect();
 
-            AST::Application(identifier, arguments)
+            mknode(Ast::Application(identifier, arguments))
         }
         Rule::builtin => {
             let mut inner = pair.into_inner();
@@ -243,10 +287,10 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
 
             let argument = inner.find(tag_eq("argument")).map(parse_node).unwrap();
 
-            AST::Builtin {
+            mknode(Ast::Builtin {
                 name,
-                argument: boxed(argument),
-            }
+                argument: (argument),
+            })
         }
         Rule::expr => parse_expr(pair.into_inner()),
         Rule::infer => parse_error!(
@@ -256,11 +300,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
         Rule::match_expr => {
             let mut inner = pair.into_inner();
 
-            let value = inner
-                .find(tag_eq("value"))
-                .map(parse_node)
-                .map(boxed)
-                .unwrap();
+            let value = inner.find(tag_eq("value")).map(parse_node).unwrap();
 
             let arms: Vec<MatchArm> = inner
                 .clone()
@@ -277,10 +317,9 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
                 .find(tag_eq("else"))
                 .and_then(|p| p.into_inner().find(tag_eq("body")))
                 .map(parse_node)
-                .map(boxed)
-                .unwrap_or(boxed(AST::Never));
+                .unwrap_or_else(|| Ast::Never.into());
 
-            AST::MatchExpr { value, arms, else_ }
+            mknode(Ast::MatchExpr { value, arms, else_ })
         }
         Rule::cond_expr => {
             let inner = pair.into_inner();
@@ -290,8 +329,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
                 .find(tag_eq("else"))
                 .and_then(|p| p.into_inner().find(tag_eq("body")))
                 .map(parse_node)
-                .map(boxed)
-                .unwrap_or(boxed(AST::Never));
+                .unwrap_or_else(|| Ast::Never.into());
 
             let arms: Vec<CondArm> = inner
                 .clone()
@@ -311,33 +349,25 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
                 })
                 .collect();
 
-            AST::CondExpr { arms, else_ }
+            mknode(Ast::CondExpr { arms, else_ })
         }
         Rule::for_expr => {
             let mut inner = pair.into_inner();
 
             let index = inner.find(tag_eq("index")).unwrap().as_str().to_string();
 
-            let iterable = inner
-                .find(tag_eq("iterable"))
-                .map(parse_node)
-                .map(boxed)
-                .unwrap();
+            let iterable = inner.find(tag_eq("iterable")).map(parse_node).unwrap();
 
-            let body = inner
-                .find(tag_eq("body"))
-                .map(parse_node)
-                .map(boxed)
-                .unwrap();
+            let body = inner.find(tag_eq("body")).map(parse_node).unwrap();
 
-            AST::MappedType {
+            mknode(Ast::MappedType {
                 index,
                 iterable,
                 body,
                 remapped_as: None,
                 readonly_mod: None,
                 optional_mod: None,
-            }
+            })
         }
         Rule::let_expr => {
             let bindings: HashMap<_, _> = pair
@@ -358,15 +388,14 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AST {
                 })
                 .collect();
 
-            let body: Box<AST> = pair
+            let body = pair
                 .clone()
                 .into_inner()
                 .find(tag_eq("body"))
                 .map(parse_node)
-                .map(boxed)
                 .unwrap();
 
-            AST::LetExpr { bindings, body }
+            mknode(Ast::LetExpr(LetExpr { bindings, body }))
         }
         Rule::EOI => {
             parse_error!(pair, format!("Unexpected end of input"));
@@ -457,16 +486,14 @@ fn pair_as_string_literal(pair: Pair<Rule>) -> String {
     }
 }
 
-fn parse_string(pair: Pair<Rule>) -> AST {
-    AST::String(pair_as_string_literal(pair))
+fn parse_string(pair: Pair<Rule>) -> AstNode {
+    Node::from_pair(&pair.clone(), Ast::String(pair_as_string_literal(pair)))
 }
 
-fn parse_import_statement(pair: Pair<Rule>) -> AST {
+fn parse_import_statement(pair: Pair<Rule>) -> AstNode {
     let mut inner = pair.clone().into_inner();
 
     let import_clause = inner.next().unwrap();
-
-    dbg!(&import_clause);
 
     let import_clause = match import_clause.as_rule() {
         Rule::named_import => {
@@ -496,56 +523,54 @@ fn parse_import_statement(pair: Pair<Rule>) -> AST {
 
     let module = inner.next().map(pair_as_string_literal).unwrap();
 
-    AST::ImportStatement {
-        import_clause,
-        module,
-    }
+    Node::from_pair(
+        &pair,
+        Ast::ImportStatement {
+            import_clause,
+            module,
+        },
+    )
 }
 
-fn parse_if_expr(pair: Pair<Rule>) -> AST {
-    let mut inner = pair.into_inner();
+fn parse_if_expr(pair: Pair<Rule>) -> AstNode {
+    let mut inner = pair.clone().into_inner();
 
     let condition = inner
         .find(tag_eq("condition"))
-        .map(|p| boxed(parse_extends_expr(p.into_inner())))
+        .map(|p| (parse_extends_expr(p.into_inner())))
         .unwrap();
 
-    let then_branch = inner
-        .find(tag_eq("then"))
-        .map(parse_node)
-        .map(boxed)
-        .unwrap();
+    let then_branch = inner.find(tag_eq("then")).map(parse_node).unwrap();
 
     let else_branch = inner
         .find(tag_eq("else"))
         .map(parse_node)
-        .unwrap_or_else(|| AST::Never);
+        .unwrap_or_else(|| Ast::Never.into());
 
-    let else_branch = boxed(else_branch);
+    let else_branch = else_branch;
 
-    match *condition {
+    match &*condition.value {
         // Other conditions are desugared later in the simplification step
-        AST::ExtendsBinOp { .. } | AST::ExtendsPrefixOp { .. } => AST::IfExpr(IfExpr {
-            condition,
-            then_branch,
-            else_branch: Some(else_branch),
-        }),
+        Ast::ExtendsInfixOp { .. } | Ast::ExtendsPrefixOp { .. } => Node::from_pair(
+            &pair,
+            Ast::IfExpr(IfExpr {
+                condition,
+                then_branch,
+                else_branch: Some(else_branch),
+            }),
+        ),
         _ => unreachable!(),
     }
 }
 
-fn parse_tuple(pair: Pair<Rule>) -> AST {
-    let items = pair.into_inner().map(parse_node).collect();
+fn parse_tuple(pair: Pair<Rule>) -> AstNode {
+    let items = pair.clone().into_inner().map(parse_node).collect();
 
-    AST::Tuple(items)
+    Node::from_pair(&pair, Ast::Tuple(Tuple { items }))
 }
 
-fn boxed(lhs: AST) -> Box<AST> {
-    Box::new(lhs)
-}
-
-fn parse_object_literal(pair: Pair<Rule>) -> AST {
-    let object_property_rules = pair.into_inner();
+fn parse_object_literal(pair: Pair<Rule>) -> AstNode {
+    let object_property_rules = pair.clone().into_inner();
     let mut properties = Vec::new();
 
     for prop_pair in object_property_rules {
@@ -583,10 +608,10 @@ fn parse_object_literal(pair: Pair<Rule>) -> AST {
         }
     }
 
-    AST::ObjectLiteral(properties)
+    Node::from_pair(&pair, Ast::ObjectLiteral(properties))
 }
 
-fn parse_type_alias(pair: Pair<Rule>) -> AST {
+fn parse_type_alias(pair: Pair<Rule>) -> AstNode {
     let inner = pair.clone().into_inner();
 
     let export = inner
@@ -601,12 +626,7 @@ fn parse_type_alias(pair: Pair<Rule>) -> AST {
         .as_str()
         .to_string();
 
-    let body = inner
-        .clone()
-        .find(tag_eq("body"))
-        .map(parse_node)
-        .map(boxed)
-        .unwrap();
+    let body = inner.clone().find(tag_eq("body")).map(parse_node).unwrap();
 
     // Track the order of the inserted parametes
     let mut ordered_params: Vec<&str> = Default::default();
@@ -663,7 +683,7 @@ fn parse_type_alias(pair: Pair<Rule>) -> AST {
                     }
                 };
 
-                param.constraint = Some(boxed(body));
+                param.constraint = Some(body);
             });
     }
 
@@ -700,7 +720,7 @@ fn parse_type_alias(pair: Pair<Rule>) -> AST {
                     }
                 };
 
-                param.default = Some(boxed(body));
+                param.default = Some(body);
             });
     };
 
@@ -709,12 +729,15 @@ fn parse_type_alias(pair: Pair<Rule>) -> AST {
         .map(|name| params.get(name).unwrap().clone())
         .collect();
 
-    AST::TypeAlias {
-        export,
-        name,
-        params,
-        body,
-    }
+    Node::from_pair(
+        &pair,
+        Ast::TypeAlias {
+            export,
+            name,
+            params,
+            body,
+        },
+    )
 }
 
 fn node_as_string(pair: Pair<Rule>) -> String {
@@ -803,26 +826,6 @@ mod parser_tests {
             crate::parser::parse_extends_expr,
             "not (A <: B)",
             "(not (<: A B))"
-        );
-    }
-
-    #[test]
-    fn extends_expr_parser_not_extends() {
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "not A <: B",
-            "(<: (not A) B)"
-        );
-    }
-
-    #[test]
-    fn extends_expr_parser_not() {
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "not A",
-            "(not A)"
         );
     }
 
@@ -1217,7 +1220,7 @@ mod parser_tests {
                 : c
             "#,
             r#"
-            if not a <: b then
+            if not (a <: b) then
                 c
             end
             "#
@@ -1234,7 +1237,7 @@ mod parser_tests {
                 : c
             "#,
             r#"
-            if not a <: b then
+            if not (a <: b) then
                 c
             else
                 d
@@ -1256,7 +1259,7 @@ mod parser_tests {
             "#,
             r#"
             if a <: b then
-                if not c <: d then
+                if not (c <: d) then
                     x
                 end
             end
@@ -1274,7 +1277,7 @@ mod parser_tests {
             "#,
             r#"
             if a <: b then
-                if not c <: d then
+                if not (c <: d) then
                     x
                 else
                     y
@@ -1293,7 +1296,7 @@ mod parser_tests {
                     : never
             "#,
             r#"
-            if not a <: b then
+            if not (a <: b) then
                 if c <: d then
                     x
                 end
@@ -1311,8 +1314,8 @@ mod parser_tests {
                     : x
             "#,
             r#"
-            if not a <: b then
-                if not c <: d then
+            if not (a <: b) then
+                if not (c <: d) then
                     x
                 end
             end
@@ -1332,7 +1335,7 @@ mod parser_tests {
                     : never
             "#,
             r#"
-            if not(a <: b) and c <: d then
+            if not (a <: b) and c <: d then
                 x
             end
             "#
@@ -1348,7 +1351,7 @@ mod parser_tests {
                 : never
             "#,
             r#"
-            if a <: b and not c <: d then
+            if a <: b and (not (c <: d)) then
                 x
             end
             "#

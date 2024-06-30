@@ -1,4 +1,4 @@
-use crate::{ast::AST, parser::parse_newtype_program};
+use crate::{ast::Ast, parser::parse_newtype_program};
 
 macro_rules! assert_sexpr {
     ($rule:expr, $processor:expr, $input:expr, $expected:expr) => {{
