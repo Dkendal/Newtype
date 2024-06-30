@@ -109,15 +109,29 @@ impl<'a> AstNode<'a> {
         Pre: Fn((Self, Context)) -> (Self, Context),
         Post: Fn((Self, Context)) -> (Self, Context),
     {
+        /// Extract the node from the tuple
         fn pick_node<T>((node, _ctx): (AstNode, T)) -> AstNode {
             node
         }
 
+        // Produce a new node and context
         let result = |node: Ast<'a>, ctx: Context| (self.clone().replace(node), ctx);
 
+        // Reducer
         let red = move |node: &AstNode<'a>, ctx| node.traverse(ctx, pre, post);
 
-        let red_pick_node =
+        // Reducer only returns the node, drops the context
+        let red_pick_node = move |node: &AstNode<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
+
+        // Reducer that maps over a list of nodes
+        let red_items = move |node: &AstNodes<'a>, ctx: Context| {
+            node.iter()
+                .map(|item| red_pick_node(item, ctx.clone()))
+                .collect_vec()
+        };
+
+        // Returns a closure that takes a node
+        let fn_red_pick_node =
             move |ctx| move |node: &AstNode<'a>| pick_node(node.traverse(ctx, pre, post));
 
         let (node, ctx) = pre((self.clone(), ctx));
@@ -135,11 +149,60 @@ impl<'a> AstNode<'a> {
 
                 (self.clone().replace(ast), ctx)
             }
-            Ast::Application(_, _) => todo!(),
-            Ast::Array(_) => todo!(),
-            Ast::InfixOp { lhs, op, rhs } => todo!(),
-            Ast::Builtin { name, argument } => todo!(),
-            Ast::CondExpr { arms, else_ } => todo!(),
+            Ast::Application(Application { name, args }) => {
+                let ast = Ast::Application(Application {
+                    name: name.clone(),
+                    args: red_items(args, ctx.clone()),
+                });
+
+                result(ast, ctx)
+            }
+
+            Ast::Array(inner) => {
+                let (inner, _) = red(inner, ctx.clone());
+                let ast = Ast::Array(inner);
+                result(ast, ctx)
+            }
+
+            Ast::InfixOp { lhs, op, rhs } => {
+                let ast = Ast::InfixOp {
+                    lhs: red_pick_node(lhs, ctx.clone()),
+                    op: op.clone(),
+                    rhs: red_pick_node(rhs, ctx.clone()),
+                };
+
+                result(ast, ctx)
+            }
+
+            Ast::Builtin { name, argument } => {
+                let (argument, _) = red(argument, ctx.clone());
+
+                let ast = Ast::Builtin {
+                    name: name.clone(),
+                    argument,
+                };
+
+                result(ast, ctx)
+            }
+
+            Ast::CondExpr(cond_expr::Expr { arms, else_arm }) => {
+                let arms = arms
+                    .iter()
+                    .map(|arm| {
+                        let mut arm = arm.clone();
+                        arm.condition = red_pick_node(&arm.condition, ctx.clone());
+                        arm.body = red_pick_node(&arm.body, ctx.clone());
+                        arm
+                    })
+                    .collect_vec();
+
+                let else_arm = red_pick_node(else_arm, ctx.clone());
+
+                let ast = Ast::CondExpr(cond_expr::Expr { arms, else_arm });
+
+                result(ast, ctx)
+            }
+
             Ast::ExtendsInfixOp { lhs, op, rhs } => {
                 let (lhs, _) = red(lhs, ctx.clone());
                 let (rhs, _) = red(rhs, ctx.clone());
@@ -152,19 +215,30 @@ impl<'a> AstNode<'a> {
 
                 (self.clone().replace(ast), ctx)
             }
-            Ast::ExtendsExpr(_) => todo!(),
-            Ast::ExtendsPrefixOp { op, value } => todo!(),
 
-            Ast::IfExpr(IfExpr {
+            Ast::ExtendsExpr(_) => (self.clone(), ctx.clone()),
+
+            Ast::ExtendsPrefixOp { op, value } => {
+                let value = red_pick_node(value, ctx.clone());
+
+                let ast = Ast::ExtendsPrefixOp {
+                    op: op.clone(),
+                    value,
+                };
+
+                result(ast, ctx)
+            }
+
+            Ast::IfExpr(if_expr::Expr {
                 condition,
                 then_branch,
                 else_branch,
             }) => {
                 let (condition, _) = red(condition, ctx.clone());
                 let (then_branch, _) = red(then_branch, ctx.clone());
-                let else_branch = else_branch.as_ref().map(red_pick_node(ctx.clone()));
+                let else_branch = else_branch.as_ref().map(fn_red_pick_node(ctx.clone()));
 
-                let ast = Ast::IfExpr(IfExpr {
+                let ast = Ast::IfExpr(if_expr::Expr {
                     condition,
                     then_branch,
                     else_branch,
@@ -176,19 +250,97 @@ impl<'a> AstNode<'a> {
             Ast::ImportStatement {
                 import_clause,
                 module,
-            } => todo!(),
-            Ast::LetExpr(_) => todo!(),
-            Ast::MappedType {
+            } => {
+                let ast = Ast::ImportStatement {
+                    import_clause: import_clause.clone(),
+                    module: module.clone(),
+                };
+
+                result(ast, ctx)
+            }
+            Ast::LetExpr(let_expr) => {
+                let (body, _) = red(&let_expr.body, ctx.clone());
+
+                let ast = Ast::LetExpr(LetExpr {
+                    bindings: let_expr.bindings.clone(),
+                    body,
+                });
+
+                result(ast, ctx)
+            }
+            Ast::MappedType(MappedType {
                 index,
                 iterable,
                 remapped_as,
                 readonly_mod,
                 optional_mod,
                 body,
-            } => todo!(),
-            Ast::MatchExpr { value, arms, else_ } => todo!(),
-            Ast::NamespaceAccess(_) => todo!(),
-            Ast::ObjectLiteral(_) => todo!(),
+            }) => {
+                let (iterable, _) = red(iterable, ctx.clone());
+                let remapped_as = remapped_as.as_ref().map(fn_red_pick_node(ctx.clone()));
+                let body = red_pick_node(body, ctx.clone());
+
+                let ast = Ast::MappedType(MappedType {
+                    index: index.clone(),
+                    iterable,
+                    remapped_as,
+                    readonly_mod: readonly_mod.clone(),
+                    optional_mod: optional_mod.clone(),
+                    body,
+                });
+
+                result(ast, ctx)
+            }
+            Ast::MatchExpr(match_expr::Expr {
+                value,
+                arms,
+                else_arm,
+            }) => {
+                let (value, _) = red(value, ctx.clone());
+
+                let arms = arms
+                    .iter()
+                    .map(|arm| {
+                        let mut arm = arm.clone();
+                        arm.pattern = red_pick_node(&arm.pattern, ctx.clone());
+                        arm.body = red_pick_node(&arm.body, ctx.clone());
+                        arm
+                    })
+                    .collect_vec();
+
+                let else_arm = red_pick_node(else_arm, ctx.clone());
+
+                let ast = Ast::MatchExpr(match_expr::Expr {
+                    value,
+                    arms,
+                    else_arm,
+                });
+
+                result(ast, ctx)
+            }
+            Ast::NamespaceAccess(access) => {
+                let lhs = red_pick_node(&access.lhs, ctx.clone());
+                let rhs = red_pick_node(&access.rhs, ctx.clone());
+
+                let ast = Ast::NamespaceAccess(NamespaceAccess { lhs, rhs });
+
+                result(ast, ctx)
+            }
+            Ast::ObjectLiteral(object) => {
+                let properties = object
+                    .properties
+                    .iter()
+                    .map(|prop| {
+                        let mut prop = prop.clone();
+                        prop.value = red_pick_node(&prop.value, ctx.clone());
+                        prop
+                    })
+                    .collect_vec();
+
+                let ast = Ast::ObjectLiteral(ObjectLiteral { properties });
+
+                result(ast, ctx)
+            }
             Ast::Program(statements) => {
                 let mut ctx = ctx.clone();
                 let mut statements = statements.clone();
@@ -207,8 +359,17 @@ impl<'a> AstNode<'a> {
                 let ast = Ast::Statement(inner);
                 result(ast, ctx)
             }
-            Ast::TemplateString(_) => todo!(),
-            Ast::Tuple(_) => todo!(),
+            node @ Ast::TemplateString(_) => result(node.clone(), ctx.clone()),
+            Ast::Tuple(Tuple { items }) => {
+                let items = items
+                    .iter()
+                    .map(|item| red_pick_node(item, ctx.clone()))
+                    .collect_vec();
+
+                let ast = Ast::Tuple(Tuple { items });
+
+                result(ast, ctx)
+            }
             Ast::TypeAlias {
                 export,
                 name,
@@ -226,8 +387,8 @@ impl<'a> AstNode<'a> {
                              default,
                              rest,
                          }| {
-                            let constraint = constraint.as_ref().map(red_pick_node(ctx.clone()));
-                            let default = default.as_ref().map(red_pick_node(ctx.clone()));
+                            let constraint = constraint.as_ref().map(fn_red_pick_node(ctx.clone()));
+                            let default = default.as_ref().map(fn_red_pick_node(ctx.clone()));
 
                             TypeParameter {
                                 name: param_name.clone(),
@@ -319,11 +480,11 @@ impl<'a> AstNode<'a> {
                     rhs: transform(rhs),
                     is_dot: *is_dot,
                 },
-                Ast::IfExpr(IfExpr {
+                Ast::IfExpr(if_expr::Expr {
                     condition,
                     then_branch,
                     else_branch,
-                }) => Ast::from(IfExpr {
+                }) => Ast::from(if_expr::Expr {
                     condition: transform(condition),
                     then_branch: transform(then_branch),
                     else_branch: else_branch.as_ref().map(|v| v.transform(f)),
@@ -355,21 +516,28 @@ impl<'a> AstNode<'a> {
                     transform(then),
                     transform(els),
                 )),
-                Ast::ObjectLiteral(props) => Ast::ObjectLiteral(
-                    props
-                        .iter()
-                        .map(|prop| {
-                            let mut p = prop.clone();
-                            p.value = transform(&prop.value);
-                            p
-                        })
-                        .collect(),
-                ),
-                Ast::Application(name, args) => {
-                    Ast::Application(name.clone(), transform_each(args))
+                Ast::ObjectLiteral(ObjectLiteral { properties: props }) => {
+                    Ast::ObjectLiteral(ObjectLiteral {
+                        properties: props
+                            .iter()
+                            .map(|prop| {
+                                let mut p = prop.clone();
+                                p.value = transform(&prop.value);
+                                p
+                            })
+                            .collect(),
+                    })
                 }
+                Ast::Application(Application { name, args }) => Ast::Application(Application {
+                    name: name.clone(),
+                    args: transform_each(args),
+                }),
 
-                Ast::MatchExpr { value, arms, else_ } => {
+                Ast::MatchExpr(match_expr::Expr {
+                    value,
+                    arms,
+                    else_arm,
+                }) => {
                     let value = transform(value);
 
                     let arms = arms
@@ -382,12 +550,16 @@ impl<'a> AstNode<'a> {
                         })
                         .collect();
 
-                    let else_ = transform(else_);
+                    let else_arm = transform(else_arm);
 
-                    Ast::MatchExpr { value, arms, else_ }
+                    Ast::MatchExpr(match_expr::Expr {
+                        value,
+                        arms,
+                        else_arm,
+                    })
                 }
 
-                Ast::CondExpr { arms, else_ } => {
+                Ast::CondExpr(cond_expr::Expr { arms, else_arm }) => {
                     let arms = arms
                         .iter()
                         .map(|arm| {
@@ -398,9 +570,9 @@ impl<'a> AstNode<'a> {
                         })
                         .collect();
 
-                    let else_ = transform(else_);
+                    let else_arm = transform(else_arm);
 
-                    Ast::CondExpr { arms, else_ }
+                    Ast::CondExpr(cond_expr::Expr { arms, else_arm })
                 }
 
                 Ast::Builtin { name, argument } => Ast::Builtin {
@@ -409,21 +581,21 @@ impl<'a> AstNode<'a> {
                 },
                 Ast::Statement(node) => Ast::Statement(node.transform(f)),
 
-                Ast::MappedType {
+                Ast::MappedType(MappedType {
                     index,
                     iterable,
                     remapped_as,
                     readonly_mod,
                     optional_mod,
                     body,
-                } => Ast::MappedType {
+                }) => Ast::MappedType(MappedType {
                     index: index.clone(),
                     iterable: iterable.transform(f),
                     remapped_as: remapped_as.clone(),
                     readonly_mod: readonly_mod.clone(),
                     optional_mod: optional_mod.clone(),
                     body: body.transform(f),
-                },
+                }),
                 Ast::NoOp => unreachable!(),
                 Ast::LetExpr(let_expr) => *let_expr.resolve_bindings().value,
             }
@@ -433,71 +605,39 @@ impl<'a> AstNode<'a> {
     }
 
     pub fn simplify(&self) -> Self {
-        self.transform(&|node| {
-            match &*(node.value) {
-                // Replace all instances of `IfExpr` with `ExtendsExpr`
-                Ast::IfExpr(if_expr) => if_expr.simplify(),
-                Ast::MatchExpr { .. } => node.simplify_match_expr(),
-                Ast::CondExpr { .. } => node.simplify_cond_expr(),
-                _ => node.clone(),
-            }
+        self.transform(&|tree| {
+            let bindings: Bindings = Default::default();
+            let (tree, _) = tree.traverse(
+                bindings,
+                &|(node, ctx)| {
+                    // dbg!(&node);
+                    (node, ctx)
+                },
+                &|(node, ctx)| match &*node.value {
+                    Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
+                    Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
+                    Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
+                    _ast => (node, ctx),
+                },
+            );
+            tree
         })
-    }
-
-    // Convert match arms to a series of extends expressions.
-    // Allows for a single wildcard pattern ("_") to be used as the default case.
-    fn simplify_match_expr(&self) -> Self {
-        let Ast::MatchExpr {
-            value,
-            arms,
-            else_: else_branch,
-        } = &*self.value
-        else {
-            panic!("Expected MatchExpr, found {self:#?}");
-        };
-
-        let out: AstNode = arms.iter().rev().fold(
-            else_branch.clone(),
-            |acc: AstNode, arm: &MatchArm| -> AstNode {
-                let MatchArm { pattern, body } = arm;
-
-                let span: Option<Span> =
-                    vec![pattern.span, body.span, acc.span]
-                        .iter()
-                        .fold(None, |acc, span| match (acc, span) {
-                            (Some(acc), Some(span)) => pest::merge_spans(&acc, span),
-                            (_, _) => *span,
-                        });
-
-                Node {
-                    span,
-                    value: Box::new(Ast::from(ExtendsExpr::new(
-                        value.clone(),
-                        pattern.clone(),
-                        body.clone(),
-                        acc,
-                    ))),
-                }
-            },
-        );
-
-        out
     }
 
     fn simplify_cond_expr(&self) -> AstNode<'a> {
         // Convert a CondExpr to a series of nested ternary expressions
-        let Ast::CondExpr { arms, else_ } = &*self.value else {
+        let Ast::CondExpr(cond_expr::Expr { arms, else_arm }) = &*self.value else {
             panic!("Expected CondExpr, found {self:#?}");
         };
 
-        let init_else: AstNode<'a> = (else_).clone();
+        let init_else: AstNode<'a> = (else_arm).clone();
 
-        let acc: AstNode<'a> = arms.iter().rev().fold(init_else, |else_, arm| {
-            let CondArm {
+        let acc: AstNode<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
+            let cond_expr::Arm {
                 condition,
                 body: then,
             } = arm;
-            expand_if_expr(condition, then, &else_)
+            if_expr::expand_to_extends(condition, then, &else_arm)
         });
 
         acc
@@ -511,21 +651,50 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn traverse() {
-        let tree = parse!(Rule::program, "type A as if a <: b then c else d end");
-        let tree = tree.traverse(
-            (),
-            &|(node, _)| {
+        let tree = parse!(
+            Rule::program,
+            r#"
+            type A as 1
+
+            type B as
+                if a <: b then
+                    c
+                else
+                    d
+                end
+
+            type C(a) as
+                match a do
+                    number => a,
+                    string => b,
+                    else => c
+                end
+
+            type D(a) as
+                cond do
+                    a <: 1 => a,
+                    else => b
+                end
+            "#
+        );
+        let bindings: Bindings = Default::default();
+        let (tree, _) = tree.traverse(
+            bindings,
+            &|(node, ctx)| {
                 // dbg!(&node);
-                (node, ())
+                (node, ctx)
             },
-            &|(node, _)| match &*node.value {
-                Ast::IfExpr(if_expr) => (if_expr.simplify(), ()),
-                _ast => (node, ()),
+            &|(node, ctx)| match &*node.value {
+                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
+                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
+                Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
+                _ast => (node, ctx),
             },
         );
         // dbg!(&tree);
-        assert_eq!("", tree.0.to_sexpr(80));
+        assert_eq!("", tree.to_sexpr(80));
     }
 }
 
@@ -618,40 +787,6 @@ impl<'a> ExtendsExpr<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct IfExpr<'a> {
-    pub condition: AstNode<'a>,
-    pub then_branch: AstNode<'a>,
-    pub else_branch: Option<AstNode<'a>>,
-}
-
-impl<'a> IfExpr<'a> {
-    fn simplify(&self) -> AstNode<'a> {
-        let else_branch = self
-            .else_branch
-            .as_ref()
-            .map_or_else(|| Node::from(Ast::Never), |v| v.clone());
-
-        expand_if_expr(&self.condition, &self.then_branch, &else_branch)
-    }
-
-    fn pretty_sexpr(&self) -> RcDoc<()> {
-        let mut vec = vec![
-            RcDoc::text("if"),
-            self.condition.pretty_sexpr(),
-            RcDoc::text("then:"),
-            self.then_branch.pretty_sexpr(),
-        ];
-
-        if let Some(else_branch) = &self.else_branch {
-            vec.push(RcDoc::text("else:"));
-            vec.push(else_branch.pretty_sexpr());
-        }
-
-        Ast::sexpr(vec)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LetExpr<'a> {
     pub bindings: HashMap<Identifier, AstNode<'a>>,
     pub body: AstNode<'a>,
@@ -697,6 +832,27 @@ impl PrettySexpr for Tuple<'_> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Application<'a> {
+    pub name: String,
+    pub args: AstNodes<'a>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct MappedType<'a> {
+    pub index: String,
+    pub iterable: AstNode<'a>,
+    pub remapped_as: Option<AstNode<'a>>,
+    pub readonly_mod: Option<MappingModifier>,
+    pub optional_mod: Option<MappingModifier>,
+    pub body: AstNode<'a>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ObjectLiteral<'a> {
+    pub properties: Vec<ObjectProperty<'a>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Ast<'a> {
     Access {
         lhs: AstNode<'a>,
@@ -704,7 +860,7 @@ pub enum Ast<'a> {
         is_dot: bool,
     },
     Any,
-    Application(String, AstNodes<'a>),
+    Application(Application<'a>),
     Array(AstNode<'a>),
     InfixOp {
         lhs: AstNode<'a>,
@@ -715,10 +871,7 @@ pub enum Ast<'a> {
         name: BuiltInKeyword,
         argument: AstNode<'a>,
     },
-    CondExpr {
-        arms: Vec<CondArm<'a>>,
-        else_: AstNode<'a>,
-    },
+    CondExpr(cond_expr::Expr<'a>),
     ExtendsInfixOp {
         lhs: AstNode<'a>,
         op: InfixOp,
@@ -731,31 +884,20 @@ pub enum Ast<'a> {
     },
     False,
     Ident(String),
-    IfExpr(IfExpr<'a>),
+    IfExpr(if_expr::Expr<'a>),
     ImportStatement {
         import_clause: ImportClause,
         module: String,
     },
     LetExpr(LetExpr<'a>),
-    MappedType {
-        index: String,
-        iterable: AstNode<'a>,
-        remapped_as: Option<AstNode<'a>>,
-        readonly_mod: Option<MappingModifier>,
-        optional_mod: Option<MappingModifier>,
-        body: AstNode<'a>,
-    },
-    MatchExpr {
-        value: AstNode<'a>,
-        arms: Vec<MatchArm<'a>>,
-        else_: AstNode<'a>,
-    },
+    MappedType(MappedType<'a>),
+    MatchExpr(match_expr::Expr<'a>),
     NamespaceAccess(NamespaceAccess<'a>),
     Never,
     NoOp,
     Null,
     Number(String),
-    ObjectLiteral(Vec<ObjectProperty<'a>>),
+    ObjectLiteral(ObjectLiteral<'a>),
     Primitive(PrimitiveType),
     Program(AstNodes<'a>),
     Statement(AstNode<'a>),
@@ -773,9 +915,21 @@ pub enum Ast<'a> {
     Unknown,
 }
 
-impl<'a> From<IfExpr<'a>> for Ast<'a> {
-    fn from(v: IfExpr<'a>) -> Self {
+impl<'a> From<if_expr::Expr<'a>> for Ast<'a> {
+    fn from(v: if_expr::Expr<'a>) -> Self {
         Self::IfExpr(v)
+    }
+}
+
+impl<'a> From<match_expr::Expr<'a>> for Ast<'a> {
+    fn from(v: match_expr::Expr<'a>) -> Self {
+        Self::MatchExpr(v)
+    }
+}
+
+impl<'a> From<cond_expr::Expr<'a>> for Ast<'a> {
+    fn from(v: cond_expr::Expr<'a>) -> Self {
+        Self::CondExpr(v)
     }
 }
 
@@ -794,11 +948,11 @@ impl<'a> Ast<'a> {
         match self {
             Ast::Access { .. } => true,
             Ast::Any => true,
-            Ast::Application(_, _) => true,
+            Ast::Application(Application { name: _, args: _ }) => true,
             Ast::Array(_) => true,
             Ast::InfixOp { .. } => true,
             Ast::Builtin { .. } => true,
-            Ast::CondExpr { .. } => false,
+            Ast::CondExpr(cond_expr::Expr { .. }) => false,
             Ast::ExtendsInfixOp { .. } => false,
             Ast::ExtendsExpr(_) => true,
             Ast::ExtendsPrefixOp { .. } => false,
@@ -807,14 +961,14 @@ impl<'a> Ast<'a> {
             Ast::IfExpr { .. } => false,
             Ast::ImportStatement { .. } => true,
             Ast::LetExpr(LetExpr { .. }) => false,
-            Ast::MappedType { .. } => true,
-            Ast::MatchExpr { .. } => false,
+            Ast::MappedType(MappedType { .. }) => true,
+            Ast::MatchExpr(match_expr::Expr { .. }) => false,
             Ast::NamespaceAccess(_) => true,
             Ast::Never => true,
             Ast::NoOp => false,
             Ast::Null => true,
             Ast::Number(_) => true,
-            Ast::ObjectLiteral(_) => true,
+            Ast::ObjectLiteral(ObjectLiteral { properties: _ }) => true,
             Ast::Primitive(_) => true,
             Ast::Program(_) => true,
             Ast::Statement(_) => true,
@@ -889,7 +1043,7 @@ impl<'a> PrettySexpr for Ast<'a> {
                 ])
             }
             Ast::Any => RcDoc::text("any"),
-            Ast::Application(name, args) => Ast::sexpr(
+            Ast::Application(Application { name, args }) => Ast::sexpr(
                 vec![RcDoc::text(name)]
                     .into_iter()
                     .chain(args.iter().map(|n| n.pretty_sexpr()))
@@ -912,7 +1066,7 @@ impl<'a> PrettySexpr for Ast<'a> {
 
                 Ast::sexpr(vec![RcDoc::text(name), argument.pretty_sexpr()])
             }
-            Ast::CondExpr { .. } => todo!(),
+            Ast::CondExpr(cond_expr) => cond_expr.pretty_sexpr(),
             Ast::ExtendsInfixOp { lhs, op, rhs } => {
                 let op = match op {
                     InfixOp::Extends => "<:",
@@ -956,14 +1110,14 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::IfExpr(if_expr) => if_expr.pretty_sexpr(),
             Ast::ImportStatement { .. } => todo!(),
             Ast::LetExpr(let_expr) => let_expr.pretty_sexpr(),
-            Ast::MappedType { .. } => todo!(),
-            Ast::MatchExpr { .. } => todo!(),
+            Ast::MappedType(MappedType { .. }) => todo!(),
+            Ast::MatchExpr(match_expr::Expr { .. }) => todo!(),
             Ast::NamespaceAccess(namespace_access) => namespace_access.pretty_sexpr(),
             Ast::Never => todo!(),
             Ast::NoOp => todo!(),
             Ast::Null => todo!(),
             Ast::Number(number) => RcDoc::text(number),
-            Ast::ObjectLiteral(_) => todo!(),
+            Ast::ObjectLiteral(ObjectLiteral { properties: _ }) => todo!(),
             Ast::Primitive(primitive) => primitive.pretty_sexpr(),
             Ast::Program(statements) => {
                 let mut vec = vec![RcDoc::text("program")];
@@ -1004,94 +1158,6 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::Undefined => todo!(),
             Ast::Unknown => todo!(),
         }
-    }
-}
-
-/// Expands an if expression into a series of nested ternary expressions
-fn expand_if_expr<'a>(
-    condition: &AstNode<'a>,
-    then: &AstNode<'a>,
-    else_: &AstNode<'a>,
-) -> AstNode<'a> {
-    // Recursive operations
-    let out: Option<AstNode<'a>> = match &*condition.value {
-        // Unary operators
-        Ast::ExtendsPrefixOp { op, value } => {
-            match op {
-                // Swap `then` and `else` branches
-                PrefixOp::Not if value.value.is_compatible_with_not_prefix_op() => {
-                    Some(expand_if_expr(&value, else_, then))
-                }
-                PrefixOp::Infer => todo!(),
-                _ => {
-                    unreachable!("Expected `not` or `infer` prefix operator, found {condition:#?}")
-                }
-            }
-        }
-        Ast::ExtendsInfixOp { lhs, op, rhs } => match op {
-            InfixOp::And => {
-                let then = expand_if_expr(&rhs, then, else_);
-                Some(expand_if_expr(&lhs, &then, else_))
-            }
-            InfixOp::Or => {
-                let else_ = expand_if_expr(&rhs, then, else_);
-                Some(expand_if_expr(&lhs, then, &else_))
-            }
-            _ => None,
-        },
-        _ => panic!("Expected extends operator, found {condition:#?}"),
-    };
-
-    if let Some(v) = out {
-        return v;
-    }
-
-    // Terminal nodes
-    match &*condition.value {
-        // Binary operators
-        Ast::ExtendsInfixOp { lhs, op, rhs } => {
-            // TODO report a syntax error here
-            // need to include spans in ASTNode<'a>
-            if !lhs.value.is_typescript_feature() {
-                dbg!(&lhs);
-                unreachable!("value must be desugared before this point");
-            }
-
-            if !rhs.value.is_typescript_feature() {
-                dbg!(rhs.value.to_sexpr(80));
-                unreachable!("value must be desugared before this point");
-            }
-
-            match op {
-                // Equivalent to `lhs extends rhs ? then : else`
-                InfixOp::Extends => {
-                    // FIXME missing span
-                    Ast::from(ExtendsExpr::new(
-                        lhs.clone(),
-                        rhs.clone(),
-                        then.clone(),
-                        else_.clone(),
-                    ))
-                    .into()
-                }
-                InfixOp::NotExtends => {
-                    // FIXME missing span
-                    Ast::from(ExtendsExpr::new(
-                        lhs.clone(),
-                        rhs.clone(),
-                        else_.clone(),
-                        then.clone(),
-                    ))
-                    .into()
-                }
-                InfixOp::Equals => todo!(),
-                InfixOp::NotEquals => todo!(),
-                InfixOp::StrictEquals => todo!(),
-                InfixOp::StrictNotEquals => todo!(),
-                _ => unreachable!(),
-            }
-        }
-        _ => panic!("Expected extends operator, found {condition:#?}"),
     }
 }
 
@@ -1317,7 +1383,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }),
             Ast::String(string) => string_literal(string),
             Ast::TemplateString(string) => RcDoc::text(string),
-            Ast::IfExpr(IfExpr { .. }) => {
+            Ast::IfExpr(if_expr::Expr { .. }) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
             Ast::Access {
@@ -1342,14 +1408,17 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 .append(rhs.to_ts())
                 .append(RcDoc::text("]"))
                 .group(),
-            Ast::ObjectLiteral(props) => {
+            Ast::ObjectLiteral(ObjectLiteral { properties: props }) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
                 let props = RcDoc::intersperse(props.iter().map(|prop| prop.to_ts()), sep);
 
                 RcDoc::text("{").append(props).append(RcDoc::text("}"))
             }
-            Ast::Application(ident, params) => {
+            Ast::Application(Application {
+                name: ident,
+                args: params,
+            }) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
                 let params = RcDoc::intersperse(params.iter().map(|param| param.to_ts()), sep);
@@ -1445,14 +1514,14 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 .append(rhs.to_ts())
                 .group(),
             Ast::Statement(stmnt) => stmnt.to_ts().append(RcDoc::text(";")),
-            Ast::MappedType {
+            Ast::MappedType(MappedType {
                 index: key,
                 iterable,
                 remapped_as,
                 readonly_mod,
                 optional_mod,
                 body,
-            } => {
+            }) => {
                 let remapped_as_doc = match remapped_as {
                     Some(remapped_as) => RcDoc::space()
                         .append("as")
@@ -1526,8 +1595,8 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }
             Ast::NoOp => todo!(),
             node @ (Ast::ExtendsPrefixOp { .. }
-            | Ast::MatchExpr { .. }
-            | Ast::CondExpr { .. }
+            | Ast::MatchExpr(match_expr::Expr { .. })
+            | Ast::CondExpr(cond_expr::Expr { .. })
             | Ast::ExtendsInfixOp { .. }) => {
                 unreachable!(
                     "ASTNode<'a> should be desugared before this point {:#?}",
@@ -1665,18 +1734,6 @@ pub enum MappingModifier {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct MatchArm<'a> {
-    pub pattern: AstNode<'a>,
-    pub body: AstNode<'a>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct CondArm<'a> {
-    pub condition: AstNode<'a>,
-    pub body: AstNode<'a>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ObjectProperty<'a> {
     pub readonly: bool,
     pub optional: bool,
@@ -1752,10 +1809,10 @@ impl<'a> TypeParameter<'a> {
             RcDoc::text(self.name.clone()),
             self.constraint
                 .as_ref()
-                .map_or_else(|| RcDoc::nil(), |v| v.pretty_sexpr()),
+                .map_or_else(RcDoc::nil, |v| v.pretty_sexpr()),
             self.default
                 .as_ref()
-                .map_or_else(|| RcDoc::nil(), |v| v.pretty_sexpr()),
+                .map_or_else(RcDoc::nil, |v| v.pretty_sexpr()),
         ])
     }
 }
@@ -1789,5 +1846,245 @@ impl<'a> typescript::Pretty for TypeParameter<'a> {
             .append(self.name.clone())
             .append(constraint)
             .append(default_value)
+    }
+}
+
+pub(crate) mod if_expr {
+    use pretty::RcDoc;
+
+    use super::{Ast, AstNode, ExtendsExpr, InfixOp, Node, PrefixOp, PrettySexpr};
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub struct Expr<'a> {
+        pub condition: AstNode<'a>,
+        pub then_branch: AstNode<'a>,
+        pub else_branch: Option<AstNode<'a>>,
+    }
+
+    impl<'a> Expr<'a> {
+        pub(crate) fn simplify(&self) -> AstNode<'a> {
+            let else_branch = self
+                .else_branch
+                .as_ref()
+                .map_or_else(|| Node::from(Ast::Never), |v| v.clone());
+
+            expand_to_extends(&self.condition, &self.then_branch, &else_branch)
+        }
+    }
+
+    impl<'a> PrettySexpr for Expr<'a> {
+        fn pretty_sexpr(&self) -> RcDoc<()> {
+            let mut vec = vec![
+                RcDoc::text("if"),
+                self.condition.pretty_sexpr(),
+                RcDoc::text("then:"),
+                self.then_branch.pretty_sexpr(),
+            ];
+
+            if let Some(else_branch) = &self.else_branch {
+                vec.push(RcDoc::text("else:"));
+                vec.push(else_branch.pretty_sexpr());
+            }
+
+            Ast::sexpr(vec)
+        }
+    }
+
+    /// Expands an if expression into a series of nested ternary expressions
+    pub(crate) fn expand_to_extends<'a>(
+        condition: &AstNode<'a>,
+        then: &AstNode<'a>,
+        else_arm: &AstNode<'a>,
+    ) -> AstNode<'a> {
+        // Recursive operations
+        let out: Option<AstNode<'a>> = match &*condition.value {
+            // Unary operators
+            Ast::ExtendsPrefixOp { op, value } => {
+                match op {
+                    // Swap `then` and `else` branches
+                    PrefixOp::Not if value.value.is_compatible_with_not_prefix_op() => {
+                        Some(expand_to_extends(value, else_arm, then))
+                    }
+                    PrefixOp::Infer => todo!(),
+                    _ => {
+                        unreachable!(
+                            "Expected `not` or `infer` prefix operator, found {condition:#?}"
+                        )
+                    }
+                }
+            }
+            Ast::ExtendsInfixOp { lhs, op, rhs } => match op {
+                InfixOp::And => {
+                    let then = expand_to_extends(rhs, then, else_arm);
+                    Some(expand_to_extends(lhs, &then, else_arm))
+                }
+                InfixOp::Or => {
+                    let else_arm = expand_to_extends(rhs, then, else_arm);
+                    Some(expand_to_extends(lhs, then, &else_arm))
+                }
+                _ => None,
+            },
+            _ => panic!("Expected extends operator, found {condition:#?}"),
+        };
+
+        if let Some(v) = out {
+            return v;
+        }
+
+        // Terminal nodes
+        match &*condition.value {
+            // Binary operators
+            Ast::ExtendsInfixOp { lhs, op, rhs } => {
+                // TODO report a syntax error here
+                // need to include spans in ASTNode<'a>
+                if !lhs.value.is_typescript_feature() {
+                    dbg!(&lhs);
+                    unreachable!("value must be desugared before this point");
+                }
+
+                if !rhs.value.is_typescript_feature() {
+                    dbg!(rhs.value.to_sexpr(80));
+                    unreachable!("value must be desugared before this point");
+                }
+
+                match op {
+                    // Equivalent to `lhs extends rhs ? then : else`
+                    InfixOp::Extends => {
+                        // FIXME missing span
+                        Ast::from(ExtendsExpr::new(
+                            lhs.clone(),
+                            rhs.clone(),
+                            then.clone(),
+                            else_arm.clone(),
+                        ))
+                        .into()
+                    }
+                    InfixOp::NotExtends => {
+                        // FIXME missing span
+                        Ast::from(ExtendsExpr::new(
+                            lhs.clone(),
+                            rhs.clone(),
+                            else_arm.clone(),
+                            then.clone(),
+                        ))
+                        .into()
+                    }
+                    InfixOp::Equals => todo!("equals"),
+                    InfixOp::NotEquals => todo!("not equals"),
+                    InfixOp::StrictEquals => todo!("strict equals"),
+                    InfixOp::StrictNotEquals => todo!("strict not equals"),
+                    _ => unreachable!(),
+                }
+            }
+            _ => panic!("Expected extends operator, found {condition:#?}"),
+        }
+    }
+}
+
+pub(crate) mod match_expr {
+    use pest::Span;
+
+    use super::{Ast, AstNode, ExtendsExpr, Node};
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub struct Expr<'a> {
+        pub value: AstNode<'a>,
+        pub arms: Vec<Arm<'a>>,
+        pub else_arm: AstNode<'a>,
+    }
+
+    impl<'a> Expr<'a> {
+        pub(crate) fn simplify(&self) -> AstNode<'a> {
+            // Convert match arms to a series of extends expressions.
+            // Allows for a single wildcard pattern ("_") to be used as the default case.
+            let Expr {
+                value,
+                arms,
+                else_arm,
+            } = self;
+
+            arms.iter()
+                .rev()
+                .fold(else_arm.clone(), |acc: AstNode, arm: &Arm| -> AstNode {
+                    let Arm { pattern, body } = arm;
+
+                    // FIXME missing span
+                    Node {
+                        span: None,
+                        value: Box::new(Ast::from(ExtendsExpr::new(
+                            value.clone(),
+                            pattern.clone(),
+                            body.clone(),
+                            acc,
+                        ))),
+                    }
+                })
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub struct Arm<'a> {
+        pub pattern: AstNode<'a>,
+        pub body: AstNode<'a>,
+    }
+}
+
+pub(crate) mod cond_expr {
+    use super::{if_expr, AstNode, PrettySexpr};
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub struct Expr<'a> {
+        pub arms: Vec<Arm<'a>>,
+        /// Unlike match and if expressions, the else arm is *not* optional
+        pub else_arm: AstNode<'a>,
+    }
+
+    impl<'a> Expr<'a> {
+        pub(crate) fn simplify(&self) -> AstNode<'a> {
+            // Convert a CondExpr to a series of nested ternary expressions
+            let Expr { arms, else_arm } = self;
+
+            let init_else: AstNode<'a> = (else_arm).clone();
+
+            let acc: AstNode<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
+                let Arm {
+                    condition,
+                    body: then,
+                } = arm;
+
+                if_expr::expand_to_extends(condition, then, &else_arm)
+            });
+
+            acc
+        }
+    }
+
+    impl<'a> PrettySexpr for Expr<'a> {
+        fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
+            let mut vec = vec![pretty::RcDoc::text("cond")];
+
+            for arm in &self.arms {
+                vec.push(arm.pretty_sexpr());
+            }
+
+            vec.push(self.else_arm.pretty_sexpr());
+
+            super::Ast::sexpr(vec)
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub struct Arm<'a> {
+        pub condition: AstNode<'a>,
+        pub body: AstNode<'a>,
+    }
+
+    impl<'a> PrettySexpr for Arm<'a> {
+        fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
+            super::Ast::sexpr(vec![
+                pretty::RcDoc::text("when"),
+                self.condition.pretty_sexpr(),
+            ])
+        }
     }
 }
