@@ -98,6 +98,22 @@ pub(crate) type AstNodes<'a> = Vec<Node<'a, Ast<'a>>>;
 type Bindings<'a> = HashMap<Identifier, AstNode<'a>>;
 
 impl<'a> AstNode<'a> {
+    pub fn prewalk<Context, F>(&self, ctx: Context, pre: &F) -> (Self, Context)
+    where
+        Context: Clone,
+        F: Fn(Self, Context) -> (Self, Context),
+    {
+        self.traverse(ctx, pre, &|n, c| (n, c))
+    }
+
+    pub fn postwalk<Context, F>(&self, ctx: Context, post: &F) -> (Self, Context)
+    where
+        Context: Clone,
+        F: Fn(Self, Context) -> (Self, Context),
+    {
+        self.traverse(ctx, &|n, c| (n, c), post)
+    }
+
     pub fn traverse<Context, Pre, Post>(
         &self,
         ctx: Context,
@@ -106,8 +122,8 @@ impl<'a> AstNode<'a> {
     ) -> (Self, Context)
     where
         Context: Clone,
-        Pre: Fn((Self, Context)) -> (Self, Context),
-        Post: Fn((Self, Context)) -> (Self, Context),
+        Pre: Fn(Self, Context) -> (Self, Context),
+        Post: Fn(Self, Context) -> (Self, Context),
     {
         /// Extract the node from the tuple
         fn pick_node<T>((node, _ctx): (AstNode, T)) -> AstNode {
@@ -134,7 +150,7 @@ impl<'a> AstNode<'a> {
         let fn_red_pick_node =
             move |ctx| move |node: &AstNode<'a>| pick_node(node.traverse(ctx, pre, post));
 
-        let (node, ctx) = pre((self.clone(), ctx));
+        let (node, ctx) = pre(self.clone(), ctx);
 
         let (node, ctx) = match &*self.value {
             Ast::Access { lhs, rhs, is_dot } => {
@@ -261,7 +277,7 @@ impl<'a> AstNode<'a> {
             Ast::LetExpr(let_expr) => {
                 let (body, _) = red(&let_expr.body, ctx.clone());
 
-                let ast = Ast::LetExpr(LetExpr {
+                let ast = Ast::LetExpr(let_expr::Expr {
                     bindings: let_expr.bindings.clone(),
                     body,
                 });
@@ -412,7 +428,7 @@ impl<'a> AstNode<'a> {
             _ => (node, ctx),
         };
 
-        let (node, acc) = post((node, ctx));
+        let (node, acc) = post(node, ctx);
 
         (node, acc)
     }
@@ -421,14 +437,12 @@ impl<'a> AstNode<'a> {
         let bindings: Bindings = Default::default();
         let (tree, _) = self.traverse(
             bindings,
-            &|(node, ctx)| {
-                // dbg!(&node);
-                (node, ctx)
-            },
-            &|(node, ctx)| match &*node.value {
+            &|node, ctx| (node, ctx),
+            &|node, ctx| match &*node.value {
                 Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
                 Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
                 Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
+                Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
                 _ast => (node, ctx),
             },
         );
@@ -474,11 +488,8 @@ mod tests {
         let bindings: Bindings = Default::default();
         let (tree, _) = tree.traverse(
             bindings,
-            &|(node, ctx)| {
-                // dbg!(&node);
-                (node, ctx)
-            },
-            &|(node, ctx)| match &*node.value {
+            &|node, ctx| (node, ctx),
+            &|node, ctx| match &*node.value {
                 Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
                 Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
                 Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
@@ -543,40 +554,6 @@ impl<'a> ExtendsExpr<'a> {
             then_branch,
             else_branch,
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct LetExpr<'a> {
-    pub bindings: HashMap<Identifier, AstNode<'a>>,
-    pub body: AstNode<'a>,
-}
-
-impl<'a> LetExpr<'a> {
-    fn resolve_bindings(&self) -> AstNode<'a> {
-        dbg!(self.to_sexpr(80));
-        // let bindings = self.bindings.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-        // let f = resolve_let_bindings(&bindings);
-        //
-        // self.body.transform(&f)
-        todo!()
-    }
-}
-
-impl PrettySexpr for LetExpr<'_> {
-    fn pretty_sexpr(&self) -> RcDoc<()> {
-        let mut bindings = vec![];
-
-        for (ident, value) in &self.bindings {
-            bindings.push(ident.pretty_sexpr().append(":"));
-            bindings.push(value.pretty_sexpr());
-        }
-
-        Ast::sexpr(vec![
-            RcDoc::text("let"),
-            Ast::sexpr(bindings),
-            self.body.pretty_sexpr(),
-        ])
     }
 }
 
@@ -649,7 +626,7 @@ pub enum Ast<'a> {
         import_clause: ImportClause,
         module: String,
     },
-    LetExpr(LetExpr<'a>),
+    LetExpr(let_expr::Expr<'a>),
     MappedType(MappedType<'a>),
     MatchExpr(match_expr::Expr<'a>),
     NamespaceAccess(NamespaceAccess<'a>),
@@ -720,7 +697,7 @@ impl<'a> Ast<'a> {
             Ast::Ident(_) => true,
             Ast::IfExpr { .. } => false,
             Ast::ImportStatement { .. } => true,
-            Ast::LetExpr(LetExpr { .. }) => false,
+            Ast::LetExpr(let_expr::Expr { .. }) => false,
             Ast::MappedType(MappedType { .. }) => true,
             Ast::MatchExpr(match_expr::Expr { .. }) => false,
             Ast::NamespaceAccess(_) => true,
@@ -1333,7 +1310,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .append("}")
                     .group()
             }
-            Ast::LetExpr(LetExpr { .. }) => {
+            Ast::LetExpr(..) => {
                 unreachable!("LetExpr should be desugared before this point")
             }
             Ast::ImportStatement {
@@ -1849,6 +1826,50 @@ pub(crate) mod cond_expr {
     }
 }
 
+pub(crate) mod let_expr {
+    use pretty::RcDoc;
+
+    use super::{Ast, AstNode, Identifier, PrettySexpr};
+
+    use std::collections::HashMap;
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub struct Expr<'a> {
+        pub bindings: HashMap<Identifier, AstNode<'a>>,
+        pub body: AstNode<'a>,
+    }
+
+    impl<'a> Expr<'a> {
+        /// Replace all identifiers in the body of the let expression with their corresponding
+        /// values
+        pub(crate) fn simplify(&self) -> super::Node<'a, Ast<'a>> {
+            let bindings = self.bindings.clone();
+            let (tree, _) = self.body.prewalk(bindings, &|node, bindings| {
+                dbg!(&node, &bindings);
+                (node, bindings)
+            });
+            tree
+        }
+    }
+
+    impl PrettySexpr for Expr<'_> {
+        fn pretty_sexpr(&self) -> RcDoc<()> {
+            let mut bindings = vec![];
+
+            for (ident, value) in &self.bindings {
+                bindings.push(ident.pretty_sexpr().append(":"));
+                bindings.push(value.pretty_sexpr());
+            }
+
+            Ast::sexpr(vec![
+                RcDoc::text("let"),
+                Ast::sexpr(bindings),
+                self.body.pretty_sexpr(),
+            ])
+        }
+    }
+}
+
 // fn resolve_let_bindings<'a>(
 //     bindings: &'a HashMap<Identifier, ASTNode<'a>>,
 // ) -> impl Fn(ASTNode) -> ASTNode + 'a {
@@ -1880,4 +1901,3 @@ pub(crate) mod cond_expr {
 //         _ => node.clone(),
 //     }
 // }
-
