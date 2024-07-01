@@ -570,7 +570,7 @@ impl PrettySexpr for Tuple<'_> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Application<'a> {
-    pub name: String,
+    pub name: Identifier,
     pub args: AstNodes<'a>,
 }
 
@@ -620,7 +620,7 @@ pub enum Ast<'a> {
         value: AstNode<'a>,
     },
     False,
-    Ident(String),
+    Ident(Identifier),
     IfExpr(if_expr::Expr<'a>),
     ImportStatement {
         import_clause: ImportClause,
@@ -644,7 +644,7 @@ pub enum Ast<'a> {
     Tuple(Tuple<'a>),
     TypeAlias {
         export: bool,
-        name: String,
+        name: Identifier,
         params: Vec<TypeParameter<'a>>,
         body: AstNode<'a>,
     },
@@ -719,14 +719,6 @@ impl<'a> Ast<'a> {
         }
     }
 
-    pub fn as_ident(&self) -> Option<&String> {
-        if let Self::Ident(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
     /// Returns `true` if the node is [`ExtendsPrefixOp`].
     ///
     /// [`ExtendsPrefixOp`]: ASTNode<'a>::ExtendsPrefixOp
@@ -750,311 +742,13 @@ impl<'a> Ast<'a> {
     pub fn is_infix_op(&self) -> bool {
         matches!(self, Self::InfixOp { .. })
     }
-}
 
-impl<'a> From<ExtendsExpr<'a>> for Ast<'a> {
-    fn from(v: ExtendsExpr<'a>) -> Self {
-        Ast::ExtendsExpr(v)
-    }
-}
-
-impl<'a, T> PrettySexpr for Node<'a, T>
-where
-    T: PrettySexpr,
-{
-    fn pretty_sexpr(&self) -> RcDoc {
-        self.value.pretty_sexpr()
-    }
-}
-
-impl<'a> PrettySexpr for Ast<'a> {
-    fn pretty_sexpr(&self) -> RcDoc {
-        match self {
-            Ast::Access { lhs, rhs, is_dot } => {
-                let op = if *is_dot { "." } else { ".[]" };
-
-                Ast::sexpr(vec![
-                    RcDoc::text(op),
-                    lhs.pretty_sexpr(),
-                    rhs.pretty_sexpr(),
-                ])
-            }
-            Ast::Any => RcDoc::text("any"),
-            Ast::Application(Application { name, args }) => Ast::sexpr(
-                vec![RcDoc::text(name)]
-                    .into_iter()
-                    .chain(args.iter().map(|n| n.pretty_sexpr()))
-                    .collect_vec(),
-            ),
-            Ast::Array(value) => Ast::sexpr(vec![RcDoc::text("[]"), value.pretty_sexpr()]),
-            Ast::InfixOp { lhs, op, rhs } => Ast::sexpr(vec![
-                RcDoc::text(match op {
-                    Op::Union => "&",
-                    Op::Intersection => "|",
-                }),
-                lhs.pretty_sexpr(),
-                rhs.pretty_sexpr(),
-            ]),
-
-            Ast::Builtin { name, argument } => {
-                let name = match name {
-                    BuiltInKeyword::Keyof => "keyof",
-                };
-
-                Ast::sexpr(vec![RcDoc::text(name), argument.pretty_sexpr()])
-            }
-            Ast::CondExpr(cond_expr) => cond_expr.pretty_sexpr(),
-            Ast::ExtendsInfixOp { lhs, op, rhs } => {
-                let op = match op {
-                    InfixOp::Extends => "<:",
-                    InfixOp::NotExtends => "</",
-                    InfixOp::Equals => "==",
-                    InfixOp::NotEquals => "!=",
-                    InfixOp::StrictEquals => "===",
-                    InfixOp::StrictNotEquals => "!==",
-                    InfixOp::And => "and",
-                    InfixOp::Or => "or",
-                };
-
-                Ast::sexpr(vec![
-                    RcDoc::text(op),
-                    lhs.pretty_sexpr(),
-                    rhs.pretty_sexpr(),
-                ])
-            }
-            Ast::ExtendsExpr(ExtendsExpr {
-                lhs,
-                rhs,
-                then_branch,
-                else_branch,
-            }) => Ast::sexpr(vec![
-                RcDoc::text("extends"),
-                lhs.pretty_sexpr(),
-                rhs.pretty_sexpr(),
-                then_branch.pretty_sexpr(),
-                else_branch.pretty_sexpr(),
-            ]),
-            Ast::ExtendsPrefixOp { op, value } => {
-                let op = match op {
-                    PrefixOp::Not => "not",
-                    PrefixOp::Infer => "infer",
-                };
-
-                Ast::sexpr(vec![RcDoc::text(op), value.pretty_sexpr()])
-            }
-            Ast::False => todo!(),
-            Ast::Ident(ident) => RcDoc::text(ident),
-            Ast::IfExpr(if_expr) => if_expr.pretty_sexpr(),
-            Ast::ImportStatement { .. } => todo!(),
-            Ast::LetExpr(let_expr) => let_expr.pretty_sexpr(),
-            Ast::MappedType(MappedType { .. }) => todo!(),
-            Ast::MatchExpr(match_expr::Expr { .. }) => todo!(),
-            Ast::NamespaceAccess(namespace_access) => namespace_access.pretty_sexpr(),
-            Ast::Never => todo!(),
-            Ast::NoOp => todo!(),
-            Ast::Null => todo!(),
-            Ast::Number(number) => RcDoc::text(number),
-            Ast::ObjectLiteral(ObjectLiteral { properties: _ }) => todo!(),
-            Ast::Primitive(primitive) => primitive.pretty_sexpr(),
-            Ast::Program(statements) => {
-                let mut vec = vec![RcDoc::text("program")];
-
-                vec.extend(statements.iter().map(|s| s.pretty_sexpr()));
-
-                Ast::sexpr(vec)
-            }
-            Ast::Statement(inner) => inner.pretty_sexpr(),
-            Ast::String(_) => todo!(),
-            Ast::TemplateString(_) => todo!(),
-            Ast::True => todo!(),
-            Ast::Tuple(tuple) => tuple.pretty_sexpr(),
-            Ast::TypeAlias {
-                export,
-                name,
-                params,
-                body,
-            } => {
-                let mut vec = vec![RcDoc::text("type"), RcDoc::text(name)];
-
-                if *export {
-                    vec.push(RcDoc::text(":export"));
-                }
-
-                if !params.is_empty() {
-                    vec.push(Ast::sexpr(
-                        params.iter().map(|p| p.pretty_sexpr()).collect(),
-                    ));
-                }
-
-                vec.push(RcDoc::text("as:"));
-
-                vec.push(body.pretty_sexpr());
-
-                Ast::sexpr(vec)
-            }
-            Ast::Undefined => todo!(),
-            Ast::Unknown => todo!(),
+    pub fn as_ident(&self) -> Option<&Identifier> {
+        if let Self::Ident(v) = self {
+            Some(v)
+        } else {
+            None
         }
-    }
-}
-
-#[cfg(test)]
-mod simplify_tests {
-
-    use super::*;
-    use crate::{
-        ast::{
-            self,
-            Ast::{self, *},
-        },
-        parser::Rule::expr,
-        pest::Parser,
-        test_support::parse,
-    };
-    use pretty_assertions::{assert_eq, assert_ne};
-
-    #[test]
-    fn simplify_basic() {
-        assert_eq!(
-            parse!(expr, "if a <: b then c else d end")
-                .simplify()
-                .to_sexpr(80),
-            "(extends a b c d)"
-        )
-    }
-
-    #[test]
-    fn simplify_not() {
-        assert_eq!(
-            parse!(
-                expr,
-                r#"
-                if a <: b then
-                    d
-                else
-                    c
-                end
-                "#
-            )
-            .simplify()
-            .to_sexpr(80),
-            parse!(
-                expr,
-                r#"
-                if not (a <: b) then
-                    c
-                else
-                    d
-                end
-                "#
-            )
-            .simplify()
-            .to_sexpr(80),
-        )
-    }
-
-    #[test]
-    fn simplify_and() {
-        assert_eq!(
-            parse!(
-                expr,
-                r#"
-                if a <: b and c <: d then
-                    e
-                else
-                    f
-                end
-                "#
-            )
-            .simplify()
-            .to_sexpr(80),
-            parse!(
-                expr,
-                r#"
-                if a <: b then
-                    if c <: d then
-                        e
-                    else
-                        f
-                    end
-                else
-                    f
-                end
-                "#
-            )
-            .simplify()
-            .to_sexpr(80),
-        )
-    }
-
-    #[test]
-    fn simplify_or() {
-        assert_eq!(
-            parse!(
-                expr,
-                r#"
-                if a <: b or c <: d
-                then e
-                else f
-                end
-                "#
-            )
-            .simplify()
-            .to_sexpr(80),
-            parse!(
-                expr,
-                r#"
-                if a <: b then e
-                else
-                    if c <: d then e
-                    else f
-                    end
-                end
-                "#
-            )
-            .simplify()
-            .to_sexpr(80),
-        )
-    }
-
-    #[test]
-    fn simplify_match_expr() {
-        assert_eq!(
-            parse!(
-                expr,
-                r#"
-                match A do
-                    number => 1,
-                    string => 2,
-                    else => 3
-                end
-                "#
-            )
-            .simplify()
-            .to_sexpr(80),
-            parse!(
-                expr,
-                r#"
-                if A <: number then 1
-                else
-                    if A <: string then 2
-                    else 3
-                    end
-                end
-                "#
-            )
-            .simplify()
-            .to_sexpr(80)
-        )
-    }
-}
-
-impl<'a, T> typescript::Pretty for Node<'a, T>
-where
-    T: typescript::Pretty,
-{
-    fn to_ts(&self) -> pretty::RcDoc<()> {
-        self.value.to_ts()
     }
 }
 
@@ -1104,14 +798,14 @@ impl<'a> typescript::Pretty for Ast<'a> {
 
                 doc.append("type")
                     .append(RcDoc::space())
-                    .append(name)
+                    .append(name.pretty())
                     .append(params_doc)
                     .append(RcDoc::space())
                     .append("=")
                     .append(RcDoc::line().append(body).nest(4))
                     .group()
             }
-            Ast::Ident(ident) => RcDoc::text(ident),
+            Ast::Ident(identifier) => identifier.pretty(),
             Ast::Number(number) => RcDoc::text(number),
             Ast::Primitive(primitive) => RcDoc::text(match primitive {
                 PrimitiveType::Boolean => "boolean",
@@ -1135,7 +829,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
 
                 lhs.to_ts()
                     .append(RcDoc::text("["))
-                    .append(string_literal(rhs))
+                    .append(string_literal(rhs.0.as_str()))
                     .append(RcDoc::text("]"))
                     .group()
             }
@@ -1158,9 +852,14 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
 
-                let params = RcDoc::intersperse(params.iter().map(|param| param.to_ts()), sep);
+                let generic_inner =
+                    RcDoc::intersperse(params.iter().map(|param| param.to_ts()), sep);
 
-                RcDoc::text(ident).append(RcDoc::text("<").append(params).append(RcDoc::text(">")))
+                let generic_params = RcDoc::text("<")
+                    .append(generic_inner)
+                    .append(RcDoc::text(">"));
+
+                ident.pretty().append(generic_params)
             }
             Ast::Tuple(Tuple { items }) => {
                 let sep = RcDoc::text(",").append(RcDoc::space());
@@ -1344,6 +1043,312 @@ impl<'a> typescript::Pretty for Ast<'a> {
     }
 }
 
+impl<'a> From<ExtendsExpr<'a>> for Ast<'a> {
+    fn from(v: ExtendsExpr<'a>) -> Self {
+        Ast::ExtendsExpr(v)
+    }
+}
+
+impl<'a> PrettySexpr for Ast<'a> {
+    fn pretty_sexpr(&self) -> RcDoc {
+        match self {
+            Ast::Access { lhs, rhs, is_dot } => {
+                let op = if *is_dot { "." } else { ".[]" };
+
+                Ast::sexpr(vec![
+                    RcDoc::text(op),
+                    lhs.pretty_sexpr(),
+                    rhs.pretty_sexpr(),
+                ])
+            }
+            Ast::Any => RcDoc::text("any"),
+            Ast::Application(Application { name, args }) => Ast::sexpr(
+                vec![name.pretty()]
+                    .into_iter()
+                    .chain(args.iter().map(|n| n.pretty_sexpr()))
+                    .collect_vec(),
+            ),
+            Ast::Array(value) => Ast::sexpr(vec![RcDoc::text("[]"), value.pretty_sexpr()]),
+            Ast::InfixOp { lhs, op, rhs } => Ast::sexpr(vec![
+                RcDoc::text(match op {
+                    Op::Union => "&",
+                    Op::Intersection => "|",
+                }),
+                lhs.pretty_sexpr(),
+                rhs.pretty_sexpr(),
+            ]),
+
+            Ast::Builtin { name, argument } => {
+                let name = match name {
+                    BuiltInKeyword::Keyof => "keyof",
+                };
+
+                Ast::sexpr(vec![RcDoc::text(name), argument.pretty_sexpr()])
+            }
+            Ast::CondExpr(cond_expr) => cond_expr.pretty_sexpr(),
+            Ast::ExtendsInfixOp { lhs, op, rhs } => {
+                let op = match op {
+                    InfixOp::Extends => "<:",
+                    InfixOp::NotExtends => "</",
+                    InfixOp::Equals => "==",
+                    InfixOp::NotEquals => "!=",
+                    InfixOp::StrictEquals => "===",
+                    InfixOp::StrictNotEquals => "!==",
+                    InfixOp::And => "and",
+                    InfixOp::Or => "or",
+                };
+
+                Ast::sexpr(vec![
+                    RcDoc::text(op),
+                    lhs.pretty_sexpr(),
+                    rhs.pretty_sexpr(),
+                ])
+            }
+            Ast::ExtendsExpr(ExtendsExpr {
+                lhs,
+                rhs,
+                then_branch,
+                else_branch,
+            }) => Ast::sexpr(vec![
+                RcDoc::text("extends"),
+                lhs.pretty_sexpr(),
+                rhs.pretty_sexpr(),
+                then_branch.pretty_sexpr(),
+                else_branch.pretty_sexpr(),
+            ]),
+            Ast::ExtendsPrefixOp { op, value } => {
+                let op = match op {
+                    PrefixOp::Not => "not",
+                    PrefixOp::Infer => "infer",
+                };
+
+                Ast::sexpr(vec![RcDoc::text(op), value.pretty_sexpr()])
+            }
+            Ast::False => todo!(),
+            Ast::Ident(ident) => ident.pretty_sexpr(),
+            Ast::IfExpr(if_expr) => if_expr.pretty_sexpr(),
+            Ast::ImportStatement { .. } => todo!(),
+            Ast::LetExpr(let_expr) => let_expr.pretty_sexpr(),
+            Ast::MappedType(MappedType { .. }) => todo!(),
+            Ast::MatchExpr(match_expr::Expr { .. }) => todo!(),
+            Ast::NamespaceAccess(namespace_access) => namespace_access.pretty_sexpr(),
+            Ast::Never => todo!(),
+            Ast::NoOp => todo!(),
+            Ast::Null => todo!(),
+            Ast::Number(number) => RcDoc::text(number),
+            Ast::ObjectLiteral(ObjectLiteral { properties: _ }) => todo!(),
+            Ast::Primitive(primitive) => primitive.pretty_sexpr(),
+            Ast::Program(statements) => {
+                let mut vec = vec![RcDoc::text("program")];
+
+                vec.extend(statements.iter().map(|s| s.pretty_sexpr()));
+
+                Ast::sexpr(vec)
+            }
+            Ast::Statement(inner) => inner.pretty_sexpr(),
+            Ast::String(_) => todo!(),
+            Ast::TemplateString(_) => todo!(),
+            Ast::True => todo!(),
+            Ast::Tuple(tuple) => tuple.pretty_sexpr(),
+            Ast::TypeAlias {
+                export,
+                name,
+                params,
+                body,
+            } => {
+                let mut vec = vec![RcDoc::text("type"), name.pretty()];
+
+                if *export {
+                    vec.push(RcDoc::text(":export"));
+                }
+
+                if !params.is_empty() {
+                    vec.push(Ast::sexpr(
+                        params.iter().map(|p| p.pretty_sexpr()).collect(),
+                    ));
+                }
+
+                vec.push(RcDoc::text("as:"));
+
+                vec.push(body.pretty_sexpr());
+
+                Ast::sexpr(vec)
+            }
+            Ast::Undefined => todo!(),
+            Ast::Unknown => todo!(),
+        }
+    }
+}
+
+impl<'a, T> PrettySexpr for Node<'a, T>
+where
+    T: PrettySexpr,
+{
+    fn pretty_sexpr(&self) -> RcDoc {
+        self.value.pretty_sexpr()
+    }
+}
+
+#[cfg(test)]
+mod simplify_tests {
+
+    use super::*;
+    use crate::{
+        ast::{
+            self,
+            Ast::{self, *},
+        },
+        parser::Rule::expr,
+        pest::Parser,
+        test_support::parse,
+    };
+    use pretty_assertions::{assert_eq, assert_ne};
+
+    #[test]
+    fn simplify_basic() {
+        assert_eq!(
+            parse!(expr, "if a <: b then c else d end")
+                .simplify()
+                .to_sexpr(80),
+            "(extends a b c d)"
+        )
+    }
+
+    #[test]
+    fn simplify_not() {
+        assert_eq!(
+            parse!(
+                expr,
+                r#"
+                if a <: b then
+                    d
+                else
+                    c
+                end
+                "#
+            )
+            .simplify()
+            .to_sexpr(80),
+            parse!(
+                expr,
+                r#"
+                if not (a <: b) then
+                    c
+                else
+                    d
+                end
+                "#
+            )
+            .simplify()
+            .to_sexpr(80),
+        )
+    }
+
+    #[test]
+    fn simplify_and() {
+        assert_eq!(
+            parse!(
+                expr,
+                r#"
+                if a <: b and c <: d then
+                    e
+                else
+                    f
+                end
+                "#
+            )
+            .simplify()
+            .to_sexpr(80),
+            parse!(
+                expr,
+                r#"
+                if a <: b then
+                    if c <: d then
+                        e
+                    else
+                        f
+                    end
+                else
+                    f
+                end
+                "#
+            )
+            .simplify()
+            .to_sexpr(80),
+        )
+    }
+
+    #[test]
+    fn simplify_or() {
+        assert_eq!(
+            parse!(
+                expr,
+                r#"
+                if a <: b or c <: d
+                then e
+                else f
+                end
+                "#
+            )
+            .simplify()
+            .to_sexpr(80),
+            parse!(
+                expr,
+                r#"
+                if a <: b then e
+                else
+                    if c <: d then e
+                    else f
+                    end
+                end
+                "#
+            )
+            .simplify()
+            .to_sexpr(80),
+        )
+    }
+
+    #[test]
+    fn simplify_match_expr() {
+        assert_eq!(
+            parse!(
+                expr,
+                r#"
+                match A do
+                    number => 1,
+                    string => 2,
+                    else => 3
+                end
+                "#
+            )
+            .simplify()
+            .to_sexpr(80),
+            parse!(
+                expr,
+                r#"
+                if A <: number then 1
+                else
+                    if A <: string then 2
+                    else 3
+                    end
+                end
+                "#
+            )
+            .simplify()
+            .to_sexpr(80)
+        )
+    }
+}
+
+impl<'a, T> typescript::Pretty for Node<'a, T>
+where
+    T: typescript::Pretty,
+{
+    fn to_ts(&self) -> pretty::RcDoc<()> {
+        self.value.to_ts()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ImportClause {
     Named(Vec<ImportSpecifier>),
@@ -1505,8 +1510,27 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Identifier(pub String);
-impl Identifier {
+
+impl From<String> for Identifier {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for Identifier {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl PrettySexpr for Identifier {
     fn pretty_sexpr(&self) -> RcDoc<()> {
+        self.pretty()
+    }
+}
+
+impl Identifier {
+    fn pretty(&self) -> RcDoc<()> {
         RcDoc::text(&self.0)
     }
 }
@@ -1844,10 +1868,38 @@ pub(crate) mod let_expr {
         /// values
         pub(crate) fn simplify(&self) -> super::Node<'a, Ast<'a>> {
             let bindings = self.bindings.clone();
+
             let (tree, _) = self.body.prewalk(bindings, &|node, bindings| {
-                dbg!(&node, &bindings);
+                //     move |node| match &*node.value {
+                //         Ast::Ident(name) => {
+                //             let ident = Identifier(name.clone());
+                //
+                //             if let Some(value) = bindings.get(&ident) {
+                //                 value.to_owned()
+                //             } else {
+                //                 node.clone()
+                //             }
+                //         }
+                //         Ast::LetExpr {
+                //             bindings: new_bindings,
+                //             body,
+                //         } => {
+                //             // let nested_bindings: HashMap<Identifier, _> = bindings
+                //             //     .iter()
+                //             //     .chain(new_bindings.iter())
+                //             //     .map(|(k, v)| (k.clone(), v.clone()))
+                //             //     .collect();
+                //             //
+                //             // // let f = resolve_let_bindings(&nested_bindings);
+                //             //
+                //             // body.transform(_)
+                //             todo!()
+                //         }
+                //         _ => node.clone(),
+                //     }
                 (node, bindings)
             });
+
             tree
         }
     }
@@ -1869,35 +1921,3 @@ pub(crate) mod let_expr {
         }
     }
 }
-
-// fn resolve_let_bindings<'a>(
-//     bindings: &'a HashMap<Identifier, ASTNode<'a>>,
-// ) -> impl Fn(ASTNode) -> ASTNode + 'a {
-//     move |node| match &*node.value {
-//         Ast::Ident(name) => {
-//             let ident = Identifier(name.clone());
-//
-//             if let Some(value) = bindings.get(&ident) {
-//                 value.to_owned()
-//             } else {
-//                 node.clone()
-//             }
-//         }
-//         Ast::LetExpr {
-//             bindings: new_bindings,
-//             body,
-//         } => {
-//             // let nested_bindings: HashMap<Identifier, _> = bindings
-//             //     .iter()
-//             //     .chain(new_bindings.iter())
-//             //     .map(|(k, v)| (k.clone(), v.clone()))
-//             //     .collect();
-//             //
-//             // // let f = resolve_let_bindings(&nested_bindings);
-//             //
-//             // body.transform(_)
-//             todo!()
-//         }
-//         _ => node.clone(),
-//     }
-// }

@@ -99,13 +99,25 @@ fn replace_pipe_with_type_application<'a>(
     match &*rhs.value {
         Ast::Ident(rhs_name) => {
             // FIXME missing span
-            Node::from_pair(&op, Ast::Application(Application { name: rhs_name.clone(), args: vec![lhs] }))
+            Node::from_pair(
+                &op,
+                Ast::Application(Application {
+                    name: rhs_name.clone(),
+                    args: vec![lhs],
+                }),
+            )
         }
         Ast::Application(Application { name, args: params }) => {
             let mut params = params.clone();
             params.insert(0, lhs);
             // FIXME missing span
-            Node::from_pair(&op, Ast::Application(Application { name: name.clone(), args: params }))
+            Node::from_pair(
+                &op,
+                Ast::Application(Application {
+                    name: name.clone(),
+                    args: params,
+                }),
+            )
         }
         _ => {
             let error = Error::new_from_span(
@@ -250,7 +262,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
         Rule::number => mknode(Ast::Number(node_as_string(pair))),
         Rule::string => parse_string(pair),
         Rule::template_string => mknode(Ast::TemplateString(node_as_string(pair))),
-        Rule::ident => mknode(Ast::Ident(node_as_string(pair))),
+        Rule::ident => mknode(Ast::Ident(pair.as_str().into())),
         Rule::never => mknode(Ast::Never),
         Rule::any => mknode(Ast::Any),
         Rule::unknown => mknode(Ast::Unknown),
@@ -262,7 +274,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
         Rule::application => {
             let mut inner = pair.into_inner();
 
-            let identifier = inner.next().map(node_as_string).unwrap();
+            let identifier = inner.next().map(node_as_string).unwrap().into();
 
             let arguments_pair = inner
                 .find(tag_eq("arguments"))
@@ -270,7 +282,10 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
 
             let arguments = arguments_pair.into_inner().map(parse_node).collect();
 
-            mknode(Ast::Application(Application { name: identifier, args: arguments }))
+            mknode(Ast::Application(Application {
+                name: identifier,
+                args: arguments,
+            }))
         }
         Rule::builtin => {
             let mut inner = pair.into_inner();
@@ -623,12 +638,7 @@ fn parse_type_alias(pair: Pair<Rule>) -> AstNode {
         .map(|p| p.as_rule() == Rule::export)
         .unwrap_or(false);
 
-    let name = inner
-        .clone()
-        .find(tag_eq("name"))
-        .unwrap()
-        .as_str()
-        .to_string();
+    let name = inner.clone().find(tag_eq("name")).unwrap().as_str().into();
 
     let body = inner.clone().find(tag_eq("body")).map(parse_node).unwrap();
 
