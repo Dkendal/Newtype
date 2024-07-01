@@ -831,7 +831,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }),
             Ast::String(string) => string_literal(string),
             Ast::TemplateString(string) => RcDoc::text(string),
-            Ast::IfExpr(if_expr::Expr { .. }) => {
+            Ast::IfExpr(..) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
             Ast::Access {
@@ -1884,7 +1884,12 @@ pub(crate) mod let_expr {
         /// Replace all identifiers in the body of the let expression with their corresponding
         /// values
         pub(crate) fn simplify(&self) -> super::Node<'a, Ast<'a>> {
-            let bindings = self.bindings.clone();
+            let mut bindings = self.bindings.clone();
+            // simplifiy all bindings first
+            for (ident, value) in &self.bindings {
+                let new_value = value.simplify();
+                bindings.insert(ident.clone(), new_value);
+            }
 
             let (tree, _) = self
                 .body
