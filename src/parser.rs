@@ -1681,6 +1681,22 @@ mod parser_tests {
     }
 
     #[test]
+    fn let_expr_shadowed() {
+        assert_typescript!(
+            r#"
+            type A = [1, 2, 3];
+            "#,
+            r#"
+            type A as
+                let a = 1 in
+                let b = a in
+                let a = 2 in
+                [b, a, let a = 3 in a]
+            "#
+        );
+    }
+
+    #[test]
     fn ts_toolbelt_any_at() {
         assert_typescript!(
             statement,

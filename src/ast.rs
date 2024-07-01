@@ -232,7 +232,25 @@ impl<'a> AstNode<'a> {
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::ExtendsExpr(_) => (self.clone(), ctx.clone()),
+            Ast::ExtendsExpr(ExtendsExpr {
+                lhs,
+                rhs,
+                then_branch,
+                else_branch,
+            }) => {
+                let lhs = red_pick_node(lhs, ctx.clone());
+                let rhs = red_pick_node(rhs, ctx.clone());
+                let then_branch = red_pick_node(then_branch, ctx.clone());
+                let else_branch = red_pick_node(else_branch, ctx.clone());
+
+                let ast = Ast::ExtendsExpr(ExtendsExpr {
+                    lhs,
+                    rhs,
+                    then_branch,
+                    else_branch,
+                });
+                result(ast, ctx)
+            }
 
             Ast::ExtendsPrefixOp { op, value } => {
                 let value = red_pick_node(value, ctx.clone());
@@ -496,7 +514,6 @@ mod tests {
                 _ast => (node, ctx),
             },
         );
-        // dbg!(&tree);
         assert_eq!("", tree.to_sexpr(80));
     }
 }
@@ -1869,36 +1886,15 @@ pub(crate) mod let_expr {
         pub(crate) fn simplify(&self) -> super::Node<'a, Ast<'a>> {
             let bindings = self.bindings.clone();
 
-            let (tree, _) = self.body.prewalk(bindings, &|node, bindings| {
-                //     move |node| match &*node.value {
-                //         Ast::Ident(name) => {
-                //             let ident = Identifier(name.clone());
-                //
-                //             if let Some(value) = bindings.get(&ident) {
-                //                 value.to_owned()
-                //             } else {
-                //                 node.clone()
-                //             }
-                //         }
-                //         Ast::LetExpr {
-                //             bindings: new_bindings,
-                //             body,
-                //         } => {
-                //             // let nested_bindings: HashMap<Identifier, _> = bindings
-                //             //     .iter()
-                //             //     .chain(new_bindings.iter())
-                //             //     .map(|(k, v)| (k.clone(), v.clone()))
-                //             //     .collect();
-                //             //
-                //             // // let f = resolve_let_bindings(&nested_bindings);
-                //             //
-                //             // body.transform(_)
-                //             todo!()
-                //         }
-                //         _ => node.clone(),
-                //     }
-                (node, bindings)
-            });
+            let (tree, _) = self
+                .body
+                .prewalk(bindings, &|node, bindings| match &*node.value {
+                    Ast::Ident(id) => {
+                        let new_value = bindings.get(id).unwrap_or(&node).clone();
+                        (new_value, bindings)
+                    }
+                    _ => (node, bindings),
+                });
 
             tree
         }
