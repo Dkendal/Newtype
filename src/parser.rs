@@ -420,70 +420,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
             parse_error!(pair, format!("Unexpected end of input"));
         }
 
-        Rule::namespace_access
-        | Rule::from_clause
-        | Rule::import_clause
-        | Rule::namespace_import
-        | Rule::named_import
-        | Rule::import_specifier
-        | Rule::defaults_caluse
-        | Rule::where_clause
-        | Rule::type_parameter_default
-        | Rule::type_constraint
-        | Rule::type_parameters
-        | Rule::expr1
-        | Rule::primary
-        | Rule::prefix
-        | Rule::infix
-        | Rule::postfix
-        | Rule::array_modifier
-        | Rule::indexed_access
-        | Rule::dot_access
-        | Rule::builtin_keyword
-        | Rule::keyof
-        | Rule::argument_list
-        | Rule::neg
-        | Rule::pipe
-        | Rule::union
-        | Rule::intersection
-        | Rule::term
-        | Rule::top_type
-        | Rule::bottom_type
-        | Rule::object_property
-        | Rule::let_binding
-        | Rule::match_arm
-        | Rule::cond_arm
-        | Rule::else_arm
-        | Rule::else_keyword
-        | Rule::end_keyword
-        | Rule::ident_chars
-        | Rule::extends_expr
-        | Rule::extends_primary
-        | Rule::extends_prefix
-        | Rule::extends_infix
-        | Rule::extends
-        | Rule::not_extends
-        | Rule::equals
-        | Rule::not_equals
-        | Rule::strict_equals
-        | Rule::strict_not_equals
-        | Rule::and
-        | Rule::or
-        | Rule::not
-        | Rule::type_string
-        | Rule::type_boolean
-        | Rule::type_number
-        | Rule::readonly_modifier
-        | Rule::export
-        | Rule::optional_modifier
-        | Rule::atom_string
-        | Rule::double_quote_string
-        | Rule::single_quote_string
-        | Rule::keyword
-        | Rule::COMMENT
-        | Rule::BLOCK_COMMENT
-        | Rule::LINE_COMMENT
-        | Rule::WHITESPACE => {
+        rule => {
             parse_error!(pair, format!("Unexpected rule: {:?}", rule));
         }
     }
