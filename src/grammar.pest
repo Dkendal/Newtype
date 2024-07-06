@@ -2,6 +2,7 @@ program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 
 statement = {
     type_alias
+  | interface
   | import_statement
 }
 
@@ -32,6 +33,14 @@ import_specifier = {
 
 type_alias = {
     (#export = export)? ~ "type" ~ #name = ident ~ ("(" ~ #parameters = type_parameters ~ ")")? ~ #defaults = defaults_caluse? ~ #where = where_clause? ~ "as" ~ #body = expr
+}
+
+interface = {
+    (#export = export)? ~ "interface" ~ #name = ident ~ ("(" ~ #Parameters = type_parameters ~ ")")? ~ #defaults_clause = defaults_caluse? ~ #where_clause = where_clause? ~ #extends = extends_clause? ~ #definition = object_literal
+}
+
+extends_clause = {
+    "extends" ~ #name = ident
 }
 
 defaults_caluse = {
@@ -84,9 +93,11 @@ dot_access = { "." ~ ident }
 
 builtin = { #name = builtin_keyword ~ "(" ~ #argument = expr ~ ")" }
 
-builtin_keyword = _{ keyof }
+builtin_keyword = _{ keyof | builtin_typeof }
 
 keyof = @{ "keyof" }
+
+builtin_typeof = @{ "typeof" }
 
 application = { ident ~ "(" ~ #arguments = argument_list ~ ")" }
 
@@ -131,11 +142,30 @@ primitive = {
 }
 
 object_literal = {
-    "{" ~ ((object_property ~ ",")* ~ object_property ~ ","?)? ~ "}"
+    "{" ~ (object_property ~ ("," ~ object_property)* ~ ","?)? ~ "}"
 }
 
 object_property = {
-    (#readonly = readonly_modifier)? ~ #key = ident ~ (#optional = optional_modifier)? ~ ":" ~ #value = expr
+    property_key ~ ":" ~ #value = expr
+}
+
+property_key = {
+    property_key_prefix ~ #key = property_key_inner
+}
+
+property_key_prefix = _{
+    (#readonly = readonly_modifier)? ~ (#optional = optional_modifier)?
+}
+
+property_key_inner = _{
+    ident
+  | ("[" ~ (computed_property_name | index_property_key) ~ "]")
+}
+
+computed_property_name = { expr }
+
+index_property_key = {
+    #index = ident ~ "in" ~ #iterable = expr ~ ("as" ~ #remap_clause = expr)?
 }
 
 let_expr = {
@@ -147,7 +177,7 @@ let_binding = {
 }
 
 for_expr = {
-    "for" ~ #index = ident ~ "in" ~ #iterable = expr ~ "do" ~ #body = expr ~ end_keyword
+    "for" ~ property_key_prefix ~ index_property_key ~ "do" ~ #body = expr ~ end_keyword
 }
 
 if_expr = {
@@ -198,7 +228,7 @@ extends_infix = _{
 
 extends = @{ "<:" }
 
-not_extends = @{ "!<:" }
+not_extends = @{ "</:" }
 
 equals = @{ "=" }
 
@@ -276,6 +306,8 @@ keyword = _{
   | "interface"
   | "keyof"
   | "let"
+  | "optional"
+  | "readonly"
   | "never"
   | "not"
   | "null"

@@ -1,26 +1,63 @@
-// sources/Any/At.ts
+export type Assign(L, Ls, depth, ignore, fill)
+    defaults
+        depth = :flat,
+        ignore = BuiltIn,
+        fill = never,
+    where
+        L <: List,
+        Ls <: List(List),
+        depth <: Depth,
+        ignore <: object,
+        fill <: any
+    as
+        L
+        |> OAssign(Ls, depth, ignore, fill)
+        |> Cast(List)
 
-// export type At<A extends any, K extends Key> =
-//     A extends List
-//     ? number extends A['length']
-//       ? K extends number | `${number}`
-//         ? A[never] | undefined
-//         : undefined
-//       : K extends keyof A ? A[K] : undefined
-//     : unknown extends A ? unknown :
-//       K extends keyof A ? A[K] :
-//       undefined;
+type Exact(A, W) as
+    if W <: unknown then
+        if A <: W then
+            if A <: Narrowable then
+                A
+            else
+                for K in keyof(A) do
+                    if K <: keyof(W) then
+                        Exact(A[K], W[K])
+                    end
+                end
+            end
+        else
+            W
+        end
+    end
 
-export type At(A, K) =
-  if A <: List then
-    if number <: A['length'] then
-      if K <: number | `${number}` then A[never] | undefined
-      else undefined
-    else
-      if K <: keyof A then A[K]
-      else undefined
-    else
-      if unknown <: A then unknwon
-      else
-        if K <: keyof A then A[K]
-        else undefined
+export type At(A, K)
+    where
+        A <: any,
+        K <: Key
+    as
+        let a_k =
+            if K <: keyof(A) then
+                A[K]
+            else
+                undefined
+            end
+        in
+
+        cond do
+            A <: List =>
+                if number <: A.length then
+                    if K <: number | `${number}` then
+                        A[never] | undefined
+                    else
+                        undefined
+                    end
+                else
+                    a_k
+                end,
+
+                        unknown <: A => unknown,
+
+                        else => a_k
+                    end
+

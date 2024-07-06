@@ -1,0 +1,32 @@
+import { A, B, I, M, Union } from :ts-toolbelt
+
+import { __ } from :.
+
+import {
+  __capture__,
+  __kind__,
+  any_,
+  bigint_,
+  boolean_,
+  function_,
+  number_,
+  object_,
+  rest_,
+  string_,
+  symbol_,
+} from :./const
+
+type True as 1
+
+type ExtractSubcapture(T) as
+    if T <: M::Primitive | M::BuiltIn and T <: object then
+        T[ Exclude(keyof(T), keyof([]) | keyof({})) ]
+    end
+
+type PartialAssignment(K, V) as
+    if not (V <: never) and K <: string then
+        for k in K do
+            v
+        end
+    end
+

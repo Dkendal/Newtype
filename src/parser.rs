@@ -15,7 +15,6 @@ use itertools::Itertools;
 
 use pest::{
     error::{Error, ErrorVariant},
-    iterators::{Pair, Pairs},
     pratt_parser::PrattParser,
     Parser,
 };
@@ -26,9 +25,12 @@ use pratt::{EXPR_PARSER, EXTENDS_PARSER};
 #[grammar = "grammar.pest"]
 pub struct NewtypeParser;
 
-pub type ParserError = pest::error::Error<Rule>;
+pub type ParserError = Error<Rule>;
 
-pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> AstNode {
+pub type Pair<'i> = pest::iterators::Pair<'i, Rule>;
+pub type Pairs<'i> = pest::iterators::Pairs<'i, Rule>;
+
+pub(crate) fn parse_expr(pairs: Pairs) -> AstNode {
     use Rule::*;
     EXPR_PARSER
         .map_primary(parse_node)
@@ -94,7 +96,7 @@ pub(crate) fn parse_expr(pairs: Pairs<Rule>) -> AstNode {
 fn replace_pipe_with_type_application<'a>(
     rhs: AstNode<'a>,
     lhs: AstNode<'a>,
-    op: Pair<'a, Rule>,
+    op: Pair<'a>,
 ) -> AstNode<'a> {
     match &*rhs.value {
         Ast::Ident(rhs_name) => {
@@ -139,7 +141,7 @@ pub(crate) fn parse_newtype_program(source: &str) -> Result<AstNode<'_>, Box<Err
     Ok(parse_node(pair))
 }
 
-pub(crate) fn parse_extends_expr(pairs: Pairs<Rule>) -> AstNode {
+pub(crate) fn parse_extends_expr(pairs: Pairs) -> AstNode {
     EXTENDS_PARSER
         .map_primary(|pair| match pair.as_rule() {
             Rule::expr => parse_expr(pair.into_inner()),
@@ -190,7 +192,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs<Rule>) -> AstNode {
                 },
             )
         })
-        .map_infix(|lhs: Node<Ast>, op: Pair<Rule>, rhs: Node<Ast>| {
+        .map_infix(|lhs: Node<Ast>, op: Pair, rhs: Node<Ast>| {
             let op = match op.as_rule() {
                 Rule::extends => InfixOp::Extends,
                 Rule::not_extends => InfixOp::NotExtends,
@@ -221,7 +223,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs<Rule>) -> AstNode {
         .parse(pairs)
 }
 
-pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
+pub(crate) fn parse_node(pair: Pair) -> AstNode {
     let rule = pair.clone().as_rule();
     let span = pair.clone().as_span();
     let mknode = |ast| Node::from_span(span, ast);
@@ -277,7 +279,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
             let identifier = inner.next().map(node_as_string).unwrap().into();
 
             let arguments_pair = inner
-                .find(tag_eq("arguments"))
+                .find(match_tag("arguments"))
                 .expect("application missing arguments");
 
             let arguments = arguments_pair.into_inner().map(parse_node).collect();
@@ -290,7 +292,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
         Rule::builtin => {
             let mut inner = pair.into_inner();
 
-            let name = inner.find(tag_eq("name")).unwrap();
+            let name = inner.find(match_tag("name")).unwrap();
 
             let name = match name.as_rule() {
                 Rule::keyof => BuiltInKeyword::Keyof,
@@ -300,7 +302,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
                 ),
             };
 
-            let argument = inner.find(tag_eq("argument")).map(parse_node).unwrap();
+            let argument = inner.find(match_tag("argument")).map(parse_node).unwrap();
 
             mknode(Ast::Builtin {
                 name,
@@ -315,22 +317,22 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
         Rule::match_expr => {
             let mut inner = pair.into_inner();
 
-            let value = inner.find(tag_eq("value")).map(parse_node).unwrap();
+            let value = inner.find(match_tag("value")).map(parse_node).unwrap();
 
             let arms: Vec<match_expr::Arm> = inner
                 .clone()
-                .filter(tag_eq("arm"))
+                .filter(match_tag("arm"))
                 .map(|arm| {
                     let mut inner = arm.into_inner();
-                    let pattern = inner.find(tag_eq("pattern")).map(parse_node).unwrap();
-                    let body = inner.find(tag_eq("body")).map(parse_node).unwrap();
+                    let pattern = inner.find(match_tag("pattern")).map(parse_node).unwrap();
+                    let body = inner.find(match_tag("body")).map(parse_node).unwrap();
                     match_expr::Arm { pattern, body }
                 })
                 .collect();
 
             let else_arm = inner
-                .find(tag_eq("else"))
-                .and_then(|p| p.into_inner().find(tag_eq("body")))
+                .find(match_tag("else"))
+                .and_then(|p| p.into_inner().find(match_tag("body")))
                 .map(parse_node)
                 .unwrap_or_else(|| Ast::Never.into());
 
@@ -345,24 +347,24 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
 
             let else_arm = inner
                 .clone()
-                .find(tag_eq("else"))
-                .and_then(|p| p.into_inner().find(tag_eq("body")))
+                .find(match_tag("else"))
+                .and_then(|p| p.into_inner().find(match_tag("body")))
                 .map(parse_node)
                 .unwrap_or_else(|| Ast::Never.into());
 
             let arms: Vec<cond_expr::Arm> = inner
                 .clone()
-                .filter(tag_eq("arm"))
+                .filter(match_tag("arm"))
                 .map(|arm| {
                     let mut inner = arm.into_inner();
 
                     let condition = inner
-                        .find(tag_eq("condition"))
+                        .find(match_tag("condition"))
                         .map(|p| p.into_inner())
                         .map(parse_extends_expr)
                         .unwrap();
 
-                    let body = inner.find(tag_eq("body")).map(parse_node).unwrap();
+                    let body = inner.find(match_tag("body")).map(parse_node).unwrap();
 
                     cond_expr::Arm { condition, body }
                 })
@@ -373,11 +375,20 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
         Rule::for_expr => {
             let mut inner = pair.into_inner();
 
-            let index = inner.find(tag_eq("index")).unwrap().as_str().to_string();
+            let ipk = next_pair!(inner, Rule::index_property_key);
 
-            let iterable = inner.find(tag_eq("iterable")).map(parse_node).unwrap();
+            let body = inner.find(match_tag("body")).map(parse_node).unwrap();
 
-            let body = inner.find(tag_eq("body")).map(parse_node).unwrap();
+            let mut inner = ipk.into_inner();
+
+            let index = inner
+                .next()
+                .and_then(filter_rule(Rule::ident))
+                .unwrap()
+                .as_str()
+                .to_string();
+
+            let iterable = inner.find(match_tag("iterable")).map(parse_node).unwrap();
 
             mknode(Ast::MappedType(MappedType {
                 index,
@@ -392,7 +403,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
             let bindings: HashMap<_, _> = pair
                 .clone()
                 .into_inner()
-                .filter(tag_eq("binding"))
+                .filter(match_tag("binding"))
                 .map(|pair| {
                     let mut inner = pair.into_inner();
                     let name = inner.next().unwrap();
@@ -410,7 +421,7 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
             let body = pair
                 .clone()
                 .into_inner()
-                .find(tag_eq("body"))
+                .find(match_tag("body"))
                 .map(parse_node)
                 .unwrap();
 
@@ -426,12 +437,12 @@ pub(crate) fn parse_node(pair: Pair<Rule>) -> AstNode {
     }
 }
 
-fn pair_as_identifier(pair: Pair<Rule>) -> Identifier {
+fn pair_as_identifier(pair: Pair) -> Identifier {
     assert_ast!(pair, Rule::ident);
     Identifier(pair.as_str().to_string())
 }
 
-fn pair_as_string_literal(pair: Pair<Rule>) -> String {
+fn pair_as_string_literal(pair: Pair) -> String {
     assert_ast!(pair, Rule::string);
 
     match pair.clone().into_inner().next().unwrap().as_rule() {
@@ -442,11 +453,11 @@ fn pair_as_string_literal(pair: Pair<Rule>) -> String {
     }
 }
 
-fn parse_string(pair: Pair<Rule>) -> AstNode {
+fn parse_string(pair: Pair) -> AstNode {
     Node::from_pair(&pair.clone(), Ast::String(pair_as_string_literal(pair)))
 }
 
-fn parse_import_statement(pair: Pair<Rule>) -> AstNode {
+fn parse_import_statement(pair: Pair) -> AstNode {
     let mut inner = pair.clone().into_inner();
 
     let import_clause = inner.next().unwrap();
@@ -488,18 +499,18 @@ fn parse_import_statement(pair: Pair<Rule>) -> AstNode {
     )
 }
 
-fn parse_if_expr(pair: Pair<Rule>) -> AstNode {
+fn parse_if_expr(pair: Pair) -> AstNode {
     let mut inner = pair.clone().into_inner();
 
     let condition = inner
-        .find(tag_eq("condition"))
+        .find(match_tag("condition"))
         .map(|p| (parse_extends_expr(p.into_inner())))
         .unwrap();
 
-    let then_branch = inner.find(tag_eq("then")).map(parse_node).unwrap();
+    let then_branch = inner.find(match_tag("then")).map(parse_node).unwrap();
 
     let else_branch = inner
-        .find(tag_eq("else"))
+        .find(match_tag("else"))
         .map(parse_node)
         .unwrap_or_else(|| Ast::Never.into());
 
@@ -519,13 +530,13 @@ fn parse_if_expr(pair: Pair<Rule>) -> AstNode {
     }
 }
 
-fn parse_tuple(pair: Pair<Rule>) -> AstNode {
+fn parse_tuple(pair: Pair) -> AstNode {
     let items = pair.clone().into_inner().map(parse_node).collect();
 
     Node::from_pair(&pair, Ast::Tuple(Tuple { items }))
 }
 
-fn parse_object_literal(pair: Pair<Rule>) -> AstNode {
+fn parse_object_literal(pair: Pair) -> AstNode {
     let object_property_rules = pair.clone().into_inner();
     let mut properties = Vec::new();
 
@@ -534,21 +545,19 @@ fn parse_object_literal(pair: Pair<Rule>) -> AstNode {
             Rule::object_property => {
                 let mut inner = prop_pair.into_inner();
 
-                let readonly = inner.clone().any(|p| tag_eq("readonly")(&p));
-
-                let key = inner
-                    .find(tag_eq("key"))
-                    .expect("object property missing key")
-                    .as_str()
-                    .to_string()
-                    .clone();
-
-                let optional = inner.clone().any(|p| tag_eq("optional")(&p));
+                let key = next_pair!(inner, Rule::property_key);
 
                 let value = inner
-                    .find(tag_eq("value"))
+                    .find(match_tag("value"))
                     .map(parse_node)
                     .expect("object property missing value");
+
+                let mut inner = key.into_inner();
+
+                let readonly = find_tag(inner.clone(), "readonly").is_some();
+                let optional = find_tag(inner.clone(), "optional").is_some();
+                let key = inner.find(match_rule(Rule::ident)).unwrap();
+                let key = key.as_str().to_string();
 
                 properties.push(ObjectProperty {
                     readonly,
@@ -567,7 +576,7 @@ fn parse_object_literal(pair: Pair<Rule>) -> AstNode {
     Node::from_pair(&pair, Ast::ObjectLiteral(ObjectLiteral { properties }))
 }
 
-fn parse_type_alias(pair: Pair<Rule>) -> AstNode {
+fn parse_type_alias(pair: Pair) -> AstNode {
     let inner = pair.clone().into_inner();
 
     let export = inner
@@ -575,16 +584,25 @@ fn parse_type_alias(pair: Pair<Rule>) -> AstNode {
         .map(|p| p.as_rule() == Rule::export)
         .unwrap_or(false);
 
-    let name = inner.clone().find(tag_eq("name")).unwrap().as_str().into();
+    let name = inner
+        .clone()
+        .find(match_tag("name"))
+        .unwrap()
+        .as_str()
+        .into();
 
-    let body = inner.clone().find(tag_eq("body")).map(parse_node).unwrap();
+    let body = inner
+        .clone()
+        .find(match_tag("body"))
+        .map(parse_node)
+        .unwrap();
 
     // Track the order of the inserted parametes
     let mut ordered_params: Vec<&str> = Default::default();
 
     let mut params: HashMap<&str, TypeParameter> = inner
         .clone()
-        .find(tag_eq("parameters"))
+        .find(match_tag("parameters"))
         .map(|p| -> HashMap<&str, TypeParameter> {
             p.into_inner()
                 .map(|param| {
@@ -599,10 +617,10 @@ fn parse_type_alias(pair: Pair<Rule>) -> AstNode {
         })
         .unwrap_or_default();
 
-    if let Some(where_clause) = inner.clone().find(tag_eq("where")) {
+    if let Some(where_clause) = inner.clone().find(match_tag("where")) {
         where_clause
             .into_inner()
-            .filter(tag_eq("constraint"))
+            .filter(match_tag("constraint"))
             .for_each(|pair| {
                 let mut inner = pair.clone().into_inner();
                 let name = inner.next().unwrap();
@@ -638,10 +656,10 @@ fn parse_type_alias(pair: Pair<Rule>) -> AstNode {
             });
     }
 
-    if let Some(defaults_clause) = inner.clone().find(tag_eq("defaults")) {
+    if let Some(defaults_clause) = inner.clone().find(match_tag("defaults")) {
         defaults_clause
             .into_inner()
-            .filter(tag_eq("default"))
+            .filter(match_tag("default"))
             .for_each(|pair| {
                 let mut inner = pair.clone().into_inner();
                 let name = inner.next().unwrap();
@@ -691,15 +709,40 @@ fn parse_type_alias(pair: Pair<Rule>) -> AstNode {
     )
 }
 
-fn node_as_string(pair: Pair<Rule>) -> String {
-    pair.as_str().to_string()
+fn node_as_string(pair: Pair) -> String {
+    return pair.as_str().to_string();
 }
 
-/**
-* Returns a predicate that matches a pair with the given tag.
-*/
-fn tag_eq<'a>(tag: &'a str) -> impl FnMut(&Pair<'a, Rule>) -> bool {
-    |pair: &Pair<Rule>| pair.as_node_tag() == Some(tag)
+fn match_tag<'a>(tag: &'a str) -> impl FnMut(&Pair<'a>) -> bool {
+    return |pair| pair.as_node_tag() == Some(tag);
+}
+
+fn filter_tag<'a>(tag: &'a str) -> impl FnMut(Pair<'a>) -> Option<Pair<'a>> {
+    return move |pair| {
+        if pair.as_node_tag() == Some(tag) {
+            Some(pair)
+        } else {
+            None
+        }
+    };
+}
+
+fn match_rule<'a>(rule: Rule) -> impl Fn(&Pair<'a>) -> bool {
+    return move |pair| pair.as_rule() == rule;
+}
+
+fn filter_rule<'a>(rule: Rule) -> impl Fn(Pair<'a>) -> Option<Pair<'a>> {
+    return move |pair| {
+        if pair.as_rule() == rule {
+            Some(pair)
+        } else {
+            None
+        }
+    };
+}
+
+fn find_tag<'a>(mut pairs: Pairs<'a>, tag: &'a str) -> Option<Pair<'a>> {
+    return pairs.find(|p| p.as_node_tag() == Some(tag));
 }
 
 // Generate tests for all test cases in tests/pest/foo/ and all subdirectories. Since
@@ -1376,7 +1419,7 @@ mod parser_tests {
 
     #[test]
     fn object_literal_optional_modifier() {
-        assert_typescript!("type A = {x?: 1};", "type A as {x?: 1}");
+        assert_typescript!("type A = {x?: 1};", "type A as {?x: 1}");
     }
 
     #[test]

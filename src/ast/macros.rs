@@ -11,6 +11,22 @@ macro_rules! assert_ast {
 
 pub(crate) use assert_ast;
 
+macro_rules! next_pair {
+    ($pairs:expr, $rule:expr) => {
+        if let Some(pair) = $pairs.next() {
+            if pair.as_rule() == $rule {
+                pair
+            } else {
+                panic!("Expected {:#?} got {:#?}", $rule, pair.as_rule())
+            }
+        } else {
+            panic!("Expected {:#?} got None", $rule)
+        }
+    };
+}
+
+pub(crate) use next_pair;
+
 macro_rules! parse_error {
     ($pair:expr) => {{
         parse_error!($pair, vec![], vec![$pair.clone().as_rule()]);
