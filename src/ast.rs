@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 use pest::Span;
-use pretty::RcDoc;
+use pretty::RcDoc as D;
 
 use crate::{
-    parser::ParserError,
+    parser::{Pair, ParserError},
     pretty::{parens, string_literal},
     typescript,
 };
@@ -19,14 +19,14 @@ pub(crate) trait PrettySexpr {
         String::from_utf8(w).unwrap()
     }
 
-    fn pretty_sexpr(&self) -> RcDoc;
+    fn pretty_sexpr(&self) -> D;
 
-    fn sexpr(items: Vec<RcDoc>) -> RcDoc {
-        let sep = RcDoc::line();
+    fn sexpr(items: Vec<D>) -> D {
+        let sep = D::line();
 
-        RcDoc::text("(")
-            .append(RcDoc::intersperse(items, sep).nest(4))
-            .append(RcDoc::text(")"))
+        D::text("(")
+            .append(D::intersperse(items, sep).nest(4))
+            .append(D::text(")"))
             .group()
     }
 }
@@ -525,9 +525,9 @@ pub struct NamespaceAccess<'a> {
 }
 
 impl NamespaceAccess<'_> {
-    fn pretty_sexpr(&self) -> RcDoc<()> {
+    fn pretty_sexpr(&self) -> D<()> {
         Ast::sexpr(vec![
-            RcDoc::text("::"),
+            D::text("::"),
             self.lhs.pretty_sexpr(),
             self.rhs.pretty_sexpr(),
         ])
@@ -580,7 +580,7 @@ pub struct Tuple<'a> {
 }
 
 impl PrettySexpr for Tuple<'_> {
-    fn pretty_sexpr(&self) -> RcDoc<()> {
+    fn pretty_sexpr(&self) -> D<()> {
         Ast::sexpr(self.items.iter().map(|item| item.pretty_sexpr()).collect())
     }
 }
@@ -667,6 +667,13 @@ pub enum Ast<'a> {
     },
     Undefined,
     Unknown,
+    Interface {
+        export: bool,
+        name: String,
+        extends: Option<String>,
+        params: Vec<TypeParameter<'a>>,
+        definition: Vec<ObjectProperty<'a>>,
+    },
 }
 
 impl<'a> From<if_expr::Expr<'a>> for Ast<'a> {
@@ -688,6 +695,10 @@ impl<'a> From<cond_expr::Expr<'a>> for Ast<'a> {
 }
 
 impl<'a> Ast<'a> {
+    pub fn to_node(&self, pair: Pair<'a>) -> AstNode<'a> {
+        AstNode::from_pair(&pair, self.clone())
+    }
+
     /// Operators that the `not` prefix operator can be applied to.
     pub fn is_compatible_with_not_prefix_op(&self) -> bool {
         match self {
@@ -722,7 +733,7 @@ impl<'a> Ast<'a> {
             Ast::NoOp => false,
             Ast::Null => true,
             Ast::Number(_) => true,
-            Ast::ObjectLiteral(ObjectLiteral { properties: _ }) => true,
+            Ast::ObjectLiteral(_) => true,
             Ast::Primitive(_) => true,
             Ast::Program(_) => true,
             Ast::Statement(_) => true,
@@ -733,6 +744,7 @@ impl<'a> Ast<'a> {
             Ast::TypeAlias { .. } => false,
             Ast::Undefined => true,
             Ast::Unknown => true,
+            Ast::Interface { .. } => todo!(),
         }
     }
 
@@ -770,15 +782,15 @@ impl<'a> Ast<'a> {
 }
 
 impl<'a> typescript::Pretty for Ast<'a> {
-    fn to_ts(&self) -> RcDoc<()> {
+    fn to_ts(&self) -> D<()> {
         match self {
             Ast::Program(stmnts) => {
-                let mut doc = RcDoc::nil();
+                let mut doc = D::nil();
                 for stmnt in stmnts {
                     doc = doc
                         .append(stmnt.to_ts())
-                        .append(RcDoc::hardline())
-                        .append(RcDoc::hardline());
+                        .append(D::hardline())
+                        .append(D::hardline());
                 }
                 doc
             }
@@ -791,46 +803,46 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 let body = (*body).to_ts();
 
                 let doc = if *export {
-                    RcDoc::text("export").append(RcDoc::space())
+                    D::text("export").append(D::space())
                 } else {
-                    RcDoc::nil()
+                    D::nil()
                 };
 
                 let params_doc = match params {
-                    list if list.is_empty() => RcDoc::nil(),
+                    list if list.is_empty() => D::nil(),
                     list => {
-                        let seperator = RcDoc::text(",").append(RcDoc::line());
+                        let seperator = D::text(",").append(D::line());
 
-                        let body = RcDoc::intersperse(
+                        let body = D::intersperse(
                             list.iter().map(|param| param.to_ts().group()),
                             seperator,
                         );
 
-                        RcDoc::text("<")
-                            .append(RcDoc::line_().append(body).append(RcDoc::line_()).nest(4))
-                            .append(RcDoc::text(">"))
+                        D::text("<")
+                            .append(D::line_().append(body).append(D::line_()).nest(4))
+                            .append(D::text(">"))
                             .group()
                     }
                 };
 
                 doc.append("type")
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append(name.pretty())
                     .append(params_doc)
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append("=")
-                    .append(RcDoc::line().append(body).nest(4))
+                    .append(D::line().append(body).nest(4))
                     .group()
             }
             Ast::Ident(identifier) => identifier.pretty(),
-            Ast::Number(number) => RcDoc::text(number),
-            Ast::Primitive(primitive) => RcDoc::text(match primitive {
+            Ast::Number(number) => D::text(number),
+            Ast::Primitive(primitive) => D::text(match primitive {
                 PrimitiveType::Boolean => "boolean",
                 PrimitiveType::Number => "number",
                 PrimitiveType::String => "string",
             }),
             Ast::String(string) => string_literal(string),
-            Ast::TemplateString(string) => RcDoc::text(string),
+            Ast::TemplateString(string) => D::text(string),
             Ast::IfExpr(..) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
@@ -845,45 +857,48 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .expect("rhs of dot access should be an ident");
 
                 lhs.to_ts()
-                    .append(RcDoc::text("["))
+                    .append(D::text("["))
                     .append(string_literal(rhs.0.as_str()))
-                    .append(RcDoc::text("]"))
+                    .append(D::text("]"))
                     .group()
             }
             Ast::Access { lhs, rhs, .. } => lhs
                 .to_ts()
-                .append(RcDoc::text("["))
+                .append(D::text("["))
                 .append(rhs.to_ts())
-                .append(RcDoc::text("]"))
+                .append(D::text("]"))
                 .group(),
             Ast::ObjectLiteral(ObjectLiteral { properties: props }) => {
-                let sep = RcDoc::text(",").append(RcDoc::space());
+                let sep = D::text(",").append(D::line());
 
-                let props = RcDoc::intersperse(props.iter().map(|prop| prop.to_ts()), sep);
+                let props = D::intersperse(props.iter().map(|prop| prop.to_ts()), sep);
 
-                RcDoc::text("{").append(props).append(RcDoc::text("}"))
+                D::nil()
+                    .append("{")
+                    .append(D::line_())
+                    .append(props.nest(4))
+                    .append(D::line_())
+                    .append(D::text("}"))
+                    .group()
             }
             Ast::Application(Application {
                 name: ident,
                 args: params,
             }) => {
-                let sep = RcDoc::text(",").append(RcDoc::space());
+                let sep = D::text(",").append(D::space());
 
-                let generic_inner =
-                    RcDoc::intersperse(params.iter().map(|param| param.to_ts()), sep);
+                let generic_inner = D::intersperse(params.iter().map(|param| param.to_ts()), sep);
 
-                let generic_params = RcDoc::text("<")
-                    .append(generic_inner)
-                    .append(RcDoc::text(">"));
+                let generic_params = D::text("<").append(generic_inner).append(D::text(">"));
 
                 ident.pretty().append(generic_params)
             }
             Ast::Tuple(Tuple { items }) => {
-                let sep = RcDoc::text(",").append(RcDoc::space());
+                let sep = D::text(",").append(D::space());
 
-                let items = RcDoc::intersperse(items.iter().map(|item| item.to_ts()), sep);
+                let items = D::intersperse(items.iter().map(|item| item.to_ts()), sep);
 
-                RcDoc::text("[").append(items).append(RcDoc::text("]"))
+                D::text("[").append(items).append(D::text("]"))
             }
             Ast::Array(node) => {
                 let doc = if node.value.is_infix_op() {
@@ -892,18 +907,18 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     node.to_ts()
                 };
 
-                doc.append(RcDoc::text("[]"))
+                doc.append(D::text("[]"))
             }
-            Ast::Null => RcDoc::text("null"),
-            Ast::Undefined => RcDoc::text("undefined"),
-            Ast::Never => RcDoc::text("never"),
-            Ast::Any => RcDoc::text("any"),
-            Ast::Unknown => RcDoc::text("unknown"),
-            Ast::True => RcDoc::text("true"),
-            Ast::False => RcDoc::text("false"),
+            Ast::Null => D::text("null"),
+            Ast::Undefined => D::text("undefined"),
+            Ast::Never => D::text("never"),
+            Ast::Any => D::text("any"),
+            Ast::Unknown => D::text("unknown"),
+            Ast::True => D::text("true"),
+            Ast::False => D::text("false"),
 
             Ast::InfixOp { lhs, op, rhs } => {
-                fn fmt<'a>(v: &'a AstNode<'a>) -> RcDoc<'a, ()> {
+                fn fmt<'a>(v: &'a AstNode<'a>) -> D<'a, ()> {
                     match &*v.value {
                         Ast::InfixOp { .. } => parens(v.to_ts()),
                         _ => v.to_ts(),
@@ -914,15 +929,15 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 let rhs = fmt(rhs);
 
                 let op = match op {
-                    Op::Union => RcDoc::text("|"),
-                    Op::Intersection => RcDoc::text("&"),
+                    Op::Union => D::text("|"),
+                    Op::Intersection => D::text("&"),
                 };
 
-                RcDoc::nil()
+                D::nil()
                     .append(lhs)
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append(op)
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append(rhs)
             }
 
@@ -936,20 +951,20 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }) => {
                 let condition_doc = lhs
                     .to_ts()
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append("extends")
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append(rhs.to_ts());
 
-                let then_doc = RcDoc::line()
+                let then_doc = D::line()
                     .append("?")
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append(then.to_ts())
                     .nest(4);
 
-                let else_doc = RcDoc::line()
+                let else_doc = D::line()
                     .append(":")
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append(els.to_ts())
                     .nest(4);
 
@@ -961,12 +976,12 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 rhs,
             } => lhs
                 .to_ts()
-                .append(RcDoc::space())
+                .append(D::space())
                 .append("extends")
-                .append(RcDoc::space())
+                .append(D::space())
                 .append(rhs.to_ts())
                 .group(),
-            Ast::Statement(stmnt) => stmnt.to_ts().append(RcDoc::text(";")),
+            Ast::Statement(stmnt) => stmnt.to_ts().append(D::text(";")),
             Ast::MappedType(MappedType {
                 index: key,
                 iterable,
@@ -976,39 +991,39 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 body,
             }) => {
                 let remapped_as_doc = match remapped_as {
-                    Some(remapped_as) => RcDoc::space()
+                    Some(remapped_as) => D::space()
                         .append("as")
-                        .append(RcDoc::space())
+                        .append(D::space())
                         .append(remapped_as.to_ts()),
-                    None => RcDoc::nil(),
+                    None => D::nil(),
                 };
 
-                let lhs_doc = RcDoc::nil()
+                let lhs_doc = D::nil()
                     .append(key)
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append("in")
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append(iterable.to_ts())
                     .append(remapped_as_doc)
                     .group();
 
                 let rhs_doc = body.to_ts();
 
-                let rhs_doc = RcDoc::line().append(rhs_doc).nest(4).group();
+                let rhs_doc = D::line().append(rhs_doc).nest(4).group();
 
                 let readonly_doc = match readonly_mod {
-                    Some(MappingModifier::Add) => RcDoc::text("readonly"),
-                    Some(MappingModifier::Remove) => RcDoc::text("-readonly"),
-                    None => RcDoc::nil(),
+                    Some(MappingModifier::Add) => D::text("readonly"),
+                    Some(MappingModifier::Remove) => D::text("-readonly"),
+                    None => D::nil(),
                 };
 
                 let optional_doc = match optional_mod {
-                    Some(MappingModifier::Add) => RcDoc::text("?"),
-                    Some(MappingModifier::Remove) => RcDoc::text("-?"),
-                    None => RcDoc::nil(),
+                    Some(MappingModifier::Add) => D::text("?"),
+                    Some(MappingModifier::Remove) => D::text("-?"),
+                    None => D::nil(),
                 };
 
-                let inner_doc = RcDoc::line()
+                let inner_doc = D::line()
                     .append(readonly_doc)
                     .append("[")
                     .append(lhs_doc)
@@ -1016,15 +1031,11 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .append(optional_doc)
                     .append(":")
                     .append(rhs_doc)
-                    .append(RcDoc::line())
+                    .append(D::line())
                     .nest(4)
                     .group();
 
-                RcDoc::nil()
-                    .append("{")
-                    .append(inner_doc)
-                    .append("}")
-                    .group()
+                D::nil().append("{").append(inner_doc).append("}").group()
             }
             Ast::LetExpr(..) => {
                 unreachable!("LetExpr should be desugared before this point")
@@ -1035,12 +1046,12 @@ impl<'a> typescript::Pretty for Ast<'a> {
             } => {
                 let import_clause = import_clause.to_ts();
 
-                RcDoc::text("import type")
-                    .append(RcDoc::space())
+                D::text("import type")
+                    .append(D::space())
                     .append(import_clause)
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append("from")
-                    .append(RcDoc::space())
+                    .append(D::space())
                     .append(string_literal(module))
             }
             Ast::NamespaceAccess(NamespaceAccess { lhs, rhs }) => {
@@ -1056,6 +1067,73 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     node
                 )
             }
+            Ast::CondExpr { .. } => todo!(),
+            Ast::ExtendsPrefixOp { .. } => todo!(),
+            Ast::MatchExpr(_) => todo!(),
+            Ast::Interface {
+                export,
+                name,
+                extends,
+                params,
+                definition,
+            } => {
+                let doc = if *export {
+                    D::text("export").append(D::space())
+                } else {
+                    D::nil()
+                };
+
+                let extends = match extends {
+                    Some(extends) => D::space()
+                        .append("extends")
+                        .append(D::space())
+                        .append(extends)
+                        .append(D::space()),
+                    None => D::nil(),
+                };
+
+                let params_doc = match params {
+                    list if list.is_empty() => D::nil(),
+                    list => {
+                        let seperator = D::text(",").append(D::line());
+
+                        let body = D::intersperse(
+                            list.iter().map(|param| param.to_ts().group()),
+                            seperator,
+                        );
+
+                        D::text("<")
+                            .append(D::line_().append(body).append(D::line_()).nest(4))
+                            .append(D::text(">"))
+                            .group()
+                    }
+                };
+
+                let body = if definition.is_empty() {
+                    D::text("{}")
+                } else {
+                    let body = definition.iter().map(|p| p.to_ts());
+
+                    let body = D::intersperse(body, D::text(";").append(D::hardline()));
+
+                    let body = D::hardline().append(body).nest(4);
+
+                    D::nil()
+                        .append("{")
+                        .append(body)
+                        .append(D::hardline())
+                        .append("}")
+                };
+
+                doc.append("interface")
+                    .append(D::space())
+                    .append(name)
+                    .append(params_doc)
+                    .append(extends)
+                    .append(D::space())
+                    .append(body)
+                    .group()
+            }
         }
     }
 }
@@ -1067,27 +1145,23 @@ impl<'a> From<ExtendsExpr<'a>> for Ast<'a> {
 }
 
 impl<'a> PrettySexpr for Ast<'a> {
-    fn pretty_sexpr(&self) -> RcDoc {
+    fn pretty_sexpr(&self) -> D {
         match self {
             Ast::Access { lhs, rhs, is_dot } => {
                 let op = if *is_dot { "." } else { ".[]" };
 
-                Ast::sexpr(vec![
-                    RcDoc::text(op),
-                    lhs.pretty_sexpr(),
-                    rhs.pretty_sexpr(),
-                ])
+                Ast::sexpr(vec![D::text(op), lhs.pretty_sexpr(), rhs.pretty_sexpr()])
             }
-            Ast::Any => RcDoc::text("any"),
+            Ast::Any => D::text("any"),
             Ast::Application(Application { name, args }) => Ast::sexpr(
                 vec![name.pretty()]
                     .into_iter()
                     .chain(args.iter().map(|n| n.pretty_sexpr()))
                     .collect_vec(),
             ),
-            Ast::Array(value) => Ast::sexpr(vec![RcDoc::text("[]"), value.pretty_sexpr()]),
+            Ast::Array(value) => Ast::sexpr(vec![D::text("[]"), value.pretty_sexpr()]),
             Ast::InfixOp { lhs, op, rhs } => Ast::sexpr(vec![
-                RcDoc::text(match op {
+                D::text(match op {
                     Op::Union => "&",
                     Op::Intersection => "|",
                 }),
@@ -1100,7 +1174,7 @@ impl<'a> PrettySexpr for Ast<'a> {
                     BuiltInKeyword::Keyof => "keyof",
                 };
 
-                Ast::sexpr(vec![RcDoc::text(name), argument.pretty_sexpr()])
+                Ast::sexpr(vec![D::text(name), argument.pretty_sexpr()])
             }
             Ast::CondExpr(cond_expr) => cond_expr.pretty_sexpr(),
             Ast::ExtendsInfixOp { lhs, op, rhs } => {
@@ -1115,11 +1189,7 @@ impl<'a> PrettySexpr for Ast<'a> {
                     InfixOp::Or => "or",
                 };
 
-                Ast::sexpr(vec![
-                    RcDoc::text(op),
-                    lhs.pretty_sexpr(),
-                    rhs.pretty_sexpr(),
-                ])
+                Ast::sexpr(vec![D::text(op), lhs.pretty_sexpr(), rhs.pretty_sexpr()])
             }
             Ast::ExtendsExpr(ExtendsExpr {
                 lhs,
@@ -1127,7 +1197,7 @@ impl<'a> PrettySexpr for Ast<'a> {
                 then_branch,
                 else_branch,
             }) => Ast::sexpr(vec![
-                RcDoc::text("extends"),
+                D::text("extends"),
                 lhs.pretty_sexpr(),
                 rhs.pretty_sexpr(),
                 then_branch.pretty_sexpr(),
@@ -1139,7 +1209,7 @@ impl<'a> PrettySexpr for Ast<'a> {
                     PrefixOp::Infer => "infer",
                 };
 
-                Ast::sexpr(vec![RcDoc::text(op), value.pretty_sexpr()])
+                Ast::sexpr(vec![D::text(op), value.pretty_sexpr()])
             }
             Ast::False => todo!(),
             Ast::Ident(ident) => ident.pretty_sexpr(),
@@ -1152,11 +1222,11 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::Never => todo!(),
             Ast::NoOp => todo!(),
             Ast::Null => todo!(),
-            Ast::Number(number) => RcDoc::text(number),
-            Ast::ObjectLiteral(ObjectLiteral { properties: _ }) => todo!(),
+            Ast::Number(number) => D::text(number),
+            Ast::ObjectLiteral(..) => todo!(),
             Ast::Primitive(primitive) => primitive.pretty_sexpr(),
             Ast::Program(statements) => {
-                let mut vec = vec![RcDoc::text("program")];
+                let mut vec = vec![D::text("program")];
 
                 vec.extend(statements.iter().map(|s| s.pretty_sexpr()));
 
@@ -1173,10 +1243,10 @@ impl<'a> PrettySexpr for Ast<'a> {
                 params,
                 body,
             } => {
-                let mut vec = vec![RcDoc::text("type"), name.pretty()];
+                let mut vec = vec![D::text("type"), name.pretty()];
 
                 if *export {
-                    vec.push(RcDoc::text(":export"));
+                    vec.push(D::text(":export"));
                 }
 
                 if !params.is_empty() {
@@ -1185,7 +1255,7 @@ impl<'a> PrettySexpr for Ast<'a> {
                     ));
                 }
 
-                vec.push(RcDoc::text("as:"));
+                vec.push(D::text("as:"));
 
                 vec.push(body.pretty_sexpr());
 
@@ -1193,6 +1263,7 @@ impl<'a> PrettySexpr for Ast<'a> {
             }
             Ast::Undefined => todo!(),
             Ast::Unknown => todo!(),
+            Ast::Interface { .. } => todo!(),
         }
     }
 }
@@ -1201,7 +1272,7 @@ impl<'a, T> PrettySexpr for Node<'a, T>
 where
     T: PrettySexpr,
 {
-    fn pretty_sexpr(&self) -> RcDoc {
+    fn pretty_sexpr(&self) -> D {
         self.value.pretty_sexpr()
     }
 }
@@ -1373,29 +1444,29 @@ pub enum ImportClause {
 }
 
 impl typescript::Pretty for ImportClause {
-    fn to_ts(&self) -> RcDoc<()> {
+    fn to_ts(&self) -> D<()> {
         match self {
             ImportClause::Named(specifiers) => {
-                let sep = RcDoc::text(",").append(RcDoc::line());
+                let sep = D::text(",").append(D::line());
 
                 let specifiers =
-                    RcDoc::intersperse(specifiers.iter().map(typescript::Pretty::to_ts), sep);
+                    D::intersperse(specifiers.iter().map(typescript::Pretty::to_ts), sep);
 
-                RcDoc::text("{")
+                D::text("{")
                     .append(
-                        RcDoc::nil()
-                            .append(RcDoc::line())
+                        D::nil()
+                            .append(D::line())
                             .append(specifiers)
-                            .append(RcDoc::line())
+                            .append(D::line())
                             .nest(4),
                     )
-                    .append(RcDoc::text("}"))
+                    .append(D::text("}"))
                     .group()
             }
-            ImportClause::Namespace { alias } => RcDoc::text("*")
-                .append(RcDoc::space())
+            ImportClause::Namespace { alias } => D::text("*")
+                .append(D::space())
                 .append("as")
-                .append(RcDoc::space())
+                .append(D::space())
                 .append(alias.to_ts()),
         }
     }
@@ -1408,14 +1479,14 @@ pub struct ImportSpecifier {
 }
 
 impl typescript::Pretty for ImportSpecifier {
-    fn to_ts(&self) -> RcDoc<()> {
+    fn to_ts(&self) -> D<()> {
         let alias_doc = match &self.alias {
-            Some(alias) => RcDoc::space()
+            Some(alias) => D::space()
                 .append("as")
-                .append(RcDoc::space())
+                .append(D::space())
                 .append(alias.to_ts()),
 
-            None => RcDoc::nil(),
+            None => D::nil(),
         };
 
         self.module_export_name.to_ts().append(alias_doc)
@@ -1428,9 +1499,9 @@ pub enum BuiltInKeyword {
 }
 
 impl typescript::Pretty for BuiltInKeyword {
-    fn to_ts(&self) -> RcDoc<()> {
+    fn to_ts(&self) -> D<()> {
         match self {
-            BuiltInKeyword::Keyof => RcDoc::text("keyof"),
+            BuiltInKeyword::Keyof => D::text("keyof"),
         }
     }
 }
@@ -1449,11 +1520,11 @@ pub enum PrimitiveType {
 }
 
 impl PrettySexpr for PrimitiveType {
-    fn pretty_sexpr(&self) -> RcDoc<()> {
+    fn pretty_sexpr(&self) -> D<()> {
         match self {
-            PrimitiveType::Boolean => RcDoc::text("boolean"),
-            PrimitiveType::Number => RcDoc::text("number"),
-            PrimitiveType::String => RcDoc::text("string"),
+            PrimitiveType::Boolean => D::text("boolean"),
+            PrimitiveType::Number => D::text("number"),
+            PrimitiveType::String => D::text("string"),
         }
     }
 }
@@ -1501,26 +1572,26 @@ pub struct ObjectProperty<'a> {
 }
 
 impl<'a> typescript::Pretty for ObjectProperty<'a> {
-    fn to_ts(&self) -> RcDoc<()> {
+    fn to_ts(&self) -> D<()> {
         let readonly = if self.readonly {
-            RcDoc::text("readonly").append(RcDoc::space())
+            D::text("readonly").append(D::space())
         } else {
-            RcDoc::nil()
+            D::nil()
         };
 
         let optional = if self.optional {
-            RcDoc::text("?")
+            D::text("?")
         } else {
-            RcDoc::nil()
+            D::nil()
         };
 
-        let doc = RcDoc::nil();
+        let doc = D::nil();
 
         doc.append(readonly)
             .append(&self.key)
             .append(optional)
-            .append(RcDoc::text(":"))
-            .append(RcDoc::space())
+            .append(D::text(":"))
+            .append(D::space())
             .append(self.value.to_ts())
     }
 }
@@ -1541,20 +1612,20 @@ impl From<&str> for Identifier {
 }
 
 impl PrettySexpr for Identifier {
-    fn pretty_sexpr(&self) -> RcDoc<()> {
+    fn pretty_sexpr(&self) -> D<()> {
         self.pretty()
     }
 }
 
 impl Identifier {
-    fn pretty(&self) -> RcDoc<()> {
-        RcDoc::text(&self.0)
+    fn pretty(&self) -> D<()> {
+        D::text(&self.0)
     }
 }
 
 impl typescript::Pretty for Identifier {
-    fn to_ts(&self) -> RcDoc<()> {
-        RcDoc::text(self.0.clone())
+    fn to_ts(&self) -> D<()> {
+        D::text(self.0.clone())
     }
 }
 
@@ -1581,45 +1652,41 @@ impl<'a> TypeParameter<'a> {
         }
     }
 
-    fn pretty_sexpr(&self) -> RcDoc<()> {
+    fn pretty_sexpr(&self) -> D<()> {
         Ast::sexpr(vec![
-            RcDoc::text("type-parameter"),
-            RcDoc::text(self.name.clone()),
+            D::text("type-parameter"),
+            D::text(self.name.clone()),
             self.constraint
                 .as_ref()
-                .map_or_else(RcDoc::nil, |v| v.pretty_sexpr()),
+                .map_or_else(D::nil, |v| v.pretty_sexpr()),
             self.default
                 .as_ref()
-                .map_or_else(RcDoc::nil, |v| v.pretty_sexpr()),
+                .map_or_else(D::nil, |v| v.pretty_sexpr()),
         ])
     }
 }
 
 impl<'a> typescript::Pretty for TypeParameter<'a> {
-    fn to_ts(&self) -> RcDoc<()> {
-        let rest = if self.rest {
-            RcDoc::text("...")
-        } else {
-            RcDoc::nil()
-        };
+    fn to_ts(&self) -> D<()> {
+        let rest = if self.rest { D::text("...") } else { D::nil() };
 
         let constraint = match &self.constraint {
-            Some(constraint) => RcDoc::space()
+            Some(constraint) => D::space()
                 .append("extends")
-                .append(RcDoc::space())
+                .append(D::space())
                 .append(constraint.to_ts()),
-            None => RcDoc::nil(),
+            None => D::nil(),
         };
 
         let default_value = match &self.default {
-            Some(value) => RcDoc::space()
+            Some(value) => D::space()
                 .append("=")
-                .append(RcDoc::space())
+                .append(D::space())
                 .append(value.to_ts()),
-            None => RcDoc::nil(),
+            None => D::nil(),
         };
 
-        RcDoc::nil()
+        D::nil()
             .append(rest)
             .append(self.name.clone())
             .append(constraint)
@@ -1628,7 +1695,7 @@ impl<'a> typescript::Pretty for TypeParameter<'a> {
 }
 
 pub(crate) mod if_expr {
-    use pretty::RcDoc;
+    use pretty::RcDoc as D;
 
     use super::{Ast, AstNode, ExtendsExpr, InfixOp, Node, PrefixOp, PrettySexpr};
 
@@ -1651,16 +1718,16 @@ pub(crate) mod if_expr {
     }
 
     impl<'a> PrettySexpr for Expr<'a> {
-        fn pretty_sexpr(&self) -> RcDoc<()> {
+        fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
             let mut vec = vec![
-                RcDoc::text("if"),
+                D::text("if"),
                 self.condition.pretty_sexpr(),
-                RcDoc::text("then:"),
+                D::text("then:"),
                 self.then_branch.pretty_sexpr(),
             ];
 
             if let Some(else_branch) = &self.else_branch {
-                vec.push(RcDoc::text("else:"));
+                vec.push(D::text("else:"));
                 vec.push(else_branch.pretty_sexpr());
             }
 
@@ -1868,7 +1935,7 @@ pub(crate) mod cond_expr {
 }
 
 pub(crate) mod let_expr {
-    use pretty::RcDoc;
+    use pretty::RcDoc as D;
 
     use super::{Ast, AstNode, Identifier, PrettySexpr};
 
@@ -1906,7 +1973,7 @@ pub(crate) mod let_expr {
     }
 
     impl PrettySexpr for Expr<'_> {
-        fn pretty_sexpr(&self) -> RcDoc<()> {
+        fn pretty_sexpr(&self) -> D<()> {
             let mut bindings = vec![];
 
             for (ident, value) in &self.bindings {
@@ -1915,7 +1982,7 @@ pub(crate) mod let_expr {
             }
 
             Ast::sexpr(vec![
-                RcDoc::text("let"),
+                D::text("let"),
                 Ast::sexpr(bindings),
                 self.body.pretty_sexpr(),
             ])

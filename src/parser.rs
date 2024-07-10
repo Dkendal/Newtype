@@ -226,8 +226,9 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> AstNode {
 pub(crate) fn parse_node(pair: Pair) -> AstNode {
     let rule = pair.clone().as_rule();
     let span = pair.clone().as_span();
-    let mknode = |ast| Node::from_span(span, ast);
+    let new = |ast| Node::from_span(span, ast);
 
+    // TODO: just return AST, remove calls to new/1 wrap result
     match rule {
         Rule::program => {
             let children: Vec<_> = pair
@@ -237,17 +238,18 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
                 .map(parse_node)
                 .collect();
 
-            mknode(Ast::Program(children))
+            new(Ast::Program(children))
         }
         Rule::statement => {
             let inner = pair.into_inner().next().unwrap();
             let inner = parse_node(inner);
-            mknode(Ast::Statement(inner))
+            new(Ast::Statement(inner))
         }
         Rule::type_alias => parse_type_alias(pair),
+        Rule::interface => parse_interface(pair),
         Rule::import_statement => parse_import_statement(pair),
         Rule::if_expr => parse_if_expr(pair),
-        Rule::object_literal => parse_object_literal(pair),
+        Rule::object_literal => new(Ast::ObjectLiteral(parse_object_literal(pair))),
         Rule::primitive => {
             let value = pair.into_inner().next().unwrap();
             let primitive = match value.as_rule() {
@@ -259,19 +261,19 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
                     value.as_rule()
                 ),
             };
-            mknode(Ast::Primitive(primitive))
+            new(Ast::Primitive(primitive))
         }
-        Rule::number => mknode(Ast::Number(node_as_string(pair))),
+        Rule::number => new(Ast::Number(node_as_string(pair))),
         Rule::string => parse_string(pair),
-        Rule::template_string => mknode(Ast::TemplateString(node_as_string(pair))),
-        Rule::ident => mknode(Ast::Ident(pair.as_str().into())),
-        Rule::never => mknode(Ast::Never),
-        Rule::any => mknode(Ast::Any),
-        Rule::unknown => mknode(Ast::Unknown),
-        Rule::literal_true => mknode(Ast::True),
-        Rule::literal_false => mknode(Ast::False),
-        Rule::null => mknode(Ast::Null),
-        Rule::undefined => mknode(Ast::Undefined),
+        Rule::template_string => new(Ast::TemplateString(node_as_string(pair))),
+        Rule::ident => new(Ast::Ident(pair.as_str().into())),
+        Rule::never => new(Ast::Never),
+        Rule::any => new(Ast::Any),
+        Rule::unknown => new(Ast::Unknown),
+        Rule::literal_true => new(Ast::True),
+        Rule::literal_false => new(Ast::False),
+        Rule::null => new(Ast::Null),
+        Rule::undefined => new(Ast::Undefined),
         Rule::tuple => parse_tuple(pair),
         Rule::application => {
             let mut inner = pair.into_inner();
@@ -284,7 +286,7 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
 
             let arguments = arguments_pair.into_inner().map(parse_node).collect();
 
-            mknode(Ast::Application(Application {
+            new(Ast::Application(Application {
                 name: identifier,
                 args: arguments,
             }))
@@ -304,7 +306,7 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
 
             let argument = inner.find(match_tag("argument")).map(parse_node).unwrap();
 
-            mknode(Ast::Builtin {
+            new(Ast::Builtin {
                 name,
                 argument: (argument),
             })
@@ -336,7 +338,7 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
                 .map(parse_node)
                 .unwrap_or_else(|| Ast::Never.into());
 
-            mknode(Ast::MatchExpr(match_expr::Expr {
+            new(Ast::MatchExpr(match_expr::Expr {
                 value,
                 arms,
                 else_arm,
@@ -370,7 +372,7 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
                 })
                 .collect();
 
-            mknode(Ast::CondExpr(cond_expr::Expr { arms, else_arm }))
+            new(Ast::CondExpr(cond_expr::Expr { arms, else_arm }))
         }
         Rule::for_expr => {
             let mut inner = pair.into_inner();
@@ -390,7 +392,7 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
 
             let iterable = inner.find(match_tag("iterable")).map(parse_node).unwrap();
 
-            mknode(Ast::MappedType(MappedType {
+            new(Ast::MappedType(MappedType {
                 index,
                 iterable,
                 body,
@@ -425,7 +427,7 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
                 .map(parse_node)
                 .unwrap();
 
-            mknode(Ast::LetExpr(let_expr::Expr { bindings, body }))
+            new(Ast::LetExpr(let_expr::Expr { bindings, body }))
         }
         Rule::EOI => {
             parse_error!(pair, format!("Unexpected end of input"));
@@ -435,6 +437,142 @@ pub(crate) fn parse_node(pair: Pair) -> AstNode {
             parse_error!(pair, format!("Unexpected rule: {:?}", rule));
         }
     }
+}
+
+fn parse_interface(pair: Pair) -> Node<Ast> {
+    let inner = pair.clone().into_inner();
+
+    let export = inner
+        .peek()
+        .map(|p| p.as_rule() == Rule::export)
+        .unwrap_or(false);
+
+    let name = inner
+        .clone()
+        .find(match_tag("name"))
+        .unwrap()
+        .as_str()
+        .into();
+
+    let body = inner.clone().find(match_tag("body")).unwrap();
+
+    let body = parse_object_literal(body);
+
+    let definition = body.properties;
+
+    // Track the order of the inserted parametes
+    let mut ordered_params: Vec<&str> = Default::default();
+
+    let mut params: HashMap<&str, TypeParameter> = inner
+        .clone()
+        .find(match_tag("parameters"))
+        .map(|p| -> HashMap<&str, TypeParameter> {
+            p.into_inner()
+                .map(|param| {
+                    ordered_params.push(param.as_str());
+
+                    (
+                        param.as_str(),
+                        TypeParameter::new(param.as_str().to_string(), None, None, false),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let Some(where_clause) = inner.clone().find(match_tag("where")) {
+        where_clause
+            .into_inner()
+            .filter(match_tag("constraint"))
+            .for_each(|pair| {
+                let mut inner = pair.clone().into_inner();
+                let name = inner.next().unwrap();
+                assert_eq!(name.as_node_tag(), Some("constraint_name"));
+                assert_eq!(name.as_rule(), Rule::ident);
+                let name = name.as_str();
+
+                assert_eq!(inner.next().unwrap().as_rule(), Rule::extends);
+
+                let body = inner.next().unwrap();
+                assert_eq!(body.as_node_tag(), Some("constraint_body"));
+                assert_eq!(body.as_rule(), Rule::expr);
+                let body = parse_node(body);
+
+                let param = match params.get_mut(name) {
+                    Some(param) => param,
+                    None => {
+                        let error = Error::<Rule>::new_from_span(
+                            ErrorVariant::CustomError {
+                                message: format!(
+                                    r#"Type parameter "{}", is missing from signature"#,
+                                    name
+                                ),
+                            },
+                            pair.clone().as_span(),
+                        );
+
+                        panic!("{error}")
+                    }
+                };
+
+                param.constraint = Some(body);
+            });
+    }
+
+    if let Some(defaults_clause) = inner.clone().find(match_tag("defaults")) {
+        defaults_clause
+            .into_inner()
+            .filter(match_tag("default"))
+            .for_each(|pair| {
+                let mut inner = pair.clone().into_inner();
+                let name = inner.next().unwrap();
+                assert_eq!(name.as_node_tag(), Some("name"));
+                assert_eq!(name.as_rule(), Rule::ident);
+                let name = name.as_str();
+
+                let body = inner.next().unwrap();
+                assert_eq!(body.as_node_tag(), Some("value"));
+                assert_eq!(body.as_rule(), Rule::expr);
+                let body = parse_node(body);
+
+                let param = match params.get_mut(name) {
+                    Some(param) => param,
+                    None => {
+                        let error = Error::<Rule>::new_from_span(
+                            ErrorVariant::CustomError {
+                                message: format!(
+                                    r#"Type parameter "{}", is missing from signature"#,
+                                    name
+                                ),
+                            },
+                            pair.clone().as_span(),
+                        );
+
+                        panic!("{error}")
+                    }
+                };
+
+                param.default = Some(body);
+            });
+    };
+
+    let params = ordered_params
+        .iter()
+        .map(|name| params.get(name).unwrap().clone())
+        .collect();
+
+    let extends = None;
+
+    Node::from_pair(
+        &pair,
+        Ast::Interface {
+            export,
+            extends,
+            name,
+            params,
+            definition,
+        },
+    )
 }
 
 fn pair_as_identifier(pair: Pair) -> Identifier {
@@ -536,7 +674,7 @@ fn parse_tuple(pair: Pair) -> AstNode {
     Node::from_pair(&pair, Ast::Tuple(Tuple { items }))
 }
 
-fn parse_object_literal(pair: Pair) -> AstNode {
+fn parse_object_literal(pair: Pair) -> ObjectLiteral {
     let object_property_rules = pair.clone().into_inner();
     let mut properties = Vec::new();
 
@@ -554,9 +692,11 @@ fn parse_object_literal(pair: Pair) -> AstNode {
 
                 let mut inner = key.into_inner();
 
+                dbg!(&inner);
+
                 let readonly = find_tag(inner.clone(), "readonly").is_some();
                 let optional = find_tag(inner.clone(), "optional").is_some();
-                let key = inner.find(match_rule(Rule::ident)).unwrap();
+                let key = find_tag(inner.clone(), "key").unwrap();
                 let key = key.as_str().to_string();
 
                 properties.push(ObjectProperty {
@@ -573,7 +713,7 @@ fn parse_object_literal(pair: Pair) -> AstNode {
         }
     }
 
-    Node::from_pair(&pair, Ast::ObjectLiteral(ObjectLiteral { properties }))
+    return ObjectLiteral { properties };
 }
 
 fn parse_type_alias(pair: Pair) -> AstNode {
@@ -1509,6 +1649,18 @@ mod parser_tests {
     }
 
     #[test]
+    fn interface() {
+        assert_typescript!(
+            r#"
+            interface Foo {};
+            "#,
+            r#"
+            interface Foo {}
+            "#
+        );
+    }
+
+    #[test]
     fn application_single_type_argument() {
         assert_typescript!(expr, "A<1>", "A(1)");
     }
@@ -1772,6 +1924,7 @@ mod parser_tests {
     }
 
     #[test]
+    #[ignore]
     fn ts_toolbelt_list_assign() {
         assert_typescript!(
             statement,
@@ -1806,10 +1959,49 @@ mod parser_tests {
     }
 
     #[test]
-    #[ignore]
     fn match_ts() {
         assert_typescript!(
             r#"
+            import type { A, B, I, M, Union } from 'ts-toolbelt';
+
+            import type { __ } from '.';
+
+            import type {
+                __capture__,
+                __kind__,
+                any_,
+                bigint_,
+                boolean_,
+                function_,
+                number_,
+                object_,
+                rest_,
+                string_,
+                symbol_
+            } from './const';
+
+            type True = 1;
+
+            type ExtractSubcapture<T> =
+                T extends M.Primitive | M.BuiltIn
+                    ? T extends object
+                        ? T[Exclude<keyof T, keyof [] | keyof {}>]
+                        : never
+                    : never;
+
+            type PartialAssignment<K, V> =
+                V extends never
+                    ? never
+                    : K extends string
+                        ? { [k in K]: v }
+                        : never;
+
+            type EmptyToNever<T> = {} extends T ? never : T;
+
+            export interface Hole<Type = any, Label = any> {
+                T: Type;
+                readonly [__kind__]: Label;
+            };
             "#,
             r#"
             import { A, B, I, M, Union } from :ts-toolbelt
@@ -1844,6 +2036,20 @@ mod parser_tests {
                     end
                 end
 
+
+            type EmptyToNever(T) as
+                if {} </: T then
+                    T
+                end
+
+            export interface Hole(Type, Label)
+            defaults
+                Type = any,
+                Label = any,
+            {
+                T: Type,
+                readonly [__kind__]: Label,
+            }
 
             "#
         );

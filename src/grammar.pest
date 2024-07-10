@@ -36,7 +36,9 @@ type_alias = {
 }
 
 interface = {
-    (#export = export)? ~ "interface" ~ #name = ident ~ ("(" ~ #Parameters = type_parameters ~ ")")? ~ #defaults_clause = defaults_caluse? ~ #where_clause = where_clause? ~ #extends = extends_clause? ~ #definition = object_literal
+    (#export = export)? ~ "interface" ~
+    #name = ident ~ ("(" ~ #Parameters = type_parameters ~ ")")? ~
+    #defaults_clause = defaults_caluse? ~ #where_clause = where_clause? ~ #extends = extends_clause? ~ #body = object_literal
 }
 
 extends_clause = {
