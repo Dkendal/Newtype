@@ -20,6 +20,7 @@ use pest::{
 };
 
 use pratt::{EXPR_PARSER, EXTENDS_PARSER};
+use Interface;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -565,13 +566,13 @@ fn parse_interface(pair: Pair) -> Node<Ast> {
 
     Node::from_pair(
         &pair,
-        Ast::Interface {
+        Ast::Interface(Interface {
             export,
             extends,
             name,
             params,
             definition,
-        },
+        }),
     )
 }
 

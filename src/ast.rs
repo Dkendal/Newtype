@@ -607,6 +607,15 @@ pub struct ObjectLiteral<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Interface<'a> {
+    pub export: bool,
+    pub name: String,
+    pub extends: Option<String>,
+    pub params: Vec<TypeParameter<'a>>,
+    pub definition: Vec<ObjectProperty<'a>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Ast<'a> {
     Access {
         lhs: AstNode<'a>,
@@ -667,13 +676,7 @@ pub enum Ast<'a> {
     },
     Undefined,
     Unknown,
-    Interface {
-        export: bool,
-        name: String,
-        extends: Option<String>,
-        params: Vec<TypeParameter<'a>>,
-        definition: Vec<ObjectProperty<'a>>,
-    },
+    Interface(Interface<'a>),
 }
 
 impl<'a> From<if_expr::Expr<'a>> for Ast<'a> {
@@ -744,7 +747,7 @@ impl<'a> Ast<'a> {
             Ast::TypeAlias { .. } => false,
             Ast::Undefined => true,
             Ast::Unknown => true,
-            Ast::Interface { .. } => todo!(),
+            Ast::Interface(Interface { .. }) => todo!(),
         }
     }
 
@@ -1070,13 +1073,13 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::CondExpr { .. } => todo!(),
             Ast::ExtendsPrefixOp { .. } => todo!(),
             Ast::MatchExpr(_) => todo!(),
-            Ast::Interface {
+            Ast::Interface(Interface {
                 export,
                 name,
                 extends,
                 params,
                 definition,
-            } => {
+            }) => {
                 let doc = if *export {
                     D::text("export").append(D::space())
                 } else {
@@ -1263,7 +1266,7 @@ impl<'a> PrettySexpr for Ast<'a> {
             }
             Ast::Undefined => todo!(),
             Ast::Unknown => todo!(),
-            Ast::Interface { .. } => todo!(),
+            Ast::Interface(Interface { .. }) => todo!(),
         }
     }
 }
