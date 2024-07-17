@@ -27,6 +27,45 @@ macro_rules! next_pair {
 
 pub(crate) use next_pair;
 
+macro_rules! take_pairs {
+    ($pairs:expr, $($rule:expr),+) => {
+        (
+            $(
+                if let Some(pair) = $pairs.next() {
+                    if pair.as_rule() == $rule {
+                        pair
+                    } else {
+                        panic!("Expected {:#?} got {:#?}", $rule, pair.as_rule())
+                    }
+                } else {
+                    panic!("Expected {:#?} got None", $rule)
+                }
+            ),+
+        )
+    };
+}
+
+pub(crate) use take_pairs;
+
+macro_rules! take_tags {
+    ($pairs:expr, [$($tag:expr),+]) => {{
+        let tags = [$($tag),+];
+        let mut init: [Option<Pair>; ${count($tag)}] = Default::default();
+
+        for pair in $pairs {
+            if let Some(tag) = pair.as_node_tag() {
+                if let Some(index) = tags.iter().position(|&t| t == tag) {
+                    init[index] = Some(pair);
+                }
+            }
+        }
+
+        init
+    }};
+}
+
+pub(crate) use take_tags;
+
 macro_rules! parse_error {
     ($pair:expr) => {{
         parse_error!($pair, vec![], vec![$pair.clone().as_rule()]);

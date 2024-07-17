@@ -461,6 +461,25 @@ fn parse_interface(pair: Pair) -> Node<Ast> {
 
     let definition = body.properties;
 
+    let params = parse_definition_options(inner);
+
+    dbg!(&params);
+
+    let extends = None;
+
+    Node::from_pair(
+        &pair,
+        Ast::Interface(Interface {
+            export,
+            extends,
+            name,
+            params,
+            definition,
+        }),
+    )
+}
+
+fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypeParameter> {
     // Track the order of the inserted parametes
     let mut ordered_params: Vec<&str> = Default::default();
 
@@ -561,19 +580,7 @@ fn parse_interface(pair: Pair) -> Node<Ast> {
         .iter()
         .map(|name| params.get(name).unwrap().clone())
         .collect();
-
-    let extends = None;
-
-    Node::from_pair(
-        &pair,
-        Ast::Interface(Interface {
-            export,
-            extends,
-            name,
-            params,
-            definition,
-        }),
-    )
+    params
 }
 
 fn pair_as_identifier(pair: Pair) -> Identifier {
@@ -693,12 +700,12 @@ fn parse_object_literal(pair: Pair) -> ObjectLiteral {
 
                 let mut inner = key.into_inner();
 
-                dbg!(&inner);
-
                 let readonly = find_tag(inner.clone(), "readonly").is_some();
                 let optional = find_tag(inner.clone(), "optional").is_some();
+
                 let key = find_tag(inner.clone(), "key").unwrap();
-                let key = key.as_str().to_string();
+
+                let key = parse_property_key_inner(key);
 
                 properties.push(ObjectProperty {
                     readonly,
@@ -715,6 +722,35 @@ fn parse_object_literal(pair: Pair) -> ObjectLiteral {
     }
 
     return ObjectLiteral { properties };
+}
+
+fn parse_property_key_inner(key: Pair) -> ObjectPropertyKey {
+    match key.as_rule() {
+        Rule::ident => ObjectPropertyKey::Key(key.as_str().to_string()),
+        Rule::index_property_key => parse_index_property_key(key),
+        Rule::computed_property_key => {
+            let inner = key.into_inner().next().unwrap();
+            let id = pair_as_identifier(inner);
+            ObjectPropertyKey::Computed(id)
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn parse_index_property_key(key: Pair) -> ObjectPropertyKey {
+    let inner = key.into_inner();
+
+    let [index, iterable, remap_clause] = take_tags!(inner, ["index", "iterable", "remap_clause"]);
+
+    let key = index.unwrap().as_str().to_string();
+    let iterable = parse_node(iterable.unwrap());
+    let remapped_as = remap_clause.map(parse_node);
+
+    ObjectPropertyKey::Index(PropertyKeyIndex {
+        key,
+        iterable,
+        remapped_as,
+    })
 }
 
 fn parse_type_alias(pair: Pair) -> AstNode {
@@ -738,106 +774,7 @@ fn parse_type_alias(pair: Pair) -> AstNode {
         .map(parse_node)
         .unwrap();
 
-    // Track the order of the inserted parametes
-    let mut ordered_params: Vec<&str> = Default::default();
-
-    let mut params: HashMap<&str, TypeParameter> = inner
-        .clone()
-        .find(match_tag("parameters"))
-        .map(|p| -> HashMap<&str, TypeParameter> {
-            p.into_inner()
-                .map(|param| {
-                    ordered_params.push(param.as_str());
-
-                    (
-                        param.as_str(),
-                        TypeParameter::new(param.as_str().to_string(), None, None, false),
-                    )
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    if let Some(where_clause) = inner.clone().find(match_tag("where")) {
-        where_clause
-            .into_inner()
-            .filter(match_tag("constraint"))
-            .for_each(|pair| {
-                let mut inner = pair.clone().into_inner();
-                let name = inner.next().unwrap();
-                assert_eq!(name.as_node_tag(), Some("constraint_name"));
-                assert_eq!(name.as_rule(), Rule::ident);
-                let name = name.as_str();
-
-                assert_eq!(inner.next().unwrap().as_rule(), Rule::extends);
-
-                let body = inner.next().unwrap();
-                assert_eq!(body.as_node_tag(), Some("constraint_body"));
-                assert_eq!(body.as_rule(), Rule::expr);
-                let body = parse_node(body);
-
-                let param = match params.get_mut(name) {
-                    Some(param) => param,
-                    None => {
-                        let error = Error::<Rule>::new_from_span(
-                            ErrorVariant::CustomError {
-                                message: format!(
-                                    r#"Type parameter "{}", is missing from signature"#,
-                                    name
-                                ),
-                            },
-                            pair.clone().as_span(),
-                        );
-
-                        panic!("{error}")
-                    }
-                };
-
-                param.constraint = Some(body);
-            });
-    }
-
-    if let Some(defaults_clause) = inner.clone().find(match_tag("defaults")) {
-        defaults_clause
-            .into_inner()
-            .filter(match_tag("default"))
-            .for_each(|pair| {
-                let mut inner = pair.clone().into_inner();
-                let name = inner.next().unwrap();
-                assert_eq!(name.as_node_tag(), Some("name"));
-                assert_eq!(name.as_rule(), Rule::ident);
-                let name = name.as_str();
-
-                let body = inner.next().unwrap();
-                assert_eq!(body.as_node_tag(), Some("value"));
-                assert_eq!(body.as_rule(), Rule::expr);
-                let body = parse_node(body);
-
-                let param = match params.get_mut(name) {
-                    Some(param) => param,
-                    None => {
-                        let error = Error::<Rule>::new_from_span(
-                            ErrorVariant::CustomError {
-                                message: format!(
-                                    r#"Type parameter "{}", is missing from signature"#,
-                                    name
-                                ),
-                            },
-                            pair.clone().as_span(),
-                        );
-
-                        panic!("{error}")
-                    }
-                };
-
-                param.default = Some(body);
-            });
-    };
-
-    let params = ordered_params
-        .iter()
-        .map(|name| params.get(name).unwrap().clone())
-        .collect();
+    let params = parse_definition_options(inner);
 
     Node::from_pair(
         &pair,
@@ -1535,160 +1472,328 @@ mod parser_tests {
         );
     }
 
-    #[test]
-    fn object_object_literal_empty() {
-        assert_typescript!("type A = {};", "type A as {}");
+    mod object_literal {
+        const R: Rule = object_literal;
+        use super::*;
+
+        #[test]
+        fn index() {
+            assert_typescript!(R, "{[k in K]: value}", "{ [k in K]: value }");
+        }
+
+        #[test]
+        fn readonly_modifier() {
+            assert_typescript!(R, "{readonly x: 1}", "{ readonly x: 1 }");
+        }
+
+        #[test]
+        fn optional_modifier() {
+            assert_typescript!(R, "{x?: 1}", "{ ?x: 1 }");
+        }
+
+        #[test]
+        fn empty() {
+            assert_typescript!(R, "{}", "{}");
+        }
+
+        #[test]
+        fn one_key() {
+            assert_typescript!(R, "{x: 1}", "{x: 1}");
+        }
+
+        #[test]
+        fn many_keys() {
+            assert_typescript!(R, "{x: 1, y: 2, z: 3}", "{x: 1, y: 2, z: 3}");
+        }
+
+        #[test]
+        fn computed_property() {
+            assert_typescript!(R, "{[K]: T}", "{[K]: T}");
+        }
     }
 
-    #[test]
-    fn object_literal_one_key() {
-        assert_typescript!("type A = {x: 1};", "type A as {x: 1}");
+    mod tuple {
+        const R: Rule = Rule::tuple;
+        use super::*;
+
+        #[test]
+        fn empty() {
+            assert_typescript!(R, "[]", "[]");
+        }
+
+        #[test]
+        fn single_element() {
+            assert_typescript!(R, "[1]", "[1]");
+        }
+
+        #[test]
+        fn multiple_elements() {
+            assert_typescript!(R, "[1, 2, 3]", "[1, 2, 3]");
+        }
+
+        #[test]
+        fn single_string_element() {
+            assert_typescript!(R, r#"['sup']"#, r#"[:sup]"#);
+        }
     }
 
-    #[test]
-    fn object_literal_many_keys() {
-        assert_typescript!(
-            "type A = {x: 1, y: 2, z: 3};",
-            "type A as {x: 1, y: 2, z: 3}"
-        );
+    mod array {
+        const R: Rule = Rule::expr;
+        use super::*;
+
+        #[test]
+        fn two_d() {
+            assert_typescript!(R, "number[]", "number[]");
+        }
+        #[test]
+        fn four_d() {
+            assert_typescript!(R, "number[][][]", "number[][][]");
+        }
+
+        #[test]
+        fn of_numbers_with_parentheses() {
+            assert_typescript!(R, "number[]", "(number)[]");
+        }
+
+        #[test]
+        fn of_union_types() {
+            assert_typescript!(R, "(number | string)[]", "(number | string)[]");
+        }
     }
 
-    #[test]
-    fn object_literal_readonly_modifier() {
-        assert_typescript!("type A = {readonly x: 1};", "type A as {readonly x: 1}");
+    mod type_alias {
+        const R: Rule = Rule::type_alias;
+        use super::*;
+
+        #[test]
+        fn generics_one_argument() {
+            assert_typescript!(R, "type A<x> = x", "type A(x) as x");
+        }
+
+        #[test]
+        fn generics_many_arguments() {
+            assert_typescript!(R, "type A<x, y, z> = 1", "type A(x, y, z) as 1");
+        }
+
+        #[test]
+        fn generic_with_guard() {
+            assert_typescript!(R, "type A<x, y, z> = 1", "type A(x, y, z) as 1");
+        }
+
+        #[test]
+        fn where_clause() {
+            assert_typescript!(
+                R,
+                r#"type A<x extends number> = x"#,
+                r#"type A(x) where x <: number as x"#
+            );
+        }
+
+        #[test]
+        fn defaults_clause() {
+            assert_typescript!(
+                R,
+                r#"type A<x = number> = x"#,
+                r#"type A(x) defaults x = number as x"#
+            );
+        }
+
+        #[test]
+        fn where_and_defaults_clause() {
+            assert_typescript!(
+                R,
+                r#"type A<x extends number = number> = x"#,
+                r#"type A(x) defaults x = number where x <: number as x"#
+            );
+        }
+
+        #[test]
+        fn exported() {
+            assert_typescript!(R, "export type A = 1", "export type A as 1");
+        }
     }
 
-    #[test]
-    fn object_literal_optional_modifier() {
-        assert_typescript!("type A = {x?: 1};", "type A as {?x: 1}");
+    mod interface {
+        const R: Rule = Rule::interface;
+        use super::*;
+
+        #[test]
+        fn interface() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo {}
+                "#,
+                r#"
+                interface Foo {}
+                "#
+            );
+        }
+
+        #[test]
+        fn params() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo<A> {}
+                "#,
+                r#"
+                interface Foo(A) {}
+                "#
+            );
+        }
+
+        #[test]
+        fn params_defaults() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo<A = any> {}
+                "#,
+                r#"
+                interface Foo(A)
+                defaults A = any
+                {}
+                "#
+            );
+        }
+
+        #[test]
+        fn readonly_property() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo {
+                    readonly x: number;
+                }
+                "#,
+                r#"
+                interface Foo {
+                    readonly x: number,
+                }
+                "#
+            );
+        }
+
+        #[test]
+        fn optional_property() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo {
+                    x?: number;
+                }
+                "#,
+                r#"
+                interface Foo {
+                    ?x: number,
+                }
+                "#
+            );
+        }
+
+        #[test]
+        fn index_property() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo {
+                    [K in T]: number;
+                }
+                "#,
+                r#"
+                interface Foo {
+                    [K in T]: number,
+                }
+                "#
+            );
+        }
+
+        #[test]
+        fn readonly_index_property() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo {
+                    readonly [K in T]: number;
+                }
+                "#,
+                r#"
+                interface Foo {
+                    readonly [K in T]: number,
+                }
+                "#
+            );
+        }
+
+        #[test]
+        fn optional_index_property() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo {
+                    [K in T]?: number;
+                }
+                "#,
+                r#"
+                interface Foo {
+                    ?[K in T]: number,
+                }
+                "#
+            );
+        }
+
+        #[test]
+        fn readonly_optional_index_property() {
+            assert_typescript!(
+                R,
+                r#"
+                interface Foo {
+                    readonly [K in T]?: number;
+                }
+                "#,
+                r#"
+                interface Foo {
+                    readonly ?[K in T]: number,
+                }
+                "#
+            );
+        }
     }
 
-    #[test]
-    fn tuple_empty() {
-        assert_typescript!("type A = [];", "type A as []");
-    }
+    mod application {
+        const R: Rule = Rule::expr;
+        use super::*;
 
-    #[test]
-    fn tuple_single_element() {
-        assert_typescript!("type A = [1];", "type A as [1]");
-    }
+        #[test]
+        fn single_type_argument() {
+            assert_typescript!(R, "A<1>", "A(1)");
+        }
 
-    #[test]
-    fn tuple_multiple_elements() {
-        assert_typescript!("type A = [1, 2, 3];", "type A as [1, 2, 3]");
-    }
+        #[test]
+        fn multiple_type_arguments() {
+            assert_typescript!(R, "A<1, 2, 3>", "A(1, 2, 3)");
+        }
 
-    #[test]
-    fn tuple_single_string_element() {
-        assert_typescript!(r#"type A = ['sup'];"#, r#"type A as [:sup]"#);
-    }
+        #[test]
+        fn type_argument_with_array() {
+            assert_typescript!(R, "A<1, []>", "A(1, [])");
+        }
 
-    #[test]
-    fn array_2d() {
-        assert_typescript!(expr, "number[]", "number[]");
-    }
-    #[test]
-    fn array_4d() {
-        assert_typescript!(expr, "number[][][]", "number[][][]");
-    }
+        #[test]
+        fn multiple_array_type_arguments() {
+            assert_typescript!(R, "A<[], [], []>", "A([], [], [])");
+        }
 
-    #[test]
-    fn array_of_numbers_with_parentheses() {
-        assert_typescript!("type A = number[];", "type A as (number)[]");
-    }
+        #[test]
+        fn nested_type_argument() {
+            assert_typescript!(R, "A<B<1>>", "A(B(1))");
+        }
 
-    #[test]
-    fn array_of_union_types() {
-        assert_typescript!(
-            "type A = (number | string)[];",
-            "type A as (number | string)[]"
-        );
-    }
-
-    #[test]
-    fn generics_one_argument() {
-        assert_typescript!("type A<x> = x;", "type A(x) as x");
-    }
-
-    #[test]
-    fn generics_many_arguments() {
-        assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) as 1");
-    }
-
-    #[test]
-    fn generic_with_guard() {
-        assert_typescript!("type A<x, y, z> = 1;", "type A(x, y, z) as 1");
-    }
-
-    #[test]
-    fn exported_type() {
-        assert_typescript!("export type A = 1;", "export type A as 1");
-    }
-
-    #[test]
-    fn type_alias_where_clause() {
-        assert_typescript!(
-            r#"type A<x extends number> = x;"#,
-            r#"type A(x) where x <: number as x"#
-        );
-    }
-
-    #[test]
-    fn type_alias_defaults_clause() {
-        assert_typescript!(
-            r#"type A<x = number> = x;"#,
-            r#"type A(x) defaults x = number as x"#
-        );
-    }
-
-    #[test]
-    fn type_alias_where_and_defaults_clause() {
-        assert_typescript!(
-            r#"type A<x extends number = number> = x;"#,
-            r#"type A(x) defaults x = number where x <: number as x"#
-        );
-    }
-
-    #[test]
-    fn interface() {
-        assert_typescript!(
-            r#"
-            interface Foo {};
-            "#,
-            r#"
-            interface Foo {}
-            "#
-        );
-    }
-
-    #[test]
-    fn application_single_type_argument() {
-        assert_typescript!(expr, "A<1>", "A(1)");
-    }
-
-    #[test]
-    fn application_multiple_type_arguments() {
-        assert_typescript!("type B = A<1, 2, 3>;", "type B as A(1, 2, 3)");
-    }
-
-    #[test]
-    fn application_type_argument_with_array() {
-        assert_typescript!("type B = A<1, []>;", "type B as A(1, [])");
-    }
-
-    #[test]
-    fn application_multiple_array_type_arguments() {
-        assert_typescript!("type B = A<[], [], []>;", "type B as A([], [], [])");
-    }
-
-    #[test]
-    fn application_nested_type_argument() {
-        assert_typescript!("type B = A<B<1>>;", "type B as A(B(1))");
-    }
-
-    #[test]
-    fn application_mixed_type_arguments() {
-        assert_typescript!("type B = A<B, 1>;", "type B as A(B, 1)");
+        #[test]
+        fn mixed_type_arguments() {
+            assert_typescript!(R, "A<B, 1>", "A(B, 1)");
+        }
     }
 
     #[test]

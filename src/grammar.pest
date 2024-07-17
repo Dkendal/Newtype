@@ -32,13 +32,25 @@ import_specifier = {
 }
 
 type_alias = {
-    (#export = export)? ~ "type" ~ #name = ident ~ ("(" ~ #parameters = type_parameters ~ ")")? ~ #defaults = defaults_caluse? ~ #where = where_clause? ~ "as" ~ #body = expr
+    (#export = export)? ~ "type" ~ 
+    #name = ident ~
+    definition_options ~
+    "as" ~ #body = expr
 }
 
 interface = {
     (#export = export)? ~ "interface" ~
-    #name = ident ~ ("(" ~ #Parameters = type_parameters ~ ")")? ~
-    #defaults_clause = defaults_caluse? ~ #where_clause = where_clause? ~ #extends = extends_clause? ~ #body = object_literal
+    #name = ident ~
+    definition_options ~
+    #extends = extends_clause? ~
+    #body = object_literal
+}
+
+
+definition_options = _{
+    ("(" ~ #parameters = type_parameters ~ ")")? ~
+    #defaults = defaults_caluse? ~
+    #where = where_clause?
 }
 
 extends_clause = {
@@ -161,10 +173,10 @@ property_key_prefix = _{
 
 property_key_inner = _{
     ident
-  | ("[" ~ (computed_property_name | index_property_key) ~ "]")
+  | ("[" ~ (index_property_key | computed_property_key) ~ "]")
 }
 
-computed_property_name = { expr }
+computed_property_key = { ident }
 
 index_property_key = {
     #index = ident ~ "in" ~ #iterable = expr ~ ("as" ~ #remap_clause = expr)?

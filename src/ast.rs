@@ -6,7 +6,7 @@ use pretty::RcDoc as D;
 
 use crate::{
     parser::{Pair, ParserError},
-    pretty::{parens, string_literal},
+    pretty::{parens, string_literal, surround},
     typescript,
 };
 
@@ -591,6 +591,18 @@ pub struct Application<'a> {
     pub args: AstNodes<'a>,
 }
 
+impl<'a> typescript::Pretty for Application<'a> {
+    fn to_ts(&self) -> D<()> {
+        let sep = D::text(",").append(D::space());
+
+        let generic_inner = D::intersperse(self.args.iter().map(|param| param.to_ts()), sep);
+
+        let generic_params = D::text("<").append(generic_inner).append(D::text(">"));
+
+        self.name.pretty().append(generic_params)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MappedType<'a> {
     pub index: String,
@@ -606,6 +618,24 @@ pub struct ObjectLiteral<'a> {
     pub properties: Vec<ObjectProperty<'a>>,
 }
 
+impl<'a> typescript::Pretty for ObjectLiteral<'a> {
+    fn to_ts(&self) -> D<()> {
+        let props = &self.properties;
+
+        let sep = D::text(",").append(D::line());
+
+        let props = D::intersperse(props.iter().map(|prop| prop.to_ts()), sep);
+
+        D::nil()
+            .append("{")
+            .append(D::line_())
+            .append(props.nest(4))
+            .append(D::line_())
+            .append(D::text("}"))
+            .group()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Interface<'a> {
     pub export: bool,
@@ -613,6 +643,73 @@ pub struct Interface<'a> {
     pub extends: Option<String>,
     pub params: Vec<TypeParameter<'a>>,
     pub definition: Vec<ObjectProperty<'a>>,
+}
+
+impl<'a> typescript::Pretty for Interface<'a> {
+    fn to_ts(&self) -> D<()> {
+        let Interface {
+            export,
+            name,
+            extends,
+            params,
+            definition,
+        } = self;
+
+        let doc = if *export {
+            D::text("export").append(D::space())
+        } else {
+            D::nil()
+        };
+
+        let extends = match extends {
+            Some(extends) => D::space()
+                .append("extends")
+                .append(D::space())
+                .append(extends)
+                .append(D::space()),
+            None => D::nil(),
+        };
+
+        let params_doc = match params {
+            list if list.is_empty() => D::nil(),
+            list => {
+                let seperator = D::text(",").append(D::line());
+
+                let params_body =
+                    D::intersperse(list.iter().map(|param| param.to_ts().group()), seperator);
+
+                D::text("<")
+                    .append(D::line_().append(params_body).append(D::line_()).nest(4))
+                    .append(D::text(">"))
+                    .group()
+            }
+        };
+
+        let body = if definition.is_empty() {
+            D::text("{}")
+        } else {
+            let body = definition.iter().map(|p| p.to_ts());
+
+            let body = D::intersperse(body, D::text(";").append(D::hardline())).append(";");
+
+            let body = D::hardline().append(body).nest(4);
+
+            D::nil()
+                .append("{")
+                .append(body)
+                .append(D::hardline())
+                .append("}")
+        };
+
+        doc.append("interface")
+            .append(D::space())
+            .append(name)
+            .append(params_doc)
+            .append(extends)
+            .append(D::space())
+            .append(body)
+            .group()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -871,31 +968,8 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 .append(rhs.to_ts())
                 .append(D::text("]"))
                 .group(),
-            Ast::ObjectLiteral(ObjectLiteral { properties: props }) => {
-                let sep = D::text(",").append(D::line());
-
-                let props = D::intersperse(props.iter().map(|prop| prop.to_ts()), sep);
-
-                D::nil()
-                    .append("{")
-                    .append(D::line_())
-                    .append(props.nest(4))
-                    .append(D::line_())
-                    .append(D::text("}"))
-                    .group()
-            }
-            Ast::Application(Application {
-                name: ident,
-                args: params,
-            }) => {
-                let sep = D::text(",").append(D::space());
-
-                let generic_inner = D::intersperse(params.iter().map(|param| param.to_ts()), sep);
-
-                let generic_params = D::text("<").append(generic_inner).append(D::text(">"));
-
-                ident.pretty().append(generic_params)
-            }
+            Ast::ObjectLiteral(value) => value.to_ts(),
+            Ast::Application(value) => value.to_ts(),
             Ast::Tuple(Tuple { items }) => {
                 let sep = D::text(",").append(D::space());
 
@@ -1073,69 +1147,8 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::CondExpr { .. } => todo!(),
             Ast::ExtendsPrefixOp { .. } => todo!(),
             Ast::MatchExpr(_) => todo!(),
-            Ast::Interface(Interface {
-                export,
-                name,
-                extends,
-                params,
-                definition,
-            }) => {
-                let doc = if *export {
-                    D::text("export").append(D::space())
-                } else {
-                    D::nil()
-                };
-
-                let extends = match extends {
-                    Some(extends) => D::space()
-                        .append("extends")
-                        .append(D::space())
-                        .append(extends)
-                        .append(D::space()),
-                    None => D::nil(),
-                };
-
-                let params_doc = match params {
-                    list if list.is_empty() => D::nil(),
-                    list => {
-                        let seperator = D::text(",").append(D::line());
-
-                        let body = D::intersperse(
-                            list.iter().map(|param| param.to_ts().group()),
-                            seperator,
-                        );
-
-                        D::text("<")
-                            .append(D::line_().append(body).append(D::line_()).nest(4))
-                            .append(D::text(">"))
-                            .group()
-                    }
-                };
-
-                let body = if definition.is_empty() {
-                    D::text("{}")
-                } else {
-                    let body = definition.iter().map(|p| p.to_ts());
-
-                    let body = D::intersperse(body, D::text(";").append(D::hardline()));
-
-                    let body = D::hardline().append(body).nest(4);
-
-                    D::nil()
-                        .append("{")
-                        .append(body)
-                        .append(D::hardline())
-                        .append("}")
-                };
-
-                doc.append("interface")
-                    .append(D::space())
-                    .append(name)
-                    .append(params_doc)
-                    .append(extends)
-                    .append(D::space())
-                    .append(body)
-                    .group()
+            Ast::Interface(value) => {
+                return value.to_ts();
             }
         }
     }
@@ -1567,10 +1580,60 @@ pub enum MappingModifier {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ObjectPropertyKey<'a> {
+    Index(PropertyKeyIndex<'a>),
+    Key(String),
+    Computed(Identifier),
+}
+
+impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
+    fn to_ts(&self) -> D<()> {
+        match self {
+            ObjectPropertyKey::Index(index) => surround(index.to_ts(), "[", "]").group(),
+            ObjectPropertyKey::Key(key) => D::text(key.clone()),
+            ObjectPropertyKey::Computed(id) => surround(id.to_ts(), "[", "]").group(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PropertyKeyIndex<'a> {
+    pub key: String,
+    pub iterable: AstNode<'a>,
+    pub remapped_as: Option<AstNode<'a>>,
+}
+
+impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
+    fn to_ts(&self) -> D<()> {
+        let PropertyKeyIndex {
+            key,
+            iterable,
+            remapped_as,
+        } = self;
+
+        let remapped_as = match remapped_as {
+            Some(remapped_as) => D::space()
+                .append("as")
+                .append(D::space())
+                .append(remapped_as.to_ts()),
+            None => D::nil(),
+        };
+
+        D::nil()
+            .append(key)
+            .append(D::space())
+            .append("in")
+            .append(D::space())
+            .append(iterable.to_ts())
+            .append(remapped_as)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ObjectProperty<'a> {
     pub readonly: bool,
     pub optional: bool,
-    pub key: String,
+    pub key: ObjectPropertyKey<'a>,
     pub value: AstNode<'a>,
 }
 
@@ -1591,7 +1654,7 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
         let doc = D::nil();
 
         doc.append(readonly)
-            .append(&self.key)
+            .append(self.key.to_ts())
             .append(optional)
             .append(D::text(":"))
             .append(D::space())

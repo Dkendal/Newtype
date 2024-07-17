@@ -4,7 +4,7 @@ macro_rules! assert_sexpr {
     ($rule:expr, $processor:expr, $input:expr, $expected:expr) => {{
         let pairs = crate::parser::NewtypeParser::parse($rule, $input).unwrap();
         let actual = $processor(pairs);
-        assert_eq!(actual.to_sexpr(80), $expected);
+        pretty_assertions::assert_eq!(actual.to_sexpr(80), $expected);
     }};
 }
 
@@ -18,7 +18,7 @@ macro_rules! parse {
 
         let pair = result.unwrap_or_else(|e| panic!("{}", e)).next().unwrap();
 
-        assert_eq!(
+        pretty_assertions::assert_eq!(
             pair.as_span().as_str(),
             $source,
             "Rule did not consume entire input"
@@ -45,7 +45,8 @@ macro_rules! assert_typescript {
         let simplified = pairs.simplify();
 
         let actual = simplified.render_pretty_ts(80);
-        assert_eq!(expected, actual.trim());
+
+        pretty_assertions::assert_eq!(expected, actual.trim());
     };
 
     ($expected:expr, $source:expr) => {
