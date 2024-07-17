@@ -20,6 +20,7 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 
 mod ast;
+mod eval;
 mod parser;
 mod pretty;
 mod typescript;

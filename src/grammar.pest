@@ -4,6 +4,7 @@ statement = {
     type_alias
   | interface
   | import_statement
+  | unittest
 }
 
 import_statement = {
@@ -21,6 +22,10 @@ import_clause = _{
 
 namespace_import = {
     "*" ~ "as" ~ #alias = ident
+}
+
+unittest = {
+    "unittest" ~ #name = string ~ "do" ~ #body = (expr)* ~ "end"
 }
 
 named_import = {
@@ -115,6 +120,8 @@ builtin_typeof = @{ "typeof" }
 
 application = { ident ~ "(" ~ #arguments = argument_list ~ ")" }
 
+macro_call = { macro_ident ~ "(" ~ #arguments = argument_list ~ ")" }
+
 argument_list = { expr ~ ("," ~ expr)* }
 
 infer = @{ "?" }
@@ -191,15 +198,15 @@ let_binding = {
 }
 
 for_expr = {
-    "for" ~ property_key_prefix ~ index_property_key ~ "do" ~ #body = expr ~ end_keyword
+    "for" ~ property_key_prefix ~ index_property_key ~ "do" ~ #body = expr ~ "end"
 }
 
 if_expr = {
-    "if" ~ #condition = extends_expr ~ "then" ~ #then = expr ~ (else_keyword ~ #else = expr)? ~ end_keyword
+    "if" ~ #condition = extends_expr ~ "then" ~ #then = expr ~ (else_keyword ~ #else = expr)? ~ "end"
 }
 
 match_expr = {
-    "match" ~ #value = expr ~ "do" ~ #arm = match_arm ~ ("," ~ #arm = match_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ end_keyword
+    "match" ~ #value = expr ~ "do" ~ #arm = match_arm ~ ("," ~ #arm = match_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ "end"
 }
 
 match_arm = {
@@ -207,7 +214,7 @@ match_arm = {
 }
 
 cond_expr = {
-    "cond" ~ "do" ~ #arm = cond_arm ~ ("," ~ #arm = cond_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ end_keyword
+    "cond" ~ "do" ~ #arm = cond_arm ~ ("," ~ #arm = cond_arm)* ~ ("," ~ #else = else_arm)? ~ ","? ~ "end"
 }
 
 cond_arm = {
@@ -286,8 +293,6 @@ optional_modifier = @{ "?" }
 
 else_keyword = @{ "else" }
 
-end_keyword = @{ "end" }
-
 string = { atom_string | double_quote_string | single_quote_string }
 
 atom_string = @{ ":" ~ (!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_" | "-" | "/" | "\\" | "."))+ }
@@ -297,6 +302,8 @@ double_quote_string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 single_quote_string = @{ "'" ~ (!"'" ~ ANY)* ~ "'" }
 
 template_string = @{ "`" ~ (!"`" ~ ANY)* ~ "`" }
+
+macro_ident = @{ ident ~ "!" }
 
 ident = @{ !(ASCII_DIGIT | keyword ~ !ident_chars) ~ ident_chars+ }
 
@@ -335,8 +342,9 @@ keyword = _{
   | "undefined"
   | "unknown"
   | "void"
+  | "unittest"
   | else_keyword
-  | end_keyword
+  | "end"
 }
 
 number = @{

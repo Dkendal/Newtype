@@ -24,7 +24,7 @@ macro_rules! parse {
             "Rule did not consume entire input"
         );
 
-        let out = crate::parser::parse_node(pair);
+        let out = crate::parser::parse(pair);
 
         out
     }};

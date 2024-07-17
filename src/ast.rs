@@ -713,6 +713,28 @@ impl<'a> typescript::Pretty for Interface<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct UnitTest<'a> {
+    pub name: String,
+    pub body: Vec<AstNode<'a>>,
+}
+
+impl PrettySexpr for UnitTest<'_> {
+    fn pretty_sexpr(&self) -> D<()> {
+        Ast::sexpr(
+            [
+                vec![
+                    D::text("unit-test"),
+                    D::text(self.name.clone()),
+                    D::text(":do"),
+                ],
+                self.body.iter().map(|node| node.pretty_sexpr()).collect(),
+            ]
+            .concat(),
+        )
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Ast<'a> {
     Access {
         lhs: AstNode<'a>,
@@ -761,6 +783,7 @@ pub enum Ast<'a> {
     Primitive(PrimitiveType),
     Program(AstNodes<'a>),
     Statement(AstNode<'a>),
+    UnitTest(UnitTest<'a>),
     String(String),
     TemplateString(String),
     True,
@@ -845,6 +868,7 @@ impl<'a> Ast<'a> {
             Ast::Undefined => true,
             Ast::Unknown => true,
             Ast::Interface(Interface { .. }) => todo!(),
+            Ast::UnitTest(_) => todo!(),
         }
     }
 
@@ -1150,6 +1174,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::Interface(value) => {
                 return value.to_ts();
             }
+            Ast::UnitTest(_) => D::nil(),
         }
     }
 }
@@ -1280,6 +1305,7 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::Undefined => todo!(),
             Ast::Unknown => todo!(),
             Ast::Interface(Interface { .. }) => todo!(),
+            Ast::UnitTest(x) => x.pretty_sexpr(),
         }
     }
 }
