@@ -977,114 +977,124 @@ mod parser_tests {
         assert_typescript!(expr, r#"A[string]"#, r#"A[string]"#);
     }
 
-    #[test]
-    fn primitive_number() {
-        assert_typescript!("type A = number;", "type A as number");
+    mod primitives {
+        const R: Rule = Rule::expr;
+        use super::*;
+
+        #[test]
+        fn number() {
+            assert_typescript!("type A = number;", "type A as number");
+        }
+
+        #[test]
+        fn boolean() {
+            assert_typescript!("type A = boolean;", "type A as boolean");
+        }
+
+        #[test]
+        fn never() {
+            assert_typescript!("type A = never;", "type A as never");
+        }
+
+        #[test]
+        fn any() {
+            assert_typescript!("type A = any;", "type A as any");
+        }
+
+        #[test]
+        fn unknown() {
+            assert_typescript!("type A = unknown;", "type A as unknown");
+        }
     }
 
-    #[test]
-    fn primitive_boolean() {
-        assert_typescript!("type A = boolean;", "type A as boolean");
-    }
+    mod literals {
+        const R: Rule = Rule::expr;
+        use super::*;
 
-    #[test]
-    fn primitive_never() {
-        assert_typescript!("type A = never;", "type A as never");
-    }
+        #[test]
+        fn number_literal_positive_integer() {
+            assert_typescript!("type A = 1;", "type A as 1");
+        }
 
-    #[test]
-    fn primitive_any() {
-        assert_typescript!("type A = any;", "type A as any");
-    }
+        #[test]
+        fn number_literal_negative_integer() {
+            assert_typescript!("type A = -1;", "type A as -1");
+        }
 
-    #[test]
-    fn primitive_unknown() {
-        assert_typescript!("type A = unknown;", "type A as unknown");
-    }
+        #[test]
+        fn number_literal_negative_integer_with_space() {
+            assert_typescript!("type A = - 1;", "type A as - 1");
+        }
 
-    #[test]
-    fn number_literal_positive_integer() {
-        assert_typescript!("type A = 1;", "type A as 1");
-    }
+        #[test]
+        fn number_literal_large_integer() {
+            assert_typescript!("type A = 100;", "type A as 100");
+        }
 
-    #[test]
-    fn number_literal_negative_integer() {
-        assert_typescript!("type A = -1;", "type A as -1");
-    }
+        #[test]
+        fn number_literal_integer_with_underscore() {
+            assert_typescript!("type A = 1_000;", "type A as 1_000");
+        }
 
-    #[test]
-    fn number_literal_negative_integer_with_space() {
-        assert_typescript!("type A = - 1;", "type A as - 1");
-    }
+        #[test]
+        fn number_literal_decimal_without_fraction() {
+            assert_typescript!("type A = 100.;", "type A as 100.");
+        }
 
-    #[test]
-    fn number_literal_large_integer() {
-        assert_typescript!("type A = 100;", "type A as 100");
-    }
+        #[test]
+        fn number_literal_decimal_with_fraction() {
+            assert_typescript!("type A = 100.0;", "type A as 100.0");
+        }
 
-    #[test]
-    fn number_literal_integer_with_underscore() {
-        assert_typescript!("type A = 1_000;", "type A as 1_000");
-    }
+        #[test]
+        fn number_literal_decimal_with_fraction_and_underscore() {
+            assert_typescript!("type A = 100.000_000;", "type A as 100.000_000");
+        }
 
-    #[test]
-    fn number_literal_decimal_without_fraction() {
-        assert_typescript!("type A = 100.;", "type A as 100.");
-    }
+        #[test]
+        fn string_atom_literals() {
+            assert_typescript!(expr, r#"'x'"#, ":x");
+        }
 
-    #[test]
-    fn number_literal_decimal_with_fraction() {
-        assert_typescript!("type A = 100.0;", "type A as 100.0");
-    }
+        #[test]
+        fn string_atom_literals_space() {
+            assert_typescript!(expr, r#"['$x', '--y__']"#, "[:$x, :--y__]");
+        }
 
-    #[test]
-    fn number_literal_decimal_with_fraction_and_underscore() {
-        assert_typescript!("type A = 100.000_000;", "type A as 100.000_000");
-    }
+        #[test]
+        fn string_double_quoted_literals() {
+            assert_typescript!(expr, r#"'1'"#, r#""1""#);
+        }
 
-    #[test]
-    fn string_atom_literals() {
-        assert_typescript!(expr, r#"'x'"#, ":x");
-    }
+        #[test]
+        fn string_single_quoted_literals() {
+            assert_typescript!(expr, "'1'", "'1'");
+        }
 
-    #[test]
-    fn string_atom_literals_space() {
-        assert_typescript!(expr, r#"['$x', '--y__']"#, "[:$x, :--y__]");
-    }
+        #[test]
+        fn template_string_literals() {
+            assert_typescript!(expr, "`1`", "`1`");
+        }
 
-    #[test]
-    fn string_double_quoted_literals() {
-        assert_typescript!(expr, r#"'1'"#, r#""1""#);
-    }
+        #[test]
+        fn literal_true() {
+            assert_typescript!("type A = true;", "type A as true");
+        }
 
-    #[test]
-    fn string_single_quoted_literals() {
-        assert_typescript!(expr, "'1'", "'1'");
-    }
+        #[test]
+        fn literal_false() {
+            assert_typescript!("type A = false;", "type A as false");
+        }
 
-    #[test]
-    fn template_string_literals() {
-        assert_typescript!(expr, "`1`", "`1`");
-    }
+        #[test]
+        fn literal_null() {
+            assert_typescript!("type A = null;", "type A as null");
+        }
 
-    #[test]
-    fn literal_true() {
-        assert_typescript!("type A = true;", "type A as true");
-    }
-
-    #[test]
-    fn literal_false() {
-        assert_typescript!("type A = false;", "type A as false");
-    }
-
-    #[test]
-    fn literal_null() {
-        assert_typescript!("type A = null;", "type A as null");
-    }
-
-    #[test]
-    fn literal_undefined() {
-        assert_typescript!("type A = undefined;", "type A as undefined");
+        #[test]
+        fn literal_undefined() {
+            assert_typescript!("type A = undefined;", "type A as undefined");
+        }
     }
 
     mod bin_ops {
