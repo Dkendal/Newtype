@@ -1087,61 +1087,66 @@ mod parser_tests {
         assert_typescript!("type A = undefined;", "type A as undefined");
     }
 
-    #[test]
-    fn bin_ops_pipe_into_identifier() {
-        assert_typescript!(Rule::program, r#"type A = Y<X>;"#, r#"type A as X |> Y"#);
-    }
+    mod bin_ops {
+        const R: Rule = Rule::expr;
+        use super::*;
 
-    #[test]
-    fn bin_ops_pipe_literal() {
-        assert_typescript!(Rule::program, r#"type A = Y<1>;"#, r#"type A as 1 |> Y"#);
-    }
+        #[test]
+        fn pipe_into_identifier() {
+            assert_typescript!(Rule::program, r#"type A = Y<X>;"#, r#"type A as X |> Y"#);
+        }
 
-    #[test]
-    fn bin_ops_pipe_into_call_with_args() {
-        assert_typescript!(
-            Rule::program,
-            r#"type A = Y<X, 1>;"#,
-            r#"type A as X |> Y(1)"#
-        );
-    }
+        #[test]
+        fn pipe_literal() {
+            assert_typescript!(Rule::program, r#"type A = Y<1>;"#, r#"type A as 1 |> Y"#);
+        }
 
-    #[test]
-    fn bin_ops_pipe_chained() {
-        assert_typescript!(
-            Rule::program,
-            r#"type A = D<C<B<A, 1>>, 2, 3, 4>;"#,
-            r#"type A as A |> B(1) |> C |> D(2, 3, 4)"#
-        );
-    }
+        #[test]
+        fn pipe_into_call_with_args() {
+            assert_typescript!(
+                Rule::program,
+                r#"type A = Y<X, 1>;"#,
+                r#"type A as X |> Y(1)"#
+            );
+        }
 
-    #[test]
-    fn bin_ops_union() {
-        assert_typescript!("type A = 1 | 2;", "type A as 1 | 2");
-    }
+        #[test]
+        fn pipe_chained() {
+            assert_typescript!(
+                Rule::program,
+                r#"type A = D<C<B<A, 1>>, 2, 3, 4>;"#,
+                r#"type A as A |> B(1) |> C |> D(2, 3, 4)"#
+            );
+        }
 
-    #[test]
-    fn bin_ops_intersection() {
-        assert_typescript!("type A = 1 & 2;", "type A as 1 & 2");
-    }
+        #[test]
+        fn union() {
+            assert_typescript!("type A = 1 | 2;", "type A as 1 | 2");
+        }
 
-    #[test]
-    fn bin_ops_union_with_intersection() {
-        assert_typescript!("type A = 1 | (2 & 3);", "type A as 1 | 2 & 3");
-    }
+        #[test]
+        fn intersection() {
+            assert_typescript!("type A = 1 & 2;", "type A as 1 & 2");
+        }
 
-    #[test]
-    fn bin_ops_intersection_with_union() {
-        assert_typescript!("type A = 1 & (2 | 3);", "type A as 1 & 2 | 3");
-    }
+        #[test]
+        fn union_with_intersection() {
+            assert_typescript!("type A = 1 | (2 & 3);", "type A as 1 | 2 & 3");
+        }
 
-    #[test]
-    fn bin_ops_grouped_union_and_intersection() {
-        assert_typescript!("type A = (1 | 2) & 3;", "type A as (1 | 2) & 3");
+        #[test]
+        fn intersection_with_union() {
+            assert_typescript!("type A = 1 & (2 | 3);", "type A as 1 & 2 | 3");
+        }
+
+        #[test]
+        fn grouped_union_and_intersection() {
+            assert_typescript!("type A = (1 | 2) & 3;", "type A as (1 | 2) & 3");
+        }
     }
 
     mod if_expr {
-        const R: Rule = object_literal;
+        const R: Rule = if_expr;
         use super::*;
 
         #[test]
