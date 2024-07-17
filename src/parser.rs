@@ -1140,323 +1140,326 @@ mod parser_tests {
         assert_typescript!("type A = (1 | 2) & 3;", "type A as (1 | 2) & 3");
     }
 
-    // If case
+    mod if_expr {
+        const R: Rule = object_literal;
+        use super::*;
 
-    #[test]
-    fn if_expr_simple_if_else() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            1 extends number
-                ? 1
-                : 0
-            "#,
-            r#"
-            if 1 <: number then
-                1
-            else
-                0
-            end
-            "#
-        );
-    }
-
-    #[test]
-    fn if_expr_if_without_else() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            1 extends number
-                ? 1
-                : never
-            "#,
-            r#"
-            if 1 <: number then
-                1
-            end
-            "#
-        );
-    }
-
-    #[test]
-    fn if_expr_nested_if() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? c extends d
-                    ? x
-                    : never
-                : never
-            "#,
-            r#"
-            if a <: b then
-                if c <: d then
-                    x
-                end
-            end
-            "#
-        );
-    }
-
-    #[test]
-    fn if_expr_nested_if_else() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? c extends d
-                    ? x
-                    : never
-                : never
-            "#,
-            r#"
-            if a <: b then
-                if c <: d then
-                    x
-                end
-            end
-            "#
-        );
-
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? c extends d
-                    ? x
-                    : y
-                : never
-            "#,
-            r#"
-            if a <: b then
-                if c <: d then
-                    x
+        #[test]
+        fn simple_if_else() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                1 extends number
+                    ? 1
+                    : 0
+                "#,
+                r#"
+                if 1 <: number then
+                    1
                 else
-                    y
+                    0
                 end
-            end
-            "#
-        );
+                "#
+            );
+        }
 
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? c extends d
-                    ? x
+        #[test]
+        fn if_without_else() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                1 extends number
+                    ? 1
                     : never
-                : z
-            "#,
-            r#"
-            if a <: b then
-                if c <: d then
-                    x
+                "#,
+                r#"
+                if 1 <: number then
+                    1
                 end
-            else
-                z
-            end
-            "#
-        );
+                "#
+            );
+        }
 
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? c extends d
-                    ? x
-                    : y
-                : z
-            "#,
-            r#"
-            if a <: b then
-                if c <: d then
-                    x
+        #[test]
+        fn nested_if() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? c extends d
+                        ? x
+                        : never
+                    : never
+                "#,
+                r#"
+                if a <: b then
+                    if c <: d then
+                        x
+                    end
+                end
+                "#
+            );
+        }
+
+        #[test]
+        fn nested_if_else() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? c extends d
+                        ? x
+                        : never
+                    : never
+                "#,
+                r#"
+                if a <: b then
+                    if c <: d then
+                        x
+                    end
+                end
+                "#
+            );
+
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? c extends d
+                        ? x
+                        : y
+                    : never
+                "#,
+                r#"
+                if a <: b then
+                    if c <: d then
+                        x
+                    else
+                        y
+                    end
+                end
+                "#
+            );
+
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? c extends d
+                        ? x
+                        : never
+                    : z
+                "#,
+                r#"
+                if a <: b then
+                    if c <: d then
+                        x
+                    end
                 else
-                    y
+                    z
                 end
-            else
-                z
-            end
-            "#
-        );
-    }
+                "#
+            );
 
-    #[test]
-    fn if_expr_not_extends() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? never
-                : c
-            "#,
-            r#"
-            if not (a <: b) then
-                c
-            end
-            "#
-        );
-    }
-
-    #[test]
-    fn if_expr_not_extends_else() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? d
-                : c
-            "#,
-            r#"
-            if not (a <: b) then
-                c
-            else
-                d
-            end
-            "#
-        );
-    }
-
-    #[test]
-    fn if_expr_not_extends_nested() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? c extends d
-                    ? never
-                    : x
-                : never
-            "#,
-            r#"
-            if a <: b then
-                if not (c <: d) then
-                    x
-                end
-            end
-            "#
-        );
-
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? c extends d
-                    ? y
-                    : x
-                : never
-            "#,
-            r#"
-            if a <: b then
-                if not (c <: d) then
-                    x
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? c extends d
+                        ? x
+                        : y
+                    : z
+                "#,
+                r#"
+                if a <: b then
+                    if c <: d then
+                        x
+                    else
+                        y
+                    end
                 else
-                    y
+                    z
                 end
-            end
-            "#
-        );
+                "#
+            );
+        }
 
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? never
-                : c extends d
-                    ? x
+        #[test]
+        fn not_extends() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? never
+                    : c
+                "#,
+                r#"
+                if not (a <: b) then
+                    c
+                end
+                "#
+            );
+        }
+
+        #[test]
+        fn not_extends_else() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? d
+                    : c
+                "#,
+                r#"
+                if not (a <: b) then
+                    c
+                else
+                    d
+                end
+                "#
+            );
+        }
+
+        #[test]
+        fn not_extends_nested() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? c extends d
+                        ? never
+                        : x
                     : never
-            "#,
-            r#"
-            if not (a <: b) then
-                if c <: d then
+                "#,
+                r#"
+                if a <: b then
+                    if not (c <: d) then
+                        x
+                    end
+                end
+                "#
+            );
+
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? c extends d
+                        ? y
+                        : x
+                    : never
+                "#,
+                r#"
+                if a <: b then
+                    if not (c <: d) then
+                        x
+                    else
+                        y
+                    end
+                end
+                "#
+            );
+
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? never
+                    : c extends d
+                        ? x
+                        : never
+                "#,
+                r#"
+                if not (a <: b) then
+                    if c <: d then
+                        x
+                    end
+                end
+                "#
+            );
+
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? never
+                    : c extends d
+                        ? never
+                        : x
+                "#,
+                r#"
+                if not (a <: b) then
+                    if not (c <: d) then
+                        x
+                    end
+                end
+                "#
+            );
+        }
+
+        #[test]
+        fn and_not() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? never
+                    : c extends d
+                        ? x
+                        : never
+                "#,
+                r#"
+                if not (a <: b) and c <: d then
                     x
                 end
-            end
-            "#
-        );
+                "#
+            );
 
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? never
-                : c extends d
-                    ? never
-                    : x
-            "#,
-            r#"
-            if not (a <: b) then
-                if not (c <: d) then
+            assert_typescript!(
+                if_expr,
+                r#"
+                a extends b
+                    ? c extends d
+                        ? never
+                        : x
+                    : never
+                "#,
+                r#"
+                if a <: b and (not (c <: d)) then
                     x
                 end
-            end
-            "#
-        );
-    }
+                "#
+            );
+        }
 
-    #[test]
-    fn if_expr_and_not() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? never
-                : c extends d
-                    ? x
+        #[test]
+        fn and() {
+            assert_typescript!(
+                "type A = a extends b ? c extends d ? e : f : f;",
+                "type A as if a <: b and c <: d then e else f end"
+            );
+        }
+
+        #[test]
+        fn joined_conditions() {
+            assert_typescript!(
+                "type A = 1 extends number ? 1 : 0;",
+                r#"type A as if 1 <: number then 1 else 0 end"#
+            );
+        }
+
+        #[test]
+        fn keyof() {
+            assert_typescript!(
+                if_expr,
+                r#"
+                x extends keyof y
+                    ? 1
                     : never
-            "#,
-            r#"
-            if not (a <: b) and c <: d then
-                x
-            end
-            "#
-        );
-
-        assert_typescript!(
-            if_expr,
-            r#"
-            a extends b
-                ? c extends d
-                    ? never
-                    : x
-                : never
-            "#,
-            r#"
-            if a <: b and (not (c <: d)) then
-                x
-            end
-            "#
-        );
-    }
-
-    #[test]
-    fn if_expr_and() {
-        assert_typescript!(
-            "type A = a extends b ? c extends d ? e : f : f;",
-            "type A as if a <: b and c <: d then e else f end"
-        );
-    }
-
-    #[test]
-    fn if_expr_joined_conditions() {
-        assert_typescript!(
-            "type A = 1 extends number ? 1 : 0;",
-            r#"type A as if 1 <: number then 1 else 0 end"#
-        );
-    }
-
-    #[test]
-    fn if_expr_keyof() {
-        assert_typescript!(
-            if_expr,
-            r#"
-            x extends keyof y
-                ? 1
-                : never
-            "#,
-            "if x <: keyof(y) then 1 end"
-        );
+                "#,
+                "if x <: keyof(y) then 1 end"
+            );
+        }
     }
 
     #[test]
