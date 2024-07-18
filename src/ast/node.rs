@@ -9,6 +9,15 @@ pub struct Node<'a> {
     pub value: Box<Ast<'a>>,
 }
 
+impl<'a> serde::Serialize for Node<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.value.serialize(serializer)
+    }
+}
+
 impl<'a> From<Ast<'a>> for Node<'a> {
     fn from(v: Ast<'a>) -> Self {
         Self::generate(Box::new(v))
@@ -108,8 +117,7 @@ impl<'a> Node<'a> {
         let red = move |node: &Node<'a>, ctx| node.traverse(ctx, pre, post);
 
         // Reducer only returns the node, drops the context
-        let red_pick_node =
-            move |node: &Node<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
+        let red_pick_node = move |node: &Node<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
 
         // Reducer that maps over a list of nodes
         let red_items = move |node: &Nodes<'a>, ctx: Context| {
@@ -393,8 +401,7 @@ impl<'a> Node<'a> {
                              default,
                              rest,
                          }| {
-                            let constraint =
-                                constraint.as_ref().map(fn_red_pick_node(ctx.clone()));
+                            let constraint = constraint.as_ref().map(fn_red_pick_node(ctx.clone()));
                             let default = default.as_ref().map(fn_red_pick_node(ctx.clone()));
 
                             TypeParameter {
@@ -426,18 +433,17 @@ impl<'a> Node<'a> {
 
     pub fn simplify(&self) -> Self {
         let bindings: Bindings = Default::default();
-        let (tree, _) =
-            self.traverse(
-                bindings,
-                &|node, ctx| (node, ctx),
-                &|node, ctx| match &*node.value {
-                    Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
-                    Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
-                    Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
-                    Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
-                    _ast => (node, ctx),
-                },
-            );
+        let (tree, _) = self.traverse(
+            bindings,
+            &|node, ctx| (node, ctx),
+            &|node, ctx| match &*node.value {
+                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
+                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
+                Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
+                Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
+                _ast => (node, ctx),
+            },
+        );
         tree
     }
 
@@ -451,7 +457,7 @@ impl<'a> Node<'a> {
     }
 
     pub(crate) fn is_extension(&self, other: &Self) -> bool {
-        todo!()
+        self.value.as_ref().is_extension(&other.value)
     }
 }
 
@@ -480,3 +486,14 @@ impl<'a> PrettySexpr for Node<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{parser::Rule, test_support::*};
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn is_extension() {
+        assert_eq!(ast!("1").is_extension(&ast!("number")), true)
+    }
+}

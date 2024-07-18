@@ -2,6 +2,7 @@ use itertools::Itertools;
 use node::{Node, Nodes};
 use pest::Span;
 use pretty::RcDoc as D;
+use serde_derive::Serialize;
 
 use crate::{
     parser::{Pair, ParserError},
@@ -10,6 +11,7 @@ use crate::{
     typescript,
 };
 
+pub(crate) mod errors;
 pub(crate) mod macros;
 
 pub(crate) trait PrettySexpr {
@@ -83,7 +85,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct NamespaceAccess<'a> {
     pub lhs: Node<'a>,
     pub rhs: Node<'a>,
@@ -99,7 +101,7 @@ impl NamespaceAccess<'_> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct ExtendsExpr<'a> {
     pub lhs: Node<'a>,
     pub rhs: Node<'a>,
@@ -134,7 +136,7 @@ impl<'a> ExtendsExpr<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Tuple<'a> {
     pub items: Nodes<'a>,
 }
@@ -145,7 +147,7 @@ impl PrettySexpr for Tuple<'_> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Application<'a> {
     pub name: Identifier,
     pub args: Nodes<'a>,
@@ -163,7 +165,7 @@ impl<'a> typescript::Pretty for Application<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct MappedType<'a> {
     pub index: String,
     pub iterable: Node<'a>,
@@ -173,7 +175,7 @@ pub struct MappedType<'a> {
     pub body: Node<'a>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct ObjectLiteral<'a> {
     pub properties: Vec<ObjectProperty<'a>>,
 }
@@ -196,7 +198,7 @@ impl<'a> typescript::Pretty for ObjectLiteral<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Interface<'a> {
     pub export: bool,
     pub name: String,
@@ -272,7 +274,7 @@ impl<'a> typescript::Pretty for Interface<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct UnitTest<'a> {
     pub name: String,
     pub body: Vec<Node<'a>>,
@@ -294,7 +296,7 @@ impl PrettySexpr for UnitTest<'_> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct MacroCall<'a> {
     pub name: String,
     pub args: Vec<Node<'a>>,
@@ -323,7 +325,7 @@ impl<'a> PrettySexpr for MacroCall<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum Ast<'a> {
     Access {
         lhs: Node<'a>,
@@ -492,6 +494,55 @@ impl<'a> Ast<'a> {
             Some(v)
         } else {
             None
+        }
+    }
+
+    fn is_extension(&self, other: &Ast<'a>) -> bool {
+        match self {
+            x if !x.is_typescript_feature() => {
+                unreachable!()
+            }
+            Ast::Access { .. } => todo!(),
+            Ast::Any => todo!(),
+            Ast::MacroCall(_) => todo!(),
+            Ast::Application(_) => todo!(),
+            Ast::Array(_) => todo!(),
+            Ast::InfixOp { .. } => todo!(),
+            Ast::Builtin { .. } => todo!(),
+            Ast::CondExpr(_) => todo!(),
+            Ast::ExtendsInfixOp { .. } => todo!(),
+            Ast::ExtendsExpr(_) => todo!(),
+            Ast::ExtendsPrefixOp { .. } => todo!(),
+            Ast::False => todo!(),
+            Ast::Ident(_) => todo!(),
+            Ast::IfExpr(_) => todo!(),
+            Ast::ImportStatement { .. } => todo!(),
+            Ast::LetExpr(_) => todo!(),
+            Ast::MappedType(_) => todo!(),
+            Ast::MatchExpr(_) => todo!(),
+            Ast::NamespaceAccess(_) => todo!(),
+            Ast::Never => todo!(),
+            Ast::NoOp => todo!(),
+            Ast::Null => todo!(),
+            Ast::Number(_) => match other {
+                Ast::Number(_) => self == other,
+                Ast::Primitive(PrimitiveType::Number) => true,
+                Ast::Any => true,
+                _ => false,
+            },
+            Ast::ObjectLiteral(_) => todo!(),
+            Ast::Primitive(_) => todo!(),
+            Ast::Program(_) => todo!(),
+            Ast::Statement(_) => todo!(),
+            Ast::UnitTest(_) => todo!(),
+            Ast::String(_) => todo!(),
+            Ast::TemplateString(_) => todo!(),
+            Ast::True => todo!(),
+            Ast::Tuple(_) => todo!(),
+            Ast::TypeAlias { .. } => todo!(),
+            Ast::Undefined => todo!(),
+            Ast::Unknown => todo!(),
+            Ast::Interface(_) => todo!(),
         }
     }
 }
@@ -841,7 +892,7 @@ impl<'a> PrettySexpr for Ast<'a> {
 
                 Ast::sexpr(vec![D::text(op), value.pretty_sexpr()])
             }
-            Ast::False => todo!(),
+            Ast::False => D::text("false"),
             Ast::Ident(ident) => ident.pretty_sexpr(),
             Ast::IfExpr(if_expr) => if_expr.pretty_sexpr(),
             Ast::ImportStatement { .. } => todo!(),
@@ -863,9 +914,9 @@ impl<'a> PrettySexpr for Ast<'a> {
                 Ast::sexpr(vec)
             }
             Ast::Statement(inner) => inner.pretty_sexpr(),
-            Ast::String(_) => todo!(),
+            Ast::String(str) => string_literal(str),
             Ast::TemplateString(_) => todo!(),
-            Ast::True => todo!(),
+            Ast::True => D::text("true"),
             Ast::Tuple(tuple) => tuple.pretty_sexpr(),
             Ast::TypeAlias {
                 export,
@@ -1051,7 +1102,7 @@ mod simplify_tests {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum ImportClause {
     Named(Vec<ImportSpecifier>),
     Namespace { alias: Identifier },
@@ -1086,7 +1137,7 @@ impl typescript::Pretty for ImportClause {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct ImportSpecifier {
     pub module_export_name: Identifier,
     pub alias: Option<Identifier>,
@@ -1107,7 +1158,7 @@ impl typescript::Pretty for ImportSpecifier {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum BuiltInKeyword {
     Keyof,
 }
@@ -1120,13 +1171,13 @@ impl typescript::Pretty for BuiltInKeyword {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum Op {
     Union,
     Intersection,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum PrimitiveType {
     Boolean,
     Number,
@@ -1143,7 +1194,7 @@ impl PrettySexpr for PrimitiveType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum PrefixOp {
     Infer,
     Not,
@@ -1159,7 +1210,7 @@ impl PrefixOp {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum InfixOp {
     Extends,
     NotExtends,
@@ -1171,13 +1222,13 @@ pub enum InfixOp {
     Or,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum MappingModifier {
     Add,
     Remove,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub enum ObjectPropertyKey<'a> {
     Index(PropertyKeyIndex<'a>),
     Key(String),
@@ -1194,7 +1245,7 @@ impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct PropertyKeyIndex<'a> {
     pub key: String,
     pub iterable: Node<'a>,
@@ -1227,7 +1278,7 @@ impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct ObjectProperty<'a> {
     pub readonly: bool,
     pub optional: bool,
@@ -1260,7 +1311,7 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize)]
 pub struct Identifier(pub String);
 
 impl From<String> for Identifier {
@@ -1293,7 +1344,7 @@ impl typescript::Pretty for Identifier {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct TypeParameter<'a> {
     pub name: String,
     pub constraint: Option<Node<'a>>,
@@ -1359,14 +1410,14 @@ impl<'a> typescript::Pretty for TypeParameter<'a> {
 }
 
 pub(crate) mod if_expr {
-    use pretty::RcDoc as D;
-
     use super::{
         node::{self, Node, Nodes},
         Ast, ExtendsExpr, InfixOp, PrefixOp, PrettySexpr,
     };
+    use pretty::RcDoc as D;
+    use serde::Serialize;
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
     pub struct Expr<'a> {
         pub condition: Node<'a>,
         pub then_branch: Node<'a>,
@@ -1494,11 +1545,11 @@ pub(crate) mod if_expr {
 }
 
 pub(crate) mod match_expr {
-    use pest::Span;
-
     use super::{node::Node, Ast, ExtendsExpr};
+    use pest::Span;
+    use serde::Serialize;
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
     pub struct Expr<'a> {
         pub value: Node<'a>,
         pub arms: Vec<Arm<'a>>,
@@ -1534,7 +1585,7 @@ pub(crate) mod match_expr {
         }
     }
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
     pub struct Arm<'a> {
         pub pattern: Node<'a>,
         pub body: Node<'a>,
@@ -1543,8 +1594,9 @@ pub(crate) mod match_expr {
 
 pub(crate) mod cond_expr {
     use super::{if_expr, Node, PrettySexpr};
+    use serde::Serialize;
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
     pub struct Expr<'a> {
         pub arms: Vec<Arm<'a>>,
         /// Unlike match and if expressions, the else arm is *not* optional
@@ -1585,7 +1637,7 @@ pub(crate) mod cond_expr {
         }
     }
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
     pub struct Arm<'a> {
         pub condition: Node<'a>,
         pub body: Node<'a>,
@@ -1603,6 +1655,7 @@ pub(crate) mod cond_expr {
 
 pub(crate) mod let_expr {
     use pretty::RcDoc as D;
+    use serde::Serialize;
 
     use super::{
         node::{self, Node},
@@ -1611,7 +1664,7 @@ pub(crate) mod let_expr {
 
     use std::collections::HashMap;
 
-    #[derive(Debug, PartialEq, Eq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
     pub struct Expr<'a> {
         pub bindings: HashMap<Identifier, Node<'a>>,
         pub body: Node<'a>,

@@ -10,6 +10,40 @@ macro_rules! assert_sexpr {
 
 pub(crate) use assert_sexpr;
 
+macro_rules! ast {
+    ($input:expr) => {{
+        use crate::parser;
+        use crate::pest::Parser;
+
+        let pair = parser::NewtypeParser::parse(parser::Rule::expr, $input)
+            .unwrap()
+            .next()
+            .unwrap();
+
+        parser::parse(pair)
+    }};
+}
+
+pub(crate) use ast;
+
+macro_rules! sexpr {
+    ($input:expr) => {{
+        use crate::parser;
+        use crate::pest::Parser;
+
+        let pair = parser::NewtypeParser::parse(parser::Rule::expr, $input)
+            .unwrap()
+            .next()
+            .unwrap();
+
+        let ast = parser::parse(pair);
+
+        serde_lexpr::to_value(ast)
+    }};
+}
+
+pub(crate) use sexpr;
+
 macro_rules! parse {
     ($rule:expr, $source:expr) => {{
         use crate::pest::Parser;

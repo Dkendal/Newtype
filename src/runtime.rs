@@ -2,7 +2,6 @@ use node::Node;
 
 use crate::ast::*;
 
-
 pub mod builtin {
     use super::*;
 
@@ -12,12 +11,14 @@ pub mod builtin {
             Ast::ExtendsExpr(ExtendsExpr {
                 lhs,
                 rhs,
-                then_branch,
+                then_branch: _,
                 else_branch,
             }) => {
-                lhs.is_extension(rhs);
-                // dbg!(lhs, rhs );
-                todo!();
+                if lhs.is_extension(rhs) {
+                    (lhs.clone(), acc)
+                } else {
+                    (else_branch.clone(), acc)
+                }
             }
             Ast::MappedType(_) => todo!(),
             x if x.is_typescript_feature() => (tree, acc),
@@ -29,6 +30,7 @@ pub mod builtin {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_support::*;
     use pest::Parser;
 
     use crate::{
@@ -43,35 +45,26 @@ mod tests {
 
         mod unquote {
             use super::*;
+            use pretty_assertions::assert_eq;
+            use serde_lexpr::to_value;
 
             #[test]
             fn literal() {
-                let source = "1";
-
-                let expected = "1";
-
-                let pair = NewtypeParser::parse(Rule::expr, source)
-                    .unwrap()
-                    .next()
-                    .unwrap();
-
-                let ast = parser::parse(pair);
-                assert_eq!(runtime::builtin::unquote(ast).to_sexpr(0), expected);
+                assert_eq!(
+                    to_value(runtime::builtin::unquote(ast!("1"))).unwrap(),
+                    sexpr!("1").unwrap()
+                );
             }
 
             #[test]
             fn if_expr() {
-                let source = "if 1 <: number then true else false end";
-
-                let expected = "true";
-
-                let pair = NewtypeParser::parse(Rule::expr, source)
-                    .unwrap()
-                    .next()
-                    .unwrap();
-
-                let ast = parser::parse(pair).simplify();
-                assert_eq!(runtime::builtin::unquote(ast).to_sexpr(0), expected);
+                assert_eq!(
+                    to_value(runtime::builtin::unquote(
+                        ast!("if 1 <: number then true else false end").simplify()
+                    ))
+                    .unwrap(),
+                    sexpr!("true").unwrap()
+                );
             }
         }
     }
