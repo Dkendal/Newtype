@@ -13,6 +13,7 @@ use crate::{
 
 use itertools::Itertools;
 
+use node::{AstNode, Node};
 use pest::{
     error::{Error, ErrorVariant},
     pratt_parser::PrattParser,
@@ -30,7 +31,7 @@ pub type ParserError = Error<Rule>;
 pub type Pair<'i> = pest::iterators::Pair<'i, Rule>;
 pub type Pairs<'i> = pest::iterators::Pairs<'i, Rule>;
 
-pub(crate) fn parse_expr(pairs: Pairs) -> AstNode {
+pub(crate) fn parse_expr(pairs: Pairs) -> node::AstNode {
     use Rule::*;
     EXPR_PARSER
         .map_primary(parse)
@@ -263,6 +264,7 @@ pub(crate) fn parse(pair: Pair) -> AstNode {
         Rule::null => new(Ast::Null),
         Rule::undefined => new(Ast::Undefined),
         Rule::tuple => parse_tuple(pair),
+        Rule::macro_call => new(Ast::MacroCall(parse_macro_call(pair))),
         Rule::application => {
             let mut inner = pair.into_inner();
 
@@ -417,6 +419,7 @@ pub(crate) fn parse(pair: Pair) -> AstNode {
 
             new(Ast::LetExpr(let_expr::Expr { bindings, body }))
         }
+
         Rule::EOI => {
             parse_error!(pair, format!("Unexpected end of input"));
         }
@@ -425,6 +428,16 @@ pub(crate) fn parse(pair: Pair) -> AstNode {
             parse_error!(pair, format!("Unexpected rule: {:?}", rule));
         }
     }
+}
+
+fn parse_macro_call(pair: Pair) -> MacroCall {
+    let mut inner = pair.into_inner();
+    let name = next_pair!(inner, Rule::macro_ident);
+    let args = next_pair!(inner, Rule::argument_list);
+    let name = name.as_str().to_string();
+    let inner = args.into_inner();
+    let args = inner.map(parse).collect_vec();
+    MacroCall { name, args }
 }
 
 fn parse_unittest(pair: Pair) -> UnitTest {
@@ -480,7 +493,7 @@ fn parse_program(pair: Pair) -> Ast {
     Ast::Program(children)
 }
 
-fn parse_interface(pair: Pair) -> Node<Ast> {
+fn parse_interface(pair: Pair) -> node::Node<Ast> {
     let inner = pair.clone().into_inner();
 
     let export = inner
@@ -507,7 +520,7 @@ fn parse_interface(pair: Pair) -> Node<Ast> {
 
     let extends = None;
 
-    Node::from_pair(
+    node::Node::from_pair(
         &pair,
         Ast::Interface(Interface {
             export,
@@ -639,11 +652,11 @@ fn pair_as_string_literal(pair: Pair) -> String {
     }
 }
 
-fn parse_string(pair: Pair) -> AstNode {
-    Node::from_pair(&pair.clone(), Ast::String(pair_as_string_literal(pair)))
+fn parse_string(pair: Pair) -> node::AstNode {
+    node::Node::from_pair(&pair.clone(), Ast::String(pair_as_string_literal(pair)))
 }
 
-fn parse_import_statement(pair: Pair) -> AstNode {
+fn parse_import_statement(pair: Pair) -> node::AstNode {
     let mut inner = pair.clone().into_inner();
 
     let import_clause = inner.next().unwrap();
@@ -676,7 +689,7 @@ fn parse_import_statement(pair: Pair) -> AstNode {
 
     let module = inner.next().map(pair_as_string_literal).unwrap();
 
-    Node::from_pair(
+    node::Node::from_pair(
         &pair,
         Ast::ImportStatement {
             import_clause,
@@ -685,7 +698,7 @@ fn parse_import_statement(pair: Pair) -> AstNode {
     )
 }
 
-fn parse_if_expr(pair: Pair) -> AstNode {
+fn parse_if_expr(pair: Pair) -> node::AstNode {
     let mut inner = pair.clone().into_inner();
 
     let condition = inner
@@ -704,7 +717,7 @@ fn parse_if_expr(pair: Pair) -> AstNode {
 
     match &*condition.value {
         // Other conditions are desugared later in the simplification step
-        Ast::ExtendsInfixOp { .. } | Ast::ExtendsPrefixOp { .. } => Node::from_pair(
+        Ast::ExtendsInfixOp { .. } | Ast::ExtendsPrefixOp { .. } => node::Node::from_pair(
             &pair,
             Ast::IfExpr(if_expr::Expr {
                 condition,
@@ -716,10 +729,10 @@ fn parse_if_expr(pair: Pair) -> AstNode {
     }
 }
 
-fn parse_tuple(pair: Pair) -> AstNode {
+fn parse_tuple(pair: Pair) -> node::AstNode {
     let items = pair.clone().into_inner().map(parse).collect();
 
-    Node::from_pair(&pair, Ast::Tuple(Tuple { items }))
+    node::Node::from_pair(&pair, Ast::Tuple(Tuple { items }))
 }
 
 fn parse_object_literal(pair: Pair) -> ObjectLiteral {
@@ -1859,6 +1872,51 @@ mod parser_tests {
                     "#
                 )
                 .trim()
+            );
+        }
+    }
+
+    mod unquote {
+        const R: Rule = Rule::expr;
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[test]
+        fn parsing() {
+            let ast = parse!(
+                R,
+                r#"
+                unquote!(1)
+                "#
+            );
+
+            assert_eq!(
+                ast.to_sexpr(0),
+                dedent!(
+                    r#"
+                    (unquote!
+                        1)
+                    "#
+                )
+                .trim()
+            );
+        }
+
+        #[ignore]
+        #[test]
+        fn evaluates_expression() {
+            assert_typescript!(
+                R,
+                "1",
+                r#"
+                unquote!(
+                    if 1 <: number then
+                        1
+                    else
+                        0
+                    end
+                )
+                "#
             );
         }
     }

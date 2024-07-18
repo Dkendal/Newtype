@@ -1,12 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
+use node::{AstNode, AstNodes, Node};
 use pest::Span;
 use pretty::RcDoc as D;
 
 use crate::{
     parser::{Pair, ParserError},
     pretty::{parens, string_literal, surround},
+    runtime::{self, builtin},
     typescript,
 };
 
@@ -31,440 +33,475 @@ pub(crate) trait PrettySexpr {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Node<'a, T> {
-    /// Generated nodes have no span
-    pub span: Option<Span<'a>>,
-    pub value: Box<T>,
-}
+pub(crate) mod node {
+    use super::*;
+    use pest::Span;
+    use std::collections::HashMap;
 
-impl<'a, T> From<T> for Node<'a, T> {
-    fn from(v: T) -> Self {
-        Self::generate(Box::new(v))
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub struct Node<'a, T> {
+        /// Generated nodes have no span
+        pub span: Option<Span<'a>>,
+        pub value: Box<T>,
     }
-}
 
-impl<'a, T> Node<'a, T> {
-    pub fn from_pair<R>(pair: &pest::iterators::Pair<'a, R>, value: T) -> Self
-    where
-        R: pest::RuleType,
-    {
-        Self {
-            span: Some(pair.clone().as_span()),
-            value: Box::new(value),
+    impl<'a, T> From<T> for Node<'a, T> {
+        fn from(v: T) -> Self {
+            Self::generate(Box::new(v))
         }
     }
 
-    pub fn from_span(span: Span<'a>, value: T) -> Self {
-        Self {
-            span: Some(span),
-            value: Box::new(value),
+    impl<'a, T> Node<'a, T> {
+        pub fn from_pair<R>(pair: &pest::iterators::Pair<'a, R>, value: T) -> Self
+        where
+            R: pest::RuleType,
+        {
+            Self {
+                span: Some(pair.clone().as_span()),
+                value: Box::new(value),
+            }
+        }
+
+        pub fn from_span(span: Span<'a>, value: T) -> Self {
+            Self {
+                span: Some(span),
+                value: Box::new(value),
+            }
+        }
+
+        pub fn generate(value: Box<T>) -> Self {
+            Self { span: None, value }
+        }
+
+        /// Transform the value of the node with a function that takes a reference to the value
+        pub fn map(&self, f: impl Fn(&T) -> T) -> Self {
+            Self {
+                span: self.span,
+                value: Box::new(f(&self.value)),
+            }
+        }
+
+        /// Replace the value of the node with a new value, creating a new node
+        /// with the same span.
+        pub fn replace(self, value: T) -> Self {
+            Self {
+                span: self.span,
+                value: Box::new(value),
+            }
+        }
+
+        pub(crate) fn new(span: Option<Span<'a>>, value: T) -> Self {
+            Self {
+                span,
+                value: Box::new(value),
+            }
+        }
+
+        pub fn set_span(&mut self, span: Option<Span<'a>>) {
+            self.span = span;
+        }
+
+        pub fn set_value(&mut self, value: Box<T>) {
+            self.value = value;
         }
     }
 
-    pub fn generate(value: Box<T>) -> Self {
-        Self { span: None, value }
-    }
+    pub(crate) type AstNode<'a> = Node<'a, Ast<'a>>;
 
-    /// Transform the value of the node with a function that takes a reference to the value
-    pub fn map(&self, f: impl Fn(&T) -> T) -> Self {
-        Self {
-            span: self.span,
-            value: Box::new(f(&self.value)),
+    pub(crate) type AstNodes<'a> = Vec<Node<'a, Ast<'a>>>;
+
+    pub(crate) type Bindings<'a> = HashMap<Identifier, AstNode<'a>>;
+
+    impl<'a> Default for AstNode<'a> {
+        fn default() -> Self {
+            Node {
+                span: None,
+                value: Box::new(Ast::NoOp),
+            }
         }
     }
 
-    /// Replace the value of the node with a new value, creating a new node
-    /// with the same span.
-    pub fn replace(self, value: T) -> Self {
-        Self {
-            span: self.span,
-            value: Box::new(value),
-        }
-    }
-
-    pub(crate) fn new(span: Option<Span<'a>>, value: T) -> Self {
-        Self {
-            span,
-            value: Box::new(value),
-        }
-    }
-}
-
-pub(crate) type AstNode<'a> = Node<'a, Ast<'a>>;
-
-pub(crate) type AstNodes<'a> = Vec<Node<'a, Ast<'a>>>;
-
-type Bindings<'a> = HashMap<Identifier, AstNode<'a>>;
-
-impl<'a> AstNode<'a> {
-    pub fn prewalk<Context, F>(&self, ctx: Context, pre: &F) -> (Self, Context)
-    where
-        Context: Clone,
-        F: Fn(Self, Context) -> (Self, Context),
-    {
-        self.traverse(ctx, pre, &|n, c| (n, c))
-    }
-
-    pub fn postwalk<Context, F>(&self, ctx: Context, post: &F) -> (Self, Context)
-    where
-        Context: Clone,
-        F: Fn(Self, Context) -> (Self, Context),
-    {
-        self.traverse(ctx, &|n, c| (n, c), post)
-    }
-
-    pub fn traverse<Context, Pre, Post>(
-        &self,
-        ctx: Context,
-        pre: &Pre,
-        post: &Post,
-    ) -> (Self, Context)
-    where
-        Context: Clone,
-        Pre: Fn(Self, Context) -> (Self, Context),
-        Post: Fn(Self, Context) -> (Self, Context),
-    {
-        /// Extract the node from the tuple
-        fn pick_node<T>((node, _ctx): (AstNode, T)) -> AstNode {
-            node
+    impl<'a> AstNode<'a> {
+        pub fn prewalk<Context, F>(&self, ctx: Context, pre: &F) -> (Self, Context)
+        where
+            Context: Clone,
+            F: Fn(Self, Context) -> (Self, Context),
+        {
+            self.traverse(ctx, pre, &|n, c| (n, c))
         }
 
-        // Produce a new node and context
-        let result = |node: Ast<'a>, ctx: Context| (self.clone().replace(node), ctx);
+        pub fn postwalk<Context, F>(&self, ctx: Context, post: &F) -> (Self, Context)
+        where
+            Context: Clone,
+            F: Fn(Self, Context) -> (Self, Context),
+        {
+            self.traverse(ctx, &|n, c| (n, c), post)
+        }
 
-        // Reducer
-        let red = move |node: &AstNode<'a>, ctx| node.traverse(ctx, pre, post);
-
-        // Reducer only returns the node, drops the context
-        let red_pick_node = move |node: &AstNode<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
-
-        // Reducer that maps over a list of nodes
-        let red_items = move |node: &AstNodes<'a>, ctx: Context| {
-            node.iter()
-                .map(|item| red_pick_node(item, ctx.clone()))
-                .collect_vec()
-        };
-
-        // Returns a closure that takes a node
-        let fn_red_pick_node =
-            move |ctx| move |node: &AstNode<'a>| pick_node(node.traverse(ctx, pre, post));
-
-        let (node, ctx) = pre(self.clone(), ctx);
-
-        let (node, ctx) = match &*self.value {
-            Ast::Access { lhs, rhs, is_dot } => {
-                let (lhs, _) = red(lhs, ctx.clone());
-                let (rhs, _) = red(rhs, ctx.clone());
-
-                let ast = Ast::Access {
-                    lhs,
-                    rhs,
-                    is_dot: *is_dot,
-                };
-
-                (self.clone().replace(ast), ctx)
-            }
-            Ast::Application(Application { name, args }) => {
-                let ast = Ast::Application(Application {
-                    name: name.clone(),
-                    args: red_items(args, ctx.clone()),
-                });
-
-                result(ast, ctx)
+        pub fn traverse<Context, Pre, Post>(
+            &self,
+            ctx: Context,
+            pre: &Pre,
+            post: &Post,
+        ) -> (Self, Context)
+        where
+            Context: Clone,
+            Pre: Fn(Self, Context) -> (Self, Context),
+            Post: Fn(Self, Context) -> (Self, Context),
+        {
+            /// Extract the node from the tuple
+            pub(crate) fn pick_node<T>((node, _ctx): (AstNode, T)) -> AstNode {
+                node
             }
 
-            Ast::Array(inner) => {
-                let (inner, _) = red(inner, ctx.clone());
-                let ast = Ast::Array(inner);
-                result(ast, ctx)
-            }
+            // Produce a new node and context
+            let result = |node: Ast<'a>, ctx: Context| (self.clone().replace(node), ctx);
 
-            Ast::InfixOp { lhs, op, rhs } => {
-                let ast = Ast::InfixOp {
-                    lhs: red_pick_node(lhs, ctx.clone()),
-                    op: op.clone(),
-                    rhs: red_pick_node(rhs, ctx.clone()),
-                };
+            // Reducer
+            let red = move |node: &AstNode<'a>, ctx| node.traverse(ctx, pre, post);
 
-                result(ast, ctx)
-            }
+            // Reducer only returns the node, drops the context
+            let red_pick_node =
+                move |node: &AstNode<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
 
-            Ast::Builtin { name, argument } => {
-                let (argument, _) = red(argument, ctx.clone());
+            // Reducer that maps over a list of nodes
+            let red_items = move |node: &AstNodes<'a>, ctx: Context| {
+                node.iter()
+                    .map(|item| red_pick_node(item, ctx.clone()))
+                    .collect_vec()
+            };
 
-                let ast = Ast::Builtin {
-                    name: name.clone(),
-                    argument,
-                };
+            // Returns a closure that takes a node
+            let fn_red_pick_node =
+                move |ctx| move |node: &AstNode<'a>| pick_node(node.traverse(ctx, pre, post));
 
-                result(ast, ctx)
-            }
+            let (node, ctx) = pre(self.clone(), ctx);
 
-            Ast::CondExpr(cond_expr::Expr { arms, else_arm }) => {
-                let arms = arms
-                    .iter()
-                    .map(|arm| {
-                        let mut arm = arm.clone();
-                        arm.condition = red_pick_node(&arm.condition, ctx.clone());
-                        arm.body = red_pick_node(&arm.body, ctx.clone());
-                        arm
-                    })
-                    .collect_vec();
+            let (node, ctx) = match &*self.value {
+                Ast::Access { lhs, rhs, is_dot } => {
+                    let (lhs, _) = red(lhs, ctx.clone());
+                    let (rhs, _) = red(rhs, ctx.clone());
 
-                let else_arm = red_pick_node(else_arm, ctx.clone());
+                    let ast = Ast::Access {
+                        lhs,
+                        rhs,
+                        is_dot: *is_dot,
+                    };
 
-                let ast = Ast::CondExpr(cond_expr::Expr { arms, else_arm });
+                    (self.clone().replace(ast), ctx)
+                }
+                Ast::Application(Application { name, args }) => {
+                    let ast = Ast::Application(Application {
+                        name: name.clone(),
+                        args: red_items(args, ctx.clone()),
+                    });
 
-                result(ast, ctx)
-            }
+                    result(ast, ctx)
+                }
 
-            Ast::ExtendsInfixOp { lhs, op, rhs } => {
-                let (lhs, _) = red(lhs, ctx.clone());
-                let (rhs, _) = red(rhs, ctx.clone());
+                Ast::Array(inner) => {
+                    let (inner, _) = red(inner, ctx.clone());
+                    let ast = Ast::Array(inner);
+                    result(ast, ctx)
+                }
 
-                let ast = Ast::ExtendsInfixOp {
-                    lhs,
-                    op: op.clone(),
-                    rhs,
-                };
+                Ast::InfixOp { lhs, op, rhs } => {
+                    let ast = Ast::InfixOp {
+                        lhs: red_pick_node(lhs, ctx.clone()),
+                        op: op.clone(),
+                        rhs: red_pick_node(rhs, ctx.clone()),
+                    };
 
-                (self.clone().replace(ast), ctx)
-            }
+                    result(ast, ctx)
+                }
 
-            Ast::ExtendsExpr(ExtendsExpr {
-                lhs,
-                rhs,
-                then_branch,
-                else_branch,
-            }) => {
-                let lhs = red_pick_node(lhs, ctx.clone());
-                let rhs = red_pick_node(rhs, ctx.clone());
-                let then_branch = red_pick_node(then_branch, ctx.clone());
-                let else_branch = red_pick_node(else_branch, ctx.clone());
+                Ast::Builtin { name, argument } => {
+                    let (argument, _) = red(argument, ctx.clone());
 
-                let ast = Ast::ExtendsExpr(ExtendsExpr {
+                    let ast = Ast::Builtin {
+                        name: name.clone(),
+                        argument,
+                    };
+
+                    result(ast, ctx)
+                }
+
+                Ast::CondExpr(cond_expr::Expr { arms, else_arm }) => {
+                    let arms = arms
+                        .iter()
+                        .map(|arm| {
+                            let mut arm = arm.clone();
+                            arm.condition = red_pick_node(&arm.condition, ctx.clone());
+                            arm.body = red_pick_node(&arm.body, ctx.clone());
+                            arm
+                        })
+                        .collect_vec();
+
+                    let else_arm = red_pick_node(else_arm, ctx.clone());
+
+                    let ast = Ast::CondExpr(cond_expr::Expr { arms, else_arm });
+
+                    result(ast, ctx)
+                }
+
+                Ast::ExtendsInfixOp { lhs, op, rhs } => {
+                    let (lhs, _) = red(lhs, ctx.clone());
+                    let (rhs, _) = red(rhs, ctx.clone());
+
+                    let ast = Ast::ExtendsInfixOp {
+                        lhs,
+                        op: op.clone(),
+                        rhs,
+                    };
+
+                    (self.clone().replace(ast), ctx)
+                }
+
+                Ast::ExtendsExpr(ExtendsExpr {
                     lhs,
                     rhs,
                     then_branch,
                     else_branch,
-                });
-                result(ast, ctx)
-            }
+                }) => {
+                    let lhs = red_pick_node(lhs, ctx.clone());
+                    let rhs = red_pick_node(rhs, ctx.clone());
+                    let then_branch = red_pick_node(then_branch, ctx.clone());
+                    let else_branch = red_pick_node(else_branch, ctx.clone());
 
-            Ast::ExtendsPrefixOp { op, value } => {
-                let value = red_pick_node(value, ctx.clone());
+                    let ast = Ast::ExtendsExpr(ExtendsExpr {
+                        lhs,
+                        rhs,
+                        then_branch,
+                        else_branch,
+                    });
+                    result(ast, ctx)
+                }
 
-                let ast = Ast::ExtendsPrefixOp {
-                    op: op.clone(),
-                    value,
-                };
+                Ast::ExtendsPrefixOp { op, value } => {
+                    let value = red_pick_node(value, ctx.clone());
 
-                result(ast, ctx)
-            }
+                    let ast = Ast::ExtendsPrefixOp {
+                        op: op.clone(),
+                        value,
+                    };
 
-            Ast::IfExpr(if_expr::Expr {
-                condition,
-                then_branch,
-                else_branch,
-            }) => {
-                let (condition, _) = red(condition, ctx.clone());
-                let (then_branch, _) = red(then_branch, ctx.clone());
-                let else_branch = else_branch.as_ref().map(fn_red_pick_node(ctx.clone()));
+                    result(ast, ctx)
+                }
 
-                let ast = Ast::IfExpr(if_expr::Expr {
+                Ast::IfExpr(if_expr::Expr {
                     condition,
                     then_branch,
                     else_branch,
-                });
+                }) => {
+                    let (condition, _) = red(condition, ctx.clone());
+                    let (then_branch, _) = red(then_branch, ctx.clone());
+                    let else_branch = else_branch.as_ref().map(fn_red_pick_node(ctx.clone()));
 
-                (self.clone().replace(ast), ctx)
-            }
+                    let ast = Ast::IfExpr(if_expr::Expr {
+                        condition,
+                        then_branch,
+                        else_branch,
+                    });
 
-            Ast::ImportStatement {
-                import_clause,
-                module,
-            } => {
-                let ast = Ast::ImportStatement {
-                    import_clause: import_clause.clone(),
-                    module: module.clone(),
-                };
+                    (self.clone().replace(ast), ctx)
+                }
 
-                result(ast, ctx)
-            }
-            Ast::LetExpr(let_expr) => {
-                let (body, _) = red(&let_expr.body, ctx.clone());
+                Ast::ImportStatement {
+                    import_clause,
+                    module,
+                } => {
+                    let ast = Ast::ImportStatement {
+                        import_clause: import_clause.clone(),
+                        module: module.clone(),
+                    };
 
-                let ast = Ast::LetExpr(let_expr::Expr {
-                    bindings: let_expr.bindings.clone(),
-                    body,
-                });
+                    result(ast, ctx)
+                }
+                Ast::LetExpr(let_expr) => {
+                    let (body, _) = red(&let_expr.body, ctx.clone());
 
-                result(ast, ctx)
-            }
-            Ast::MappedType(MappedType {
-                index,
-                iterable,
-                remapped_as,
-                readonly_mod,
-                optional_mod,
-                body,
-            }) => {
-                let (iterable, _) = red(iterable, ctx.clone());
-                let remapped_as = remapped_as.as_ref().map(fn_red_pick_node(ctx.clone()));
-                let body = red_pick_node(body, ctx.clone());
+                    let ast = Ast::LetExpr(let_expr::Expr {
+                        bindings: let_expr.bindings.clone(),
+                        body,
+                    });
 
-                let ast = Ast::MappedType(MappedType {
-                    index: index.clone(),
+                    result(ast, ctx)
+                }
+                Ast::MappedType(MappedType {
+                    index,
                     iterable,
                     remapped_as,
-                    readonly_mod: readonly_mod.clone(),
-                    optional_mod: optional_mod.clone(),
+                    readonly_mod,
+                    optional_mod,
                     body,
-                });
+                }) => {
+                    let (iterable, _) = red(iterable, ctx.clone());
+                    let remapped_as = remapped_as.as_ref().map(fn_red_pick_node(ctx.clone()));
+                    let body = red_pick_node(body, ctx.clone());
 
-                result(ast, ctx)
-            }
-            Ast::MatchExpr(match_expr::Expr {
-                value,
-                arms,
-                else_arm,
-            }) => {
-                let (value, _) = red(value, ctx.clone());
+                    let ast = Ast::MappedType(MappedType {
+                        index: index.clone(),
+                        iterable,
+                        remapped_as,
+                        readonly_mod: readonly_mod.clone(),
+                        optional_mod: optional_mod.clone(),
+                        body,
+                    });
 
-                let arms = arms
-                    .iter()
-                    .map(|arm| {
-                        let mut arm = arm.clone();
-                        arm.pattern = red_pick_node(&arm.pattern, ctx.clone());
-                        arm.body = red_pick_node(&arm.body, ctx.clone());
-                        arm
-                    })
-                    .collect_vec();
-
-                let else_arm = red_pick_node(else_arm, ctx.clone());
-
-                let ast = Ast::MatchExpr(match_expr::Expr {
+                    result(ast, ctx)
+                }
+                Ast::MatchExpr(match_expr::Expr {
                     value,
                     arms,
                     else_arm,
-                });
+                }) => {
+                    let (value, _) = red(value, ctx.clone());
 
-                result(ast, ctx)
-            }
-            Ast::NamespaceAccess(access) => {
-                let lhs = red_pick_node(&access.lhs, ctx.clone());
-                let rhs = red_pick_node(&access.rhs, ctx.clone());
+                    let arms = arms
+                        .iter()
+                        .map(|arm| {
+                            let mut arm = arm.clone();
+                            arm.pattern = red_pick_node(&arm.pattern, ctx.clone());
+                            arm.body = red_pick_node(&arm.body, ctx.clone());
+                            arm
+                        })
+                        .collect_vec();
 
-                let ast = Ast::NamespaceAccess(NamespaceAccess { lhs, rhs });
+                    let else_arm = red_pick_node(else_arm, ctx.clone());
 
-                result(ast, ctx)
-            }
-            Ast::ObjectLiteral(object) => {
-                let properties = object
-                    .properties
-                    .iter()
-                    .map(|prop| {
-                        let mut prop = prop.clone();
-                        prop.value = red_pick_node(&prop.value, ctx.clone());
-                        prop
-                    })
-                    .collect_vec();
+                    let ast = Ast::MatchExpr(match_expr::Expr {
+                        value,
+                        arms,
+                        else_arm,
+                    });
 
-                let ast = Ast::ObjectLiteral(ObjectLiteral { properties });
-
-                result(ast, ctx)
-            }
-            Ast::Program(statements) => {
-                let mut ctx = ctx.clone();
-                let mut statements = statements.clone();
-
-                for statement in &mut statements {
-                    (*statement, ctx) = red(statement, ctx.clone());
+                    result(ast, ctx)
                 }
+                Ast::NamespaceAccess(access) => {
+                    let lhs = red_pick_node(&access.lhs, ctx.clone());
+                    let rhs = red_pick_node(&access.rhs, ctx.clone());
 
-                let ast = Ast::Program(statements);
+                    let ast = Ast::NamespaceAccess(NamespaceAccess { lhs, rhs });
 
-                result(ast, ctx)
-            }
-            Ast::Statement(inner) => {
-                // Statement MAY propagate context to siblings
-                let (inner, ctx) = red(inner, ctx.clone());
-                let ast = Ast::Statement(inner);
-                result(ast, ctx)
-            }
-            node @ Ast::TemplateString(_) => result(node.clone(), ctx.clone()),
-            Ast::Tuple(Tuple { items }) => {
-                let items = items
-                    .iter()
-                    .map(|item| red_pick_node(item, ctx.clone()))
-                    .collect_vec();
+                    result(ast, ctx)
+                }
+                Ast::ObjectLiteral(object) => {
+                    let properties = object
+                        .properties
+                        .iter()
+                        .map(|prop| {
+                            let mut prop = prop.clone();
+                            prop.value = red_pick_node(&prop.value, ctx.clone());
+                            prop
+                        })
+                        .collect_vec();
 
-                let ast = Ast::Tuple(Tuple { items });
+                    let ast = Ast::ObjectLiteral(ObjectLiteral { properties });
 
-                result(ast, ctx)
-            }
-            Ast::TypeAlias {
-                export,
-                name,
-                params,
-                body,
-            } => {
-                let (body, _) = body.traverse(ctx.clone(), pre, post);
+                    result(ast, ctx)
+                }
+                Ast::Program(statements) => {
+                    let mut ctx = ctx.clone();
+                    let mut statements = statements.clone();
 
-                let params = params
-                    .iter()
-                    .map(
-                        |TypeParameter {
-                             name: param_name,
-                             constraint,
-                             default,
-                             rest,
-                         }| {
-                            let constraint = constraint.as_ref().map(fn_red_pick_node(ctx.clone()));
-                            let default = default.as_ref().map(fn_red_pick_node(ctx.clone()));
+                    for statement in &mut statements {
+                        (*statement, ctx) = red(statement, ctx.clone());
+                    }
 
-                            TypeParameter {
-                                name: param_name.clone(),
-                                constraint,
-                                default,
-                                rest: *rest,
-                            }
-                        },
-                    )
-                    .collect_vec();
+                    let ast = Ast::Program(statements);
 
-                let ast = Ast::TypeAlias {
-                    export: *export,
-                    name: name.clone(),
+                    result(ast, ctx)
+                }
+                Ast::Statement(inner) => {
+                    // Statement MAY propagate context to siblings
+                    let (inner, ctx) = red(inner, ctx.clone());
+                    let ast = Ast::Statement(inner);
+                    result(ast, ctx)
+                }
+                node @ Ast::TemplateString(_) => result(node.clone(), ctx.clone()),
+                Ast::Tuple(Tuple { items }) => {
+                    let items = items
+                        .iter()
+                        .map(|item| red_pick_node(item, ctx.clone()))
+                        .collect_vec();
+
+                    let ast = Ast::Tuple(Tuple { items });
+
+                    result(ast, ctx)
+                }
+                Ast::TypeAlias {
+                    export,
+                    name,
                     params,
                     body,
-                };
+                } => {
+                    let (body, _) = body.traverse(ctx.clone(), pre, post);
 
-                result(ast, ctx)
-            }
-            _ => (node, ctx),
-        };
+                    let params = params
+                        .iter()
+                        .map(
+                            |TypeParameter {
+                                 name: param_name,
+                                 constraint,
+                                 default,
+                                 rest,
+                             }| {
+                                let constraint =
+                                    constraint.as_ref().map(fn_red_pick_node(ctx.clone()));
+                                let default = default.as_ref().map(fn_red_pick_node(ctx.clone()));
 
-        let (node, acc) = post(node, ctx);
+                                TypeParameter {
+                                    name: param_name.clone(),
+                                    constraint,
+                                    default,
+                                    rest: *rest,
+                                }
+                            },
+                        )
+                        .collect_vec();
 
-        (node, acc)
-    }
+                    let ast = Ast::TypeAlias {
+                        export: *export,
+                        name: name.clone(),
+                        params,
+                        body,
+                    };
 
-    pub fn simplify(&self) -> Self {
-        let bindings: Bindings = Default::default();
-        let (tree, _) = self.traverse(
-            bindings,
-            &|node, ctx| (node, ctx),
-            &|node, ctx| match &*node.value {
-                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
-                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
-                Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
-                Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
-                _ast => (node, ctx),
-            },
-        );
-        tree
+                    result(ast, ctx)
+                }
+                _ => (node, ctx),
+            };
+
+            let (node, acc) = post(node, ctx);
+
+            (node, acc)
+        }
+
+        pub fn simplify(&self) -> Self {
+            let bindings: Bindings = Default::default();
+            let (tree, _) =
+                self.traverse(
+                    bindings,
+                    &|node, ctx| (node, ctx),
+                    &|node, ctx| match &*node.value {
+                        Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
+                        Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
+                        Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
+                        Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
+                        _ast => (node, ctx),
+                    },
+                );
+            tree
+        }
+
+        pub fn eval(&self) -> Self {
+            let (tree, _) = self.prewalk((), &|node, ctx| match &*node.value {
+                Ast::MacroCall(value) => (value.eval(), ctx),
+                _ => (node, ctx),
+            });
+
+            tree
+        }
     }
 }
 
@@ -503,7 +540,7 @@ mod tests {
                 end
             "#
         );
-        let bindings: Bindings = Default::default();
+        let bindings: node::Bindings = Default::default();
         let (tree, _) = tree.traverse(
             bindings,
             &|node, ctx| (node, ctx),
@@ -735,6 +772,35 @@ impl PrettySexpr for UnitTest<'_> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct MacroCall<'a> {
+    pub name: String,
+    pub args: Vec<AstNode<'a>>,
+}
+
+impl<'a> MacroCall<'a> {
+    fn eval(&self) -> AstNode<'a> {
+        match self.name.as_str() {
+            "unquote!" => match self.args.as_slice() {
+                [node] => builtin::unquote(node.to_owned()),
+                _ => panic!("unquote! expects exactly one argument"),
+            },
+            id => unimplemented!("macro {} not implemented", id),
+        }
+    }
+}
+
+impl<'a> PrettySexpr for MacroCall<'a> {
+    fn pretty_sexpr(&self) -> D<()> {
+        Ast::sexpr(
+            vec![D::text(self.name.clone())]
+                .into_iter()
+                .chain(self.args.iter().map(|n| n.pretty_sexpr()))
+                .collect_vec(),
+        )
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Ast<'a> {
     Access {
         lhs: AstNode<'a>,
@@ -742,6 +808,7 @@ pub enum Ast<'a> {
         is_dot: bool,
     },
     Any,
+    MacroCall(MacroCall<'a>),
     Application(Application<'a>),
     Array(AstNode<'a>),
     InfixOp {
@@ -869,6 +936,7 @@ impl<'a> Ast<'a> {
             Ast::Unknown => true,
             Ast::Interface(Interface { .. }) => todo!(),
             Ast::UnitTest(_) => todo!(),
+            Ast::MacroCall(_) => todo!(),
         }
     }
 
@@ -1168,13 +1236,11 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     node
                 )
             }
-            Ast::CondExpr { .. } => todo!(),
-            Ast::ExtendsPrefixOp { .. } => todo!(),
-            Ast::MatchExpr(_) => todo!(),
             Ast::Interface(value) => {
                 return value.to_ts();
             }
             Ast::UnitTest(_) => D::nil(),
+            Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
         }
     }
 }
@@ -1306,6 +1372,7 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::Unknown => todo!(),
             Ast::Interface(Interface { .. }) => todo!(),
             Ast::UnitTest(x) => x.pretty_sexpr(),
+            Ast::MacroCall(x) => x.pretty_sexpr(),
         }
     }
 }
@@ -1470,7 +1537,7 @@ mod simplify_tests {
     }
 }
 
-impl<'a, T> typescript::Pretty for Node<'a, T>
+impl<'a, T> typescript::Pretty for node::Node<'a, T>
 where
     T: typescript::Pretty,
 {
@@ -1789,7 +1856,10 @@ impl<'a> typescript::Pretty for TypeParameter<'a> {
 pub(crate) mod if_expr {
     use pretty::RcDoc as D;
 
-    use super::{Ast, AstNode, ExtendsExpr, InfixOp, Node, PrefixOp, PrettySexpr};
+    use super::{
+        node::{self, AstNode, Node},
+        Ast, ExtendsExpr, InfixOp, PrefixOp, PrettySexpr,
+    };
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Expr<'a> {
@@ -1803,7 +1873,7 @@ pub(crate) mod if_expr {
             let else_branch = self
                 .else_branch
                 .as_ref()
-                .map_or_else(|| Node::from(Ast::Never), |v| v.clone());
+                .map_or_else(|| node::Node::from(Ast::Never), |v| v.clone());
 
             expand_to_extends(&self.condition, &self.then_branch, &else_branch)
         }
@@ -1921,7 +1991,7 @@ pub(crate) mod if_expr {
 pub(crate) mod match_expr {
     use pest::Span;
 
-    use super::{Ast, AstNode, ExtendsExpr, Node};
+    use super::{node::Node, Ast, AstNode, ExtendsExpr};
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Expr<'a> {
@@ -2029,7 +2099,10 @@ pub(crate) mod cond_expr {
 pub(crate) mod let_expr {
     use pretty::RcDoc as D;
 
-    use super::{Ast, AstNode, Identifier, PrettySexpr};
+    use super::{
+        node::{self, AstNode},
+        Ast, Identifier, PrettySexpr,
+    };
 
     use std::collections::HashMap;
 
@@ -2042,7 +2115,7 @@ pub(crate) mod let_expr {
     impl<'a> Expr<'a> {
         /// Replace all identifiers in the body of the let expression with their corresponding
         /// values
-        pub(crate) fn simplify(&self) -> super::Node<'a, Ast<'a>> {
+        pub(crate) fn simplify(&self) -> super::node::Node<'a, Ast<'a>> {
             let mut bindings = self.bindings.clone();
             // simplifiy all bindings first
             for (ident, value) in &self.bindings {

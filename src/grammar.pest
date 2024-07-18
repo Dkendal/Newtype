@@ -91,6 +91,7 @@ primary = _{
   | cond_expr
   | let_expr
   | builtin
+  | macro_call
   | application
   | term
   | "(" ~ expr ~ ")"
