@@ -483,6 +483,10 @@ pub(crate) mod node {
 
             tree
         }
+
+        pub(crate) fn is_extension(&self, other: &Self) -> bool {
+            todo!()
+        }
     }
 
     pub(crate) type Nodes<'a> = Vec<Node<'a>>;

@@ -2,6 +2,7 @@ use node::Node;
 
 use crate::ast::*;
 
+
 pub mod builtin {
     use super::*;
 
@@ -14,7 +15,7 @@ pub mod builtin {
                 then_branch,
                 else_branch,
             }) => {
-                // lhs.is_extension(rhs);
+                lhs.is_extension(rhs);
                 // dbg!(lhs, rhs );
                 todo!();
             }
