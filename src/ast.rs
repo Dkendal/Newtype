@@ -497,7 +497,11 @@ impl<'a> Ast<'a> {
         }
     }
 
-    fn is_extension(&self, other: &Ast<'a>) -> bool {
+    fn is_extension(&self, other: &Ast<'a>) -> Option<bool> {
+        if *other == Ast::Never {
+            return None;
+        }
+
         match self {
             x if !x.is_typescript_feature() => {
                 unreachable!()
@@ -525,10 +529,10 @@ impl<'a> Ast<'a> {
             Ast::NoOp => todo!(),
             Ast::Null => todo!(),
             Ast::Number(_) => match other {
-                Ast::Number(_) => self == other,
-                Ast::Primitive(PrimitiveType::Number) => true,
-                Ast::Any => true,
-                _ => false,
+                Ast::Number(_) => Some(self == other),
+                Ast::Primitive(PrimitiveType::Number) => Some(true),
+                Ast::Any => Some(true),
+                _ => Some(false),
             },
             Ast::ObjectLiteral(_) => todo!(),
             Ast::Primitive(_) => todo!(),

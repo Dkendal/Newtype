@@ -14,10 +14,16 @@ pub mod builtin {
                 then_branch,
                 else_branch,
             }) => {
-                if lhs.is_extension(rhs) {
-                    (then_branch.clone(), acc)
+                if let Some(extends) = lhs.is_extension(rhs) {
+                    if extends {
+                        (then_branch.clone(), acc)
+                    } else {
+                        (else_branch.clone(), acc)
+                    }
                 } else {
-                    (else_branch.clone(), acc)
+                    let mut tree = tree.clone();
+                    tree.set_value(Box::new(Ast::Never));
+                    (tree, acc)
                 }
             }
             Ast::MappedType(_) => todo!(),

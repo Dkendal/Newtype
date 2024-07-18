@@ -458,7 +458,7 @@ impl<'a> Node<'a> {
         tree
     }
 
-    pub(crate) fn is_extension(&self, other: &Self) -> bool {
+    pub(crate) fn is_extension(&self, other: &Self) -> Option<bool> {
         self.value.as_ref().is_extension(&other.value)
     }
 }
@@ -496,6 +496,6 @@ mod tests {
 
     #[test]
     fn is_extension() {
-        assert_eq!(ast!("1").is_extension(&ast!("number")), true)
+        assert_eq!(ast!("1").is_extension(&ast!("number")), Some(true))
     }
 }
