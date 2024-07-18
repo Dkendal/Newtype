@@ -13,7 +13,7 @@ use crate::{
 
 use itertools::Itertools;
 
-use node::{AstNode, Node};
+use node::Node;
 use pest::{
     error::{Error, ErrorVariant},
     pratt_parser::PrattParser,
@@ -31,7 +31,7 @@ pub type ParserError = Error<Rule>;
 pub type Pair<'i> = pest::iterators::Pair<'i, Rule>;
 pub type Pairs<'i> = pest::iterators::Pairs<'i, Rule>;
 
-pub(crate) fn parse_expr(pairs: Pairs) -> node::AstNode {
+pub(crate) fn parse_expr(pairs: Pairs) -> Node {
     use Rule::*;
     EXPR_PARSER
         .map_primary(parse)
@@ -94,11 +94,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> node::AstNode {
 /// A |> B
 /// # B(A)
 /// ```
-fn replace_pipe_with_type_application<'a>(
-    rhs: AstNode<'a>,
-    lhs: AstNode<'a>,
-    op: Pair<'a>,
-) -> AstNode<'a> {
+fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair<'a>) -> Node<'a> {
     match &*rhs.value {
         Ast::Ident(rhs_name) => {
             // FIXME missing span
@@ -136,13 +132,13 @@ fn replace_pipe_with_type_application<'a>(
     }
 }
 
-pub(crate) fn parse_newtype_program(source: &str) -> Result<AstNode<'_>, Box<Error<Rule>>> {
+pub(crate) fn parse_newtype_program(source: &str) -> Result<Node<'_>, Box<Error<Rule>>> {
     let pair = NewtypeParser::parse(Rule::program, source)?.next().unwrap();
 
     Ok(parse(pair))
 }
 
-pub(crate) fn parse_extends_expr(pairs: Pairs) -> AstNode {
+pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
     EXTENDS_PARSER
         .map_primary(|pair| match pair.as_rule() {
             Rule::expr => parse_expr(pair.into_inner()),
@@ -193,7 +189,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> AstNode {
                 },
             )
         })
-        .map_infix(|lhs: Node<Ast>, op: Pair, rhs: Node<Ast>| {
+        .map_infix(|lhs: Node, op: Pair, rhs: Node| {
             let op = match op.as_rule() {
                 Rule::extends => InfixOp::Extends,
                 Rule::not_extends => InfixOp::NotExtends,
@@ -224,7 +220,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> AstNode {
         .parse(pairs)
 }
 
-pub(crate) fn parse(pair: Pair) -> AstNode {
+pub(crate) fn parse(pair: Pair) -> Node {
     let rule = pair.clone().as_rule();
     let span = pair.clone().as_span();
     let new = |ast| Node::from_span(span, ast);
@@ -493,7 +489,7 @@ fn parse_program(pair: Pair) -> Ast {
     Ast::Program(children)
 }
 
-fn parse_interface(pair: Pair) -> node::Node<Ast> {
+fn parse_interface(pair: Pair) -> Node {
     let inner = pair.clone().into_inner();
 
     let export = inner
@@ -520,7 +516,7 @@ fn parse_interface(pair: Pair) -> node::Node<Ast> {
 
     let extends = None;
 
-    node::Node::from_pair(
+    Node::from_pair(
         &pair,
         Ast::Interface(Interface {
             export,
@@ -652,11 +648,11 @@ fn pair_as_string_literal(pair: Pair) -> String {
     }
 }
 
-fn parse_string(pair: Pair) -> node::AstNode {
-    node::Node::from_pair(&pair.clone(), Ast::String(pair_as_string_literal(pair)))
+fn parse_string(pair: Pair) -> Node {
+    Node::from_pair(&pair.clone(), Ast::String(pair_as_string_literal(pair)))
 }
 
-fn parse_import_statement(pair: Pair) -> node::AstNode {
+fn parse_import_statement(pair: Pair) -> Node {
     let mut inner = pair.clone().into_inner();
 
     let import_clause = inner.next().unwrap();
@@ -689,7 +685,7 @@ fn parse_import_statement(pair: Pair) -> node::AstNode {
 
     let module = inner.next().map(pair_as_string_literal).unwrap();
 
-    node::Node::from_pair(
+    Node::from_pair(
         &pair,
         Ast::ImportStatement {
             import_clause,
@@ -698,7 +694,7 @@ fn parse_import_statement(pair: Pair) -> node::AstNode {
     )
 }
 
-fn parse_if_expr(pair: Pair) -> node::AstNode {
+fn parse_if_expr(pair: Pair) -> Node {
     let mut inner = pair.clone().into_inner();
 
     let condition = inner
@@ -717,7 +713,7 @@ fn parse_if_expr(pair: Pair) -> node::AstNode {
 
     match &*condition.value {
         // Other conditions are desugared later in the simplification step
-        Ast::ExtendsInfixOp { .. } | Ast::ExtendsPrefixOp { .. } => node::Node::from_pair(
+        Ast::ExtendsInfixOp { .. } | Ast::ExtendsPrefixOp { .. } => Node::from_pair(
             &pair,
             Ast::IfExpr(if_expr::Expr {
                 condition,
@@ -729,10 +725,10 @@ fn parse_if_expr(pair: Pair) -> node::AstNode {
     }
 }
 
-fn parse_tuple(pair: Pair) -> node::AstNode {
+fn parse_tuple(pair: Pair) -> Node {
     let items = pair.clone().into_inner().map(parse).collect();
 
-    node::Node::from_pair(&pair, Ast::Tuple(Tuple { items }))
+    Node::from_pair(&pair, Ast::Tuple(Tuple { items }))
 }
 
 fn parse_object_literal(pair: Pair) -> ObjectLiteral {

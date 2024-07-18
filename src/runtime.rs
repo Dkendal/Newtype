@@ -1,14 +1,26 @@
-use node::AstNode;
+use node::Node;
 
 use crate::ast::*;
 
 pub mod builtin {
     use super::*;
 
-    pub fn unquote(tree: AstNode) -> AstNode {
+    pub fn unquote(tree: Node) -> Node {
         let (out, _) = tree.prewalk((), &|tree, acc| match &*tree.value {
             Ast::MacroCall(_) => todo!(),
-            _ => (tree, acc),
+            Ast::ExtendsExpr(ExtendsExpr {
+                lhs,
+                rhs,
+                then_branch,
+                else_branch,
+            }) => {
+                // lhs.is_extension(rhs);
+                // dbg!(lhs, rhs );
+                todo!();
+            }
+            Ast::MappedType(_) => todo!(),
+            x if x.is_typescript_feature() => (tree, acc),
+            x => unimplemented!("Expected AST to have been desugared {:?}", x),
         });
         out
     }
@@ -57,7 +69,7 @@ mod tests {
                     .next()
                     .unwrap();
 
-                let ast = parser::parse(pair);
+                let ast = parser::parse(pair).simplify();
                 assert_eq!(runtime::builtin::unquote(ast).to_sexpr(0), expected);
             }
         }

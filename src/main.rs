@@ -20,9 +20,9 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 
 mod ast;
-mod runtime;
 mod parser;
 mod pretty;
+mod runtime;
 mod typescript;
 
 #[cfg(test)]

@@ -1,7 +1,5 @@
-use std::collections::{HashMap, HashSet};
-
 use itertools::Itertools;
-use node::{AstNode, AstNodes, Node};
+use node::{Node, Nodes};
 use pest::Span;
 use pretty::RcDoc as D;
 
@@ -39,20 +37,20 @@ pub(crate) mod node {
     use std::collections::HashMap;
 
     #[derive(Debug, PartialEq, Eq, Clone)]
-    pub struct Node<'a, T> {
+    pub struct Node<'a> {
         /// Generated nodes have no span
         pub span: Option<Span<'a>>,
-        pub value: Box<T>,
+        pub value: Box<Ast<'a>>,
     }
 
-    impl<'a, T> From<T> for Node<'a, T> {
-        fn from(v: T) -> Self {
+    impl<'a> From<Ast<'a>> for Node<'a> {
+        fn from(v: Ast<'a>) -> Self {
             Self::generate(Box::new(v))
         }
     }
 
-    impl<'a, T> Node<'a, T> {
-        pub fn from_pair<R>(pair: &pest::iterators::Pair<'a, R>, value: T) -> Self
+    impl<'a> Node<'a> {
+        pub fn from_pair<R>(pair: &pest::iterators::Pair<'a, R>, value: Ast<'a>) -> Self
         where
             R: pest::RuleType,
         {
@@ -62,19 +60,19 @@ pub(crate) mod node {
             }
         }
 
-        pub fn from_span(span: Span<'a>, value: T) -> Self {
+        pub fn from_span(span: Span<'a>, value: Ast<'a>) -> Self {
             Self {
                 span: Some(span),
                 value: Box::new(value),
             }
         }
 
-        pub fn generate(value: Box<T>) -> Self {
+        pub fn generate(value: Box<Ast<'a>>) -> Self {
             Self { span: None, value }
         }
 
         /// Transform the value of the node with a function that takes a reference to the value
-        pub fn map(&self, f: impl Fn(&T) -> T) -> Self {
+        pub fn map(&self, f: impl Fn(&Ast<'a>) -> Ast<'a>) -> Self {
             Self {
                 span: self.span,
                 value: Box::new(f(&self.value)),
@@ -83,14 +81,14 @@ pub(crate) mod node {
 
         /// Replace the value of the node with a new value, creating a new node
         /// with the same span.
-        pub fn replace(self, value: T) -> Self {
+        pub fn replace(self, value: Ast<'a>) -> Self {
             Self {
                 span: self.span,
                 value: Box::new(value),
             }
         }
 
-        pub(crate) fn new(span: Option<Span<'a>>, value: T) -> Self {
+        pub(crate) fn new(span: Option<Span<'a>>, value: Ast<'a>) -> Self {
             Self {
                 span,
                 value: Box::new(value),
@@ -101,27 +99,10 @@ pub(crate) mod node {
             self.span = span;
         }
 
-        pub fn set_value(&mut self, value: Box<T>) {
+        pub fn set_value(&mut self, value: Box<Ast<'a>>) {
             self.value = value;
         }
-    }
 
-    pub(crate) type AstNode<'a> = Node<'a, Ast<'a>>;
-
-    pub(crate) type AstNodes<'a> = Vec<Node<'a, Ast<'a>>>;
-
-    pub(crate) type Bindings<'a> = HashMap<Identifier, AstNode<'a>>;
-
-    impl<'a> Default for AstNode<'a> {
-        fn default() -> Self {
-            Node {
-                span: None,
-                value: Box::new(Ast::NoOp),
-            }
-        }
-    }
-
-    impl<'a> AstNode<'a> {
         pub fn prewalk<Context, F>(&self, ctx: Context, pre: &F) -> (Self, Context)
         where
             Context: Clone,
@@ -150,7 +131,7 @@ pub(crate) mod node {
             Post: Fn(Self, Context) -> (Self, Context),
         {
             /// Extract the node from the tuple
-            pub(crate) fn pick_node<T>((node, _ctx): (AstNode, T)) -> AstNode {
+            pub(crate) fn pick_node<T>((node, _ctx): (Node, T)) -> Node {
                 node
             }
 
@@ -158,14 +139,14 @@ pub(crate) mod node {
             let result = |node: Ast<'a>, ctx: Context| (self.clone().replace(node), ctx);
 
             // Reducer
-            let red = move |node: &AstNode<'a>, ctx| node.traverse(ctx, pre, post);
+            let red = move |node: &Node<'a>, ctx| node.traverse(ctx, pre, post);
 
             // Reducer only returns the node, drops the context
             let red_pick_node =
-                move |node: &AstNode<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
+                move |node: &Node<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
 
             // Reducer that maps over a list of nodes
-            let red_items = move |node: &AstNodes<'a>, ctx: Context| {
+            let red_items = move |node: &Nodes<'a>, ctx: Context| {
                 node.iter()
                     .map(|item| red_pick_node(item, ctx.clone()))
                     .collect_vec()
@@ -173,7 +154,7 @@ pub(crate) mod node {
 
             // Returns a closure that takes a node
             let fn_red_pick_node =
-                move |ctx| move |node: &AstNode<'a>| pick_node(node.traverse(ctx, pre, post));
+                move |ctx| move |node: &Node<'a>| pick_node(node.traverse(ctx, pre, post));
 
             let (node, ctx) = pre(self.clone(), ctx);
 
@@ -503,6 +484,31 @@ pub(crate) mod node {
             tree
         }
     }
+
+    pub(crate) type Nodes<'a> = Vec<Node<'a>>;
+
+    pub(crate) type Bindings<'a> = HashMap<Identifier, Node<'a>>;
+
+    impl<'a> Default for Node<'a> {
+        fn default() -> Self {
+            Node {
+                span: None,
+                value: Box::new(Ast::NoOp),
+            }
+        }
+    }
+
+    impl<'a> typescript::Pretty for Node<'a> {
+        fn to_ts(&self) -> pretty::RcDoc<()> {
+            self.value.to_ts()
+        }
+    }
+
+    impl<'a> PrettySexpr for Node<'a> {
+        fn pretty_sexpr(&self) -> D {
+            self.value.pretty_sexpr()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -557,8 +563,8 @@ mod tests {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NamespaceAccess<'a> {
-    pub lhs: AstNode<'a>,
-    pub rhs: AstNode<'a>,
+    pub lhs: Node<'a>,
+    pub rhs: Node<'a>,
 }
 
 impl NamespaceAccess<'_> {
@@ -573,19 +579,14 @@ impl NamespaceAccess<'_> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ExtendsExpr<'a> {
-    pub lhs: AstNode<'a>,
-    pub rhs: AstNode<'a>,
-    pub then_branch: AstNode<'a>,
-    pub else_branch: AstNode<'a>,
+    pub lhs: Node<'a>,
+    pub rhs: Node<'a>,
+    pub then_branch: Node<'a>,
+    pub else_branch: Node<'a>,
 }
 
 impl<'a> ExtendsExpr<'a> {
-    pub fn new(
-        lhs: AstNode<'a>,
-        rhs: AstNode<'a>,
-        then_branch: AstNode<'a>,
-        else_branch: AstNode<'a>,
-    ) -> Self {
+    pub fn new(lhs: Node<'a>, rhs: Node<'a>, then_branch: Node<'a>, else_branch: Node<'a>) -> Self {
         if !lhs.value.is_typescript_feature() {
             dbg!(&lhs);
             unreachable!("value must be desugared before this point");
@@ -613,7 +614,7 @@ impl<'a> ExtendsExpr<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Tuple<'a> {
-    pub items: AstNodes<'a>,
+    pub items: Nodes<'a>,
 }
 
 impl PrettySexpr for Tuple<'_> {
@@ -625,7 +626,7 @@ impl PrettySexpr for Tuple<'_> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Application<'a> {
     pub name: Identifier,
-    pub args: AstNodes<'a>,
+    pub args: Nodes<'a>,
 }
 
 impl<'a> typescript::Pretty for Application<'a> {
@@ -643,11 +644,11 @@ impl<'a> typescript::Pretty for Application<'a> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MappedType<'a> {
     pub index: String,
-    pub iterable: AstNode<'a>,
-    pub remapped_as: Option<AstNode<'a>>,
+    pub iterable: Node<'a>,
+    pub remapped_as: Option<Node<'a>>,
     pub readonly_mod: Option<MappingModifier>,
     pub optional_mod: Option<MappingModifier>,
-    pub body: AstNode<'a>,
+    pub body: Node<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -752,7 +753,7 @@ impl<'a> typescript::Pretty for Interface<'a> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct UnitTest<'a> {
     pub name: String,
-    pub body: Vec<AstNode<'a>>,
+    pub body: Vec<Node<'a>>,
 }
 
 impl PrettySexpr for UnitTest<'_> {
@@ -774,11 +775,11 @@ impl PrettySexpr for UnitTest<'_> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MacroCall<'a> {
     pub name: String,
-    pub args: Vec<AstNode<'a>>,
+    pub args: Vec<Node<'a>>,
 }
 
 impl<'a> MacroCall<'a> {
-    fn eval(&self) -> AstNode<'a> {
+    fn eval(&self) -> Node<'a> {
         match self.name.as_str() {
             "unquote!" => match self.args.as_slice() {
                 [node] => builtin::unquote(node.to_owned()),
@@ -803,33 +804,33 @@ impl<'a> PrettySexpr for MacroCall<'a> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Ast<'a> {
     Access {
-        lhs: AstNode<'a>,
-        rhs: AstNode<'a>,
+        lhs: Node<'a>,
+        rhs: Node<'a>,
         is_dot: bool,
     },
     Any,
     MacroCall(MacroCall<'a>),
     Application(Application<'a>),
-    Array(AstNode<'a>),
+    Array(Node<'a>),
     InfixOp {
-        lhs: AstNode<'a>,
+        lhs: Node<'a>,
         op: Op,
-        rhs: AstNode<'a>,
+        rhs: Node<'a>,
     },
     Builtin {
         name: BuiltInKeyword,
-        argument: AstNode<'a>,
+        argument: Node<'a>,
     },
     CondExpr(cond_expr::Expr<'a>),
     ExtendsInfixOp {
-        lhs: AstNode<'a>,
+        lhs: Node<'a>,
         op: InfixOp,
-        rhs: AstNode<'a>,
+        rhs: Node<'a>,
     },
     ExtendsExpr(ExtendsExpr<'a>),
     ExtendsPrefixOp {
         op: PrefixOp,
-        value: AstNode<'a>,
+        value: Node<'a>,
     },
     False,
     Ident(Identifier),
@@ -848,8 +849,8 @@ pub enum Ast<'a> {
     Number(String),
     ObjectLiteral(ObjectLiteral<'a>),
     Primitive(PrimitiveType),
-    Program(AstNodes<'a>),
-    Statement(AstNode<'a>),
+    Program(Nodes<'a>),
+    Statement(Node<'a>),
     UnitTest(UnitTest<'a>),
     String(String),
     TemplateString(String),
@@ -859,7 +860,7 @@ pub enum Ast<'a> {
         export: bool,
         name: Identifier,
         params: Vec<TypeParameter<'a>>,
-        body: AstNode<'a>,
+        body: Node<'a>,
     },
     Undefined,
     Unknown,
@@ -885,8 +886,8 @@ impl<'a> From<cond_expr::Expr<'a>> for Ast<'a> {
 }
 
 impl<'a> Ast<'a> {
-    pub fn to_node(&self, pair: Pair<'a>) -> AstNode<'a> {
-        AstNode::from_pair(&pair, self.clone())
+    pub fn to_node(&self, pair: Pair<'a>) -> Node<'a> {
+        Node::from_pair(&pair, self.clone())
     }
 
     /// Operators that the `not` prefix operator can be applied to.
@@ -1087,7 +1088,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::False => D::text("false"),
 
             Ast::InfixOp { lhs, op, rhs } => {
-                fn fmt<'a>(v: &'a AstNode<'a>) -> D<'a, ()> {
+                fn fmt<'a>(v: &'a Node<'a>) -> D<'a, ()> {
                     match &*v.value {
                         Ast::InfixOp { .. } => parens(v.to_ts()),
                         _ => v.to_ts(),
@@ -1377,15 +1378,6 @@ impl<'a> PrettySexpr for Ast<'a> {
     }
 }
 
-impl<'a, T> PrettySexpr for Node<'a, T>
-where
-    T: PrettySexpr,
-{
-    fn pretty_sexpr(&self) -> D {
-        self.value.pretty_sexpr()
-    }
-}
-
 #[cfg(test)]
 mod simplify_tests {
 
@@ -1537,15 +1529,6 @@ mod simplify_tests {
     }
 }
 
-impl<'a, T> typescript::Pretty for node::Node<'a, T>
-where
-    T: typescript::Pretty,
-{
-    fn to_ts(&self) -> pretty::RcDoc<()> {
-        self.value.to_ts()
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ImportClause {
     Named(Vec<ImportSpecifier>),
@@ -1692,8 +1675,8 @@ impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PropertyKeyIndex<'a> {
     pub key: String,
-    pub iterable: AstNode<'a>,
-    pub remapped_as: Option<AstNode<'a>>,
+    pub iterable: Node<'a>,
+    pub remapped_as: Option<Node<'a>>,
 }
 
 impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
@@ -1727,7 +1710,7 @@ pub struct ObjectProperty<'a> {
     pub readonly: bool,
     pub optional: bool,
     pub key: ObjectPropertyKey<'a>,
-    pub value: AstNode<'a>,
+    pub value: Node<'a>,
 }
 
 impl<'a> typescript::Pretty for ObjectProperty<'a> {
@@ -1791,16 +1774,16 @@ impl typescript::Pretty for Identifier {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypeParameter<'a> {
     pub name: String,
-    pub constraint: Option<AstNode<'a>>,
-    pub default: Option<AstNode<'a>>,
+    pub constraint: Option<Node<'a>>,
+    pub default: Option<Node<'a>>,
     pub rest: bool,
 }
 
 impl<'a> TypeParameter<'a> {
     pub fn new(
         name: String,
-        constraint: Option<AstNode<'a>>,
-        default: Option<AstNode<'a>>,
+        constraint: Option<Node<'a>>,
+        default: Option<Node<'a>>,
         rest: bool,
     ) -> Self {
         Self {
@@ -1857,19 +1840,19 @@ pub(crate) mod if_expr {
     use pretty::RcDoc as D;
 
     use super::{
-        node::{self, AstNode, Node},
+        node::{self, Node, Nodes},
         Ast, ExtendsExpr, InfixOp, PrefixOp, PrettySexpr,
     };
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Expr<'a> {
-        pub condition: AstNode<'a>,
-        pub then_branch: AstNode<'a>,
-        pub else_branch: Option<AstNode<'a>>,
+        pub condition: Node<'a>,
+        pub then_branch: Node<'a>,
+        pub else_branch: Option<Node<'a>>,
     }
 
     impl<'a> Expr<'a> {
-        pub(crate) fn simplify(&self) -> AstNode<'a> {
+        pub(crate) fn simplify(&self) -> Node<'a> {
             let else_branch = self
                 .else_branch
                 .as_ref()
@@ -1899,12 +1882,12 @@ pub(crate) mod if_expr {
 
     /// Expands an if expression into a series of nested ternary expressions
     pub(crate) fn expand_to_extends<'a>(
-        condition: &AstNode<'a>,
-        then: &AstNode<'a>,
-        else_arm: &AstNode<'a>,
-    ) -> AstNode<'a> {
+        condition: &Node<'a>,
+        then: &Node<'a>,
+        else_arm: &Node<'a>,
+    ) -> Node<'a> {
         // Recursive operations
-        let out: Option<AstNode<'a>> = match &*condition.value {
+        let out: Option<Node<'a>> = match &*condition.value {
             // Unary operators
             Ast::ExtendsPrefixOp { op, value } => {
                 match op {
@@ -1991,17 +1974,17 @@ pub(crate) mod if_expr {
 pub(crate) mod match_expr {
     use pest::Span;
 
-    use super::{node::Node, Ast, AstNode, ExtendsExpr};
+    use super::{node::Node, Ast, ExtendsExpr};
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Expr<'a> {
-        pub value: AstNode<'a>,
+        pub value: Node<'a>,
         pub arms: Vec<Arm<'a>>,
-        pub else_arm: AstNode<'a>,
+        pub else_arm: Node<'a>,
     }
 
     impl<'a> Expr<'a> {
-        pub(crate) fn simplify(&self) -> AstNode<'a> {
+        pub(crate) fn simplify(&self) -> Node<'a> {
             // Convert match arms to a series of extends expressions.
             // Allows for a single wildcard pattern ("_") to be used as the default case.
             let Expr {
@@ -2012,7 +1995,7 @@ pub(crate) mod match_expr {
 
             arms.iter()
                 .rev()
-                .fold(else_arm.clone(), |acc: AstNode, arm: &Arm| -> AstNode {
+                .fold(else_arm.clone(), |acc: Node, arm: &Arm| -> Node {
                     let Arm { pattern, body } = arm;
 
                     // FIXME missing span
@@ -2031,29 +2014,29 @@ pub(crate) mod match_expr {
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Arm<'a> {
-        pub pattern: AstNode<'a>,
-        pub body: AstNode<'a>,
+        pub pattern: Node<'a>,
+        pub body: Node<'a>,
     }
 }
 
 pub(crate) mod cond_expr {
-    use super::{if_expr, AstNode, PrettySexpr};
+    use super::{if_expr, Node, PrettySexpr};
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Expr<'a> {
         pub arms: Vec<Arm<'a>>,
         /// Unlike match and if expressions, the else arm is *not* optional
-        pub else_arm: AstNode<'a>,
+        pub else_arm: Node<'a>,
     }
 
     impl<'a> Expr<'a> {
-        pub(crate) fn simplify(&self) -> AstNode<'a> {
+        pub(crate) fn simplify(&self) -> Node<'a> {
             // Convert a CondExpr to a series of nested ternary expressions
             let Expr { arms, else_arm } = self;
 
-            let init_else: AstNode<'a> = (else_arm).clone();
+            let init_else: Node<'a> = (else_arm).clone();
 
-            let acc: AstNode<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
+            let acc: Node<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
                 let Arm {
                     condition,
                     body: then,
@@ -2082,8 +2065,8 @@ pub(crate) mod cond_expr {
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Arm<'a> {
-        pub condition: AstNode<'a>,
-        pub body: AstNode<'a>,
+        pub condition: Node<'a>,
+        pub body: Node<'a>,
     }
 
     impl<'a> PrettySexpr for Arm<'a> {
@@ -2100,7 +2083,7 @@ pub(crate) mod let_expr {
     use pretty::RcDoc as D;
 
     use super::{
-        node::{self, AstNode},
+        node::{self, Node},
         Ast, Identifier, PrettySexpr,
     };
 
@@ -2108,14 +2091,14 @@ pub(crate) mod let_expr {
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Expr<'a> {
-        pub bindings: HashMap<Identifier, AstNode<'a>>,
-        pub body: AstNode<'a>,
+        pub bindings: HashMap<Identifier, Node<'a>>,
+        pub body: Node<'a>,
     }
 
     impl<'a> Expr<'a> {
         /// Replace all identifiers in the body of the let expression with their corresponding
         /// values
-        pub(crate) fn simplify(&self) -> super::node::Node<'a, Ast<'a>> {
+        pub(crate) fn simplify(&self) -> super::node::Node<'a> {
             let mut bindings = self.bindings.clone();
             // simplifiy all bindings first
             for (ident, value) in &self.bindings {
