@@ -130,9 +130,11 @@ impl<'a> Node<'a> {
         let fn_red_pick_node =
             move |ctx| move |node: &Node<'a>| pick_node(node.traverse(ctx, pre, post));
 
-        let (node, ctx) = pre(self.clone(), ctx);
+        let node = self.clone();
 
-        let (node, ctx) = match &*self.value {
+        let (node, ctx) = pre(node, ctx);
+
+        let (node, ctx) = match &*node.value {
             Ast::Access { lhs, rhs, is_dot } => {
                 let (lhs, _) = red(lhs, ctx.clone());
                 let (rhs, _) = red(rhs, ctx.clone());

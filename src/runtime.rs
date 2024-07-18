@@ -11,11 +11,11 @@ pub mod builtin {
             Ast::ExtendsExpr(ExtendsExpr {
                 lhs,
                 rhs,
-                then_branch: _,
+                then_branch,
                 else_branch,
             }) => {
                 if lhs.is_extension(rhs) {
-                    (lhs.clone(), acc)
+                    (then_branch.clone(), acc)
                 } else {
                     (else_branch.clone(), acc)
                 }
