@@ -27,6 +27,7 @@ mod typescript;
 
 #[cfg(test)]
 mod test_support;
+mod extends_result;
 
 use clap::Parser;
 use std::io::Read;
@@ -52,7 +53,9 @@ fn main() {
         input
     };
 
-    let result = parser::parse_newtype_program(&input_source);
+    let input = input_source.as_str();
+
+    let result = parser::parse_newtype_program(&input);
 
     match result {
         Ok(result) => {

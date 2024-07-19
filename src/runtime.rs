@@ -3,6 +3,8 @@ use node::Node;
 use crate::ast::*;
 
 pub mod builtin {
+    use crate::extends_result::ExtendsResult;
+
     use super::*;
 
     pub fn unquote(tree: Node) -> Node {
@@ -13,19 +15,25 @@ pub mod builtin {
                 rhs,
                 then_branch,
                 else_branch,
-            }) => {
-                if let Some(extends) = lhs.is_extension(rhs) {
-                    if extends {
-                        (then_branch.clone(), acc)
-                    } else {
-                        (else_branch.clone(), acc)
-                    }
-                } else {
+            }) => match lhs.is_subtype(rhs) {
+                ExtendsResult::True => (then_branch.clone(), acc),
+                ExtendsResult::False => (else_branch.clone(), acc),
+                ExtendsResult::Never => {
                     let mut tree = tree.clone();
                     tree.set_value(Box::new(Ast::Never));
                     (tree, acc)
                 }
-            }
+                ExtendsResult::Both => {
+                    let mut tree = tree.clone();
+                    let value = Ast::InfixOp {
+                        lhs: then_branch.clone(),
+                        op: Op::Union,
+                        rhs: else_branch.clone(),
+                    };
+                    tree.set_value(Box::new(value));
+                    (tree, acc)
+                }
+            },
             Ast::MappedType(_) => todo!(),
             x if x.is_typescript_feature() => (tree, acc),
             x => unimplemented!("Expected AST to have been desugared {:?}", x),

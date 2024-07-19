@@ -5,6 +5,7 @@ use pretty::RcDoc as D;
 use serde_derive::Serialize;
 
 use crate::{
+    extends_result::ExtendsResult,
     parser::{Pair, ParserError},
     pretty::{parens, string_literal, surround},
     runtime::{self, builtin},
@@ -34,56 +35,6 @@ pub(crate) trait PrettySexpr {
 }
 
 pub(crate) mod node;
-
-#[cfg(test)]
-mod tests {
-    use crate::{parser::Rule, test_support::parse};
-
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn traverse() {
-        let tree = parse!(
-            Rule::program,
-            r#"
-            type A as 1
-
-            type B as
-                if a <: b then
-                    c
-                else
-                    d
-                end
-
-            type C(a) as
-                match a do
-                    number => a,
-                    string => b,
-                    else => c
-                end
-
-            type D(a) as
-                cond do
-                    a <: 1 => a,
-                    else => b
-                end
-            "#
-        );
-        let bindings: node::Bindings = Default::default();
-        let (tree, _) = tree.traverse(
-            bindings,
-            &|node, ctx| (node, ctx),
-            &|node, ctx| match &*node.value {
-                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
-                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
-                Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
-                _ast => (node, ctx),
-            },
-        );
-        assert_eq!("", tree.to_sexpr(80));
-    }
-}
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct NamespaceAccess<'a> {
@@ -406,148 +357,6 @@ impl<'a> From<match_expr::Expr<'a>> for Ast<'a> {
 impl<'a> From<cond_expr::Expr<'a>> for Ast<'a> {
     fn from(v: cond_expr::Expr<'a>) -> Self {
         Self::CondExpr(v)
-    }
-}
-
-impl<'a> Ast<'a> {
-    pub fn to_node(&self, pair: Pair<'a>) -> Node<'a> {
-        Node::from_pair(&pair, self.clone())
-    }
-
-    /// Operators that the `not` prefix operator can be applied to.
-    pub fn is_compatible_with_not_prefix_op(&self) -> bool {
-        match self {
-            Ast::ExtendsPrefixOp { op, .. } if op.is_not() => true,
-            Ast::ExtendsInfixOp { .. } => true,
-            _ => false,
-        }
-    }
-    /// Anything that returns true is a feature that has a direct equivalent in TypeScript.
-    /// Anything that's false is a feature that needs to be desugared.
-    pub fn is_typescript_feature(&self) -> bool {
-        match self {
-            Ast::Access { .. } => true,
-            Ast::Any => true,
-            Ast::Application(Application { name: _, args: _ }) => true,
-            Ast::Array(_) => true,
-            Ast::InfixOp { .. } => true,
-            Ast::Builtin { .. } => true,
-            Ast::CondExpr(cond_expr::Expr { .. }) => false,
-            Ast::ExtendsInfixOp { .. } => false,
-            Ast::ExtendsExpr(_) => true,
-            Ast::ExtendsPrefixOp { .. } => false,
-            Ast::False => true,
-            Ast::Ident(_) => true,
-            Ast::IfExpr { .. } => false,
-            Ast::ImportStatement { .. } => true,
-            Ast::LetExpr(let_expr::Expr { .. }) => false,
-            Ast::MappedType(MappedType { .. }) => true,
-            Ast::MatchExpr(match_expr::Expr { .. }) => false,
-            Ast::NamespaceAccess(_) => true,
-            Ast::Never => true,
-            Ast::NoOp => false,
-            Ast::Null => true,
-            Ast::Number(_) => true,
-            Ast::ObjectLiteral(_) => true,
-            Ast::Primitive(_) => true,
-            Ast::Program(_) => true,
-            Ast::Statement(_) => true,
-            Ast::String(_) => true,
-            Ast::TemplateString(_) => true,
-            Ast::True => true,
-            Ast::Tuple(Tuple { items: _ }) => true,
-            Ast::TypeAlias { .. } => false,
-            Ast::Undefined => true,
-            Ast::Unknown => true,
-            Ast::Interface(Interface { .. }) => todo!(),
-            Ast::UnitTest(_) => todo!(),
-            Ast::MacroCall(_) => todo!(),
-        }
-    }
-
-    /// Returns `true` if the node is [`ExtendsPrefixOp`].
-    ///
-    /// [`ExtendsPrefixOp`]: ASTNode<'a>::ExtendsPrefixOp
-    #[must_use]
-    pub fn is_extends_prefix_op(&self) -> bool {
-        matches!(self, Self::ExtendsPrefixOp { .. })
-    }
-
-    /// Returns `true` if the ast is [`ExtendsInfixOp`].
-    ///
-    /// [`ExtendsInfixOp`]: Ast::ExtendsInfixOp
-    #[must_use]
-    pub fn is_extends_infix_op(&self) -> bool {
-        matches!(self, Self::ExtendsInfixOp { .. })
-    }
-
-    /// Returns `true` if the ast is [`InfixOp`].
-    ///
-    /// [`InfixOp`]: Ast::InfixOp
-    #[must_use]
-    pub fn is_infix_op(&self) -> bool {
-        matches!(self, Self::InfixOp { .. })
-    }
-
-    pub fn as_ident(&self) -> Option<&Identifier> {
-        if let Self::Ident(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
-    fn is_extension(&self, other: &Ast<'a>) -> Option<bool> {
-        if *other == Ast::Never {
-            return None;
-        }
-
-        match self {
-            x if !x.is_typescript_feature() => {
-                unreachable!()
-            }
-            Ast::Access { .. } => todo!(),
-            Ast::Any => todo!(),
-            Ast::MacroCall(_) => todo!(),
-            Ast::Application(_) => todo!(),
-            Ast::Array(_) => todo!(),
-            Ast::InfixOp { .. } => todo!(),
-            Ast::Builtin { .. } => todo!(),
-            Ast::CondExpr(_) => todo!(),
-            Ast::ExtendsInfixOp { .. } => todo!(),
-            Ast::ExtendsExpr(_) => todo!(),
-            Ast::ExtendsPrefixOp { .. } => todo!(),
-            Ast::False => todo!(),
-            Ast::Ident(_) => todo!(),
-            Ast::IfExpr(_) => todo!(),
-            Ast::ImportStatement { .. } => todo!(),
-            Ast::LetExpr(_) => todo!(),
-            Ast::MappedType(_) => todo!(),
-            Ast::MatchExpr(_) => todo!(),
-            Ast::NamespaceAccess(_) => todo!(),
-            Ast::Never => todo!(),
-            Ast::NoOp => todo!(),
-            Ast::Null => todo!(),
-            Ast::Number(_) => match other {
-                Ast::Number(_) => Some(self == other),
-                Ast::Primitive(PrimitiveType::Number) => Some(true),
-                Ast::Any => Some(true),
-                _ => Some(false),
-            },
-            Ast::ObjectLiteral(_) => todo!(),
-            Ast::Primitive(_) => todo!(),
-            Ast::Program(_) => todo!(),
-            Ast::Statement(_) => todo!(),
-            Ast::UnitTest(_) => todo!(),
-            Ast::String(_) => todo!(),
-            Ast::TemplateString(_) => todo!(),
-            Ast::True => todo!(),
-            Ast::Tuple(_) => todo!(),
-            Ast::TypeAlias { .. } => todo!(),
-            Ast::Undefined => todo!(),
-            Ast::Unknown => todo!(),
-            Ast::Interface(_) => todo!(),
-        }
     }
 }
 
@@ -951,6 +760,226 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::Interface(Interface { .. }) => todo!(),
             Ast::UnitTest(x) => x.pretty_sexpr(),
             Ast::MacroCall(x) => x.pretty_sexpr(),
+        }
+    }
+}
+
+impl<'a> Ast<'a> {
+    pub fn to_node(&self, pair: Pair<'a>) -> Node<'a> {
+        Node::from_pair(&pair, self.clone())
+    }
+
+    /// Operators that the `not` prefix operator can be applied to.
+    pub fn is_compatible_with_not_prefix_op(&self) -> bool {
+        match self {
+            Ast::ExtendsPrefixOp { op, .. } if op.is_not() => true,
+            Ast::ExtendsInfixOp { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_top_type(&self) -> bool {
+        matches!(self, Ast::Any | Ast::Unknown)
+    }
+
+    pub fn is_empty_object(&self) -> bool {
+        matches!(self, Ast::ObjectLiteral(ObjectLiteral { properties }) if properties.is_empty())
+    }
+
+    pub fn is_nullish(&self) -> bool {
+        matches!(self, Ast::Null | Ast::Undefined)
+    }
+
+    pub fn is_bottom_type(&self) -> bool {
+        matches!(self, Ast::Never)
+    }
+
+    /// Anything that returns true is a feature that has a direct equivalent in TypeScript.
+    /// Anything that's false is a feature that needs to be desugared.
+    pub fn is_typescript_feature(&self) -> bool {
+        match self {
+            Ast::Access { .. } => true,
+            Ast::Any => true,
+            Ast::Application(Application { name: _, args: _ }) => true,
+            Ast::Array(_) => true,
+            Ast::InfixOp { .. } => true,
+            Ast::Builtin { .. } => true,
+            Ast::CondExpr(cond_expr::Expr { .. }) => false,
+            Ast::ExtendsInfixOp { .. } => false,
+            Ast::ExtendsExpr(_) => true,
+            Ast::ExtendsPrefixOp { .. } => false,
+            Ast::False => true,
+            Ast::Ident(_) => true,
+            Ast::IfExpr { .. } => false,
+            Ast::ImportStatement { .. } => true,
+            Ast::LetExpr(let_expr::Expr { .. }) => false,
+            Ast::MappedType(MappedType { .. }) => true,
+            Ast::MatchExpr(match_expr::Expr { .. }) => false,
+            Ast::NamespaceAccess(_) => true,
+            Ast::Never => true,
+            Ast::NoOp => false,
+            Ast::Null => true,
+            Ast::Number(_) => true,
+            Ast::ObjectLiteral(_) => true,
+            Ast::Primitive(_) => true,
+            Ast::Program(_) => true,
+            Ast::Statement(_) => true,
+            Ast::String(_) => true,
+            Ast::TemplateString(_) => true,
+            Ast::True => true,
+            Ast::Tuple(Tuple { items: _ }) => true,
+            Ast::TypeAlias { .. } => false,
+            Ast::Undefined => true,
+            Ast::Unknown => true,
+            Ast::Interface(Interface { .. }) => todo!(),
+            Ast::UnitTest(_) => todo!(),
+            Ast::MacroCall(_) => todo!(),
+        }
+    }
+
+    /// Returns `true` if the node is [`ExtendsPrefixOp`].
+    ///
+    /// [`ExtendsPrefixOp`]: ASTNode<'a>::ExtendsPrefixOp
+    #[must_use]
+    pub fn is_extends_prefix_op(&self) -> bool {
+        matches!(self, Self::ExtendsPrefixOp { .. })
+    }
+
+    /// Returns `true` if the ast is [`ExtendsInfixOp`].
+    ///
+    /// [`ExtendsInfixOp`]: Ast::ExtendsInfixOp
+    #[must_use]
+    pub fn is_extends_infix_op(&self) -> bool {
+        matches!(self, Self::ExtendsInfixOp { .. })
+    }
+
+    /// Returns `true` if the ast is [`InfixOp`].
+    ///
+    /// [`InfixOp`]: Ast::InfixOp
+    #[must_use]
+    pub fn is_infix_op(&self) -> bool {
+        matches!(self, Self::InfixOp { .. })
+    }
+
+    pub fn as_ident(&self) -> Option<&Identifier> {
+        if let Self::Ident(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    fn is_subtype(&self, other: &Ast<'a>) -> ExtendsResult {
+        type A<'a> = Ast<'a>;
+        type T = ExtendsResult;
+
+        // comparisons with never always result in never
+        if self.is_bottom_type() {
+            return T::Never;
+        }
+
+        // everything extends both top types
+        if other.is_top_type() {
+            return T::True;
+        }
+
+        match self {
+            x if !x.is_typescript_feature() => {
+                unreachable!()
+            }
+
+            A::Any => T::Both,
+
+            A::Unknown => T::False,
+
+            A::True => match other {
+                A::True => T::True,
+                A::Primitive(PrimitiveType::Boolean) => T::True,
+                _ => T::False,
+            },
+
+            A::False => match other {
+                A::False => T::True,
+                A::Primitive(PrimitiveType::Boolean) => T::True,
+                _ => T::False,
+            },
+
+            A::Access { .. } => todo!(),
+
+            A::Application(_) => todo!(),
+
+            A::Array(_) => todo!(),
+
+            A::InfixOp { .. } => todo!(),
+
+            A::Builtin { .. } => todo!(),
+
+            A::Ident(_) => todo!(),
+
+            A::NamespaceAccess(_) => todo!(),
+
+            A::Number(a) => match other {
+                A::Number(b) => Into::into(a == b),
+                A::Primitive(PrimitiveType::Number) => T::True,
+                _ => T::False,
+            },
+
+            A::ObjectLiteral(_) => todo!(),
+
+            A::Primitive(a) => match other {
+                A::Primitive(b) => Into::into(a == b),
+                _ => T::False,
+            },
+
+            A::String(a) => match other {
+                A::String(b) => Into::into(a == b),
+                A::Primitive(PrimitiveType::String) => T::True,
+                _ => T::False,
+            },
+
+            A::TemplateString(a) => match other {
+                A::TemplateString(b) => Into::into(a == b),
+                A::Primitive(PrimitiveType::String) => T::True,
+                _ => T::False,
+            },
+
+            A::Tuple(_) => todo!(),
+
+            A::Undefined => match other {
+                A::Undefined => T::True,
+                _ => T::False,
+            },
+
+            A::Null => match other {
+                A::Null => T::True,
+                _ => T::False,
+            },
+
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{parser::Rule, test_support::*};
+    static TRUE: ExtendsResult = ExtendsResult::True;
+    static FALSE: ExtendsResult = ExtendsResult::False;
+    static BOTH: ExtendsResult = ExtendsResult::Both;
+    static NEVER: ExtendsResult = ExtendsResult::Never;
+
+    use super::*;
+
+    mod is_subtype {
+        use super::*;
+
+        mod never {
+            use super::*;
+
+            // #[test]
+            // fn never() {
+            //     assert_eq!(ast!("never").is_subtype(&ast!("never")), NEVER);
+            // }
         }
     }
 }
@@ -1413,306 +1442,10 @@ impl<'a> typescript::Pretty for TypeParameter<'a> {
     }
 }
 
-pub(crate) mod if_expr {
-    use super::{
-        node::{self, Node, Nodes},
-        Ast, ExtendsExpr, InfixOp, PrefixOp, PrettySexpr,
-    };
-    use pretty::RcDoc as D;
-    use serde::Serialize;
+pub(crate) mod if_expr;
 
-    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-    pub struct Expr<'a> {
-        pub condition: Node<'a>,
-        pub then_branch: Node<'a>,
-        pub else_branch: Option<Node<'a>>,
-    }
+pub(crate) mod match_expr;
 
-    impl<'a> Expr<'a> {
-        pub(crate) fn simplify(&self) -> Node<'a> {
-            let else_branch = self
-                .else_branch
-                .as_ref()
-                .map_or_else(|| node::Node::from(Ast::Never), |v| v.clone());
+pub(crate) mod cond_expr;
 
-            expand_to_extends(&self.condition, &self.then_branch, &else_branch)
-        }
-    }
-
-    impl<'a> PrettySexpr for Expr<'a> {
-        fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
-            let mut vec = vec![
-                D::text("if"),
-                self.condition.pretty_sexpr(),
-                D::text("then:"),
-                self.then_branch.pretty_sexpr(),
-            ];
-
-            if let Some(else_branch) = &self.else_branch {
-                vec.push(D::text("else:"));
-                vec.push(else_branch.pretty_sexpr());
-            }
-
-            Ast::sexpr(vec)
-        }
-    }
-
-    /// Expands an if expression into a series of nested ternary expressions
-    pub(crate) fn expand_to_extends<'a>(
-        condition: &Node<'a>,
-        then: &Node<'a>,
-        else_arm: &Node<'a>,
-    ) -> Node<'a> {
-        // Recursive operations
-        let out: Option<Node<'a>> = match &*condition.value {
-            // Unary operators
-            Ast::ExtendsPrefixOp { op, value } => {
-                match op {
-                    // Swap `then` and `else` branches
-                    PrefixOp::Not if value.value.is_compatible_with_not_prefix_op() => {
-                        Some(expand_to_extends(value, else_arm, then))
-                    }
-                    PrefixOp::Infer => todo!(),
-                    _ => {
-                        unreachable!(
-                            "Expected `not` or `infer` prefix operator, found {condition:#?}"
-                        )
-                    }
-                }
-            }
-            Ast::ExtendsInfixOp { lhs, op, rhs } => match op {
-                InfixOp::And => {
-                    let then = expand_to_extends(rhs, then, else_arm);
-                    Some(expand_to_extends(lhs, &then, else_arm))
-                }
-                InfixOp::Or => {
-                    let else_arm = expand_to_extends(rhs, then, else_arm);
-                    Some(expand_to_extends(lhs, then, &else_arm))
-                }
-                _ => None,
-            },
-            _ => panic!("Expected extends operator, found {condition:#?}"),
-        };
-
-        if let Some(v) = out {
-            return v;
-        }
-
-        // Terminal nodes
-        match &*condition.value {
-            // Binary operators
-            Ast::ExtendsInfixOp { lhs, op, rhs } => {
-                // TODO report a syntax error here
-                // need to include spans in ASTNode<'a>
-                if !lhs.value.is_typescript_feature() {
-                    dbg!(&lhs);
-                    unreachable!("value must be desugared before this point");
-                }
-
-                if !rhs.value.is_typescript_feature() {
-                    dbg!(rhs.value.to_sexpr(80));
-                    unreachable!("value must be desugared before this point");
-                }
-
-                match op {
-                    // Equivalent to `lhs extends rhs ? then : else`
-                    InfixOp::Extends => {
-                        // FIXME missing span
-                        Ast::from(ExtendsExpr::new(
-                            lhs.clone(),
-                            rhs.clone(),
-                            then.clone(),
-                            else_arm.clone(),
-                        ))
-                        .into()
-                    }
-                    InfixOp::NotExtends => {
-                        // FIXME missing span
-                        Ast::from(ExtendsExpr::new(
-                            lhs.clone(),
-                            rhs.clone(),
-                            else_arm.clone(),
-                            then.clone(),
-                        ))
-                        .into()
-                    }
-                    InfixOp::Equals => todo!("equals"),
-                    InfixOp::NotEquals => todo!("not equals"),
-                    InfixOp::StrictEquals => todo!("strict equals"),
-                    InfixOp::StrictNotEquals => todo!("strict not equals"),
-                    _ => unreachable!(),
-                }
-            }
-            _ => panic!("Expected extends operator, found {condition:#?}"),
-        }
-    }
-}
-
-pub(crate) mod match_expr {
-    use super::{node::Node, Ast, ExtendsExpr};
-    use pest::Span;
-    use serde::Serialize;
-
-    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-    pub struct Expr<'a> {
-        pub value: Node<'a>,
-        pub arms: Vec<Arm<'a>>,
-        pub else_arm: Node<'a>,
-    }
-
-    impl<'a> Expr<'a> {
-        pub(crate) fn simplify(&self) -> Node<'a> {
-            // Convert match arms to a series of extends expressions.
-            // Allows for a single wildcard pattern ("_") to be used as the default case.
-            let Expr {
-                value,
-                arms,
-                else_arm,
-            } = self;
-
-            arms.iter()
-                .rev()
-                .fold(else_arm.clone(), |acc: Node, arm: &Arm| -> Node {
-                    let Arm { pattern, body } = arm;
-
-                    // FIXME missing span
-                    Node {
-                        span: None,
-                        value: Box::new(Ast::from(ExtendsExpr::new(
-                            value.clone(),
-                            pattern.clone(),
-                            body.clone(),
-                            acc,
-                        ))),
-                    }
-                })
-        }
-    }
-
-    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-    pub struct Arm<'a> {
-        pub pattern: Node<'a>,
-        pub body: Node<'a>,
-    }
-}
-
-pub(crate) mod cond_expr {
-    use super::{if_expr, Node, PrettySexpr};
-    use serde::Serialize;
-
-    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-    pub struct Expr<'a> {
-        pub arms: Vec<Arm<'a>>,
-        /// Unlike match and if expressions, the else arm is *not* optional
-        pub else_arm: Node<'a>,
-    }
-
-    impl<'a> Expr<'a> {
-        pub(crate) fn simplify(&self) -> Node<'a> {
-            // Convert a CondExpr to a series of nested ternary expressions
-            let Expr { arms, else_arm } = self;
-
-            let init_else: Node<'a> = (else_arm).clone();
-
-            let acc: Node<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
-                let Arm {
-                    condition,
-                    body: then,
-                } = arm;
-
-                if_expr::expand_to_extends(condition, then, &else_arm)
-            });
-
-            acc
-        }
-    }
-
-    impl<'a> PrettySexpr for Expr<'a> {
-        fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
-            let mut vec = vec![pretty::RcDoc::text("cond")];
-
-            for arm in &self.arms {
-                vec.push(arm.pretty_sexpr());
-            }
-
-            vec.push(self.else_arm.pretty_sexpr());
-
-            super::Ast::sexpr(vec)
-        }
-    }
-
-    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-    pub struct Arm<'a> {
-        pub condition: Node<'a>,
-        pub body: Node<'a>,
-    }
-
-    impl<'a> PrettySexpr for Arm<'a> {
-        fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
-            super::Ast::sexpr(vec![
-                pretty::RcDoc::text("when"),
-                self.condition.pretty_sexpr(),
-            ])
-        }
-    }
-}
-
-pub(crate) mod let_expr {
-    use pretty::RcDoc as D;
-    use serde::Serialize;
-
-    use super::{
-        node::{self, Node},
-        Ast, Identifier, PrettySexpr,
-    };
-
-    use std::collections::HashMap;
-
-    #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-    pub struct Expr<'a> {
-        pub bindings: HashMap<Identifier, Node<'a>>,
-        pub body: Node<'a>,
-    }
-
-    impl<'a> Expr<'a> {
-        /// Replace all identifiers in the body of the let expression with their corresponding
-        /// values
-        pub(crate) fn simplify(&self) -> super::node::Node<'a> {
-            let mut bindings = self.bindings.clone();
-            // simplifiy all bindings first
-            for (ident, value) in &self.bindings {
-                let new_value = value.simplify();
-                bindings.insert(ident.clone(), new_value);
-            }
-
-            let (tree, _) = self
-                .body
-                .prewalk(bindings, &|node, bindings| match &*node.value {
-                    Ast::Ident(id) => {
-                        let new_value = bindings.get(id).unwrap_or(&node).clone();
-                        (new_value, bindings)
-                    }
-                    _ => (node, bindings),
-                });
-
-            tree
-        }
-    }
-
-    impl PrettySexpr for Expr<'_> {
-        fn pretty_sexpr(&self) -> D<()> {
-            let mut bindings = vec![];
-
-            for (ident, value) in &self.bindings {
-                bindings.push(ident.pretty_sexpr().append(":"));
-                bindings.push(value.pretty_sexpr());
-            }
-
-            Ast::sexpr(vec![
-                D::text("let"),
-                Ast::sexpr(bindings),
-                self.body.pretty_sexpr(),
-            ])
-        }
-    }
-}
+pub(crate) mod let_expr;

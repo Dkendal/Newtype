@@ -94,7 +94,11 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
 /// A |> B
 /// # B(A)
 /// ```
-fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair<'a>) -> Node<'a> {
+fn replace_pipe_with_type_application<'a>(
+    rhs: Node<'a>,
+    lhs: Node<'a>,
+    op: Pair<'a>,
+) -> Node<'a> {
     match &*rhs.value {
         Ast::Ident(rhs_name) => {
             // FIXME missing span

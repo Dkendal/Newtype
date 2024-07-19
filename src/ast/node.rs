@@ -1,3 +1,5 @@
+use crate::extends_result::ExtendsResult;
+
 use super::*;
 use pest::Span;
 use std::collections::HashMap;
@@ -458,8 +460,8 @@ impl<'a> Node<'a> {
         tree
     }
 
-    pub(crate) fn is_extension(&self, other: &Self) -> Option<bool> {
-        self.value.as_ref().is_extension(&other.value)
+    pub(crate) fn is_subtype(&self, other: &Self) -> ExtendsResult {
+        self.value.as_ref().is_subtype(&other.value)
     }
 }
 
@@ -495,7 +497,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn is_extension() {
-        assert_eq!(ast!("1").is_extension(&ast!("number")), Some(true))
+    fn is_subtype() {
+        assert_eq!(ast!("1").is_subtype(&ast!("number")), ExtendsResult::True)
     }
 }
