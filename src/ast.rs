@@ -16,42 +16,12 @@ use crate::{
 
 pub(crate) mod errors;
 pub(crate) mod macros;
-
-pub(crate) trait PrettySexpr {
-    fn to_sexpr(&self, width: usize) -> String {
-        let mut w = Vec::new();
-        self.pretty_sexpr().render(width, &mut w).unwrap();
-        String::from_utf8(w).unwrap()
-    }
-
-    fn pretty_sexpr(&self) -> D;
-
-    fn sexpr(items: Vec<D>) -> D {
-        let sep = D::line();
-
-        D::text("(")
-            .append(D::intersperse(items, sep).nest(4))
-            .append(D::text(")"))
-            .group()
-    }
-}
-
 pub(crate) mod node;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct NamespaceAccess<'a> {
     pub lhs: Node<'a>,
     pub rhs: Node<'a>,
-}
-
-impl NamespaceAccess<'_> {
-    fn pretty_sexpr(&self) -> D<()> {
-        Ast::sexpr(vec![
-            D::text("::"),
-            self.lhs.pretty_sexpr(),
-            self.rhs.pretty_sexpr(),
-        ])
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -92,12 +62,6 @@ impl<'a> ExtendsExpr<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Tuple<'a> {
     pub items: Nodes<'a>,
-}
-
-impl PrettySexpr for Tuple<'_> {
-    fn pretty_sexpr(&self) -> D<()> {
-        Ast::sexpr(self.items.iter().map(|item| item.pretty_sexpr()).collect())
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -247,22 +211,6 @@ pub struct UnitTest<'a> {
     pub body: Vec<Node<'a>>,
 }
 
-impl PrettySexpr for UnitTest<'_> {
-    fn pretty_sexpr(&self) -> D<()> {
-        Ast::sexpr(
-            [
-                vec![
-                    D::text("unit-test"),
-                    D::text(self.name.clone()),
-                    D::text(":do"),
-                ],
-                self.body.iter().map(|node| node.pretty_sexpr()).collect(),
-            ]
-            .concat(),
-        )
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct MacroCall<'a> {
     pub name: String,
@@ -278,17 +226,6 @@ impl<'a> MacroCall<'a> {
             },
             id => unimplemented!("macro {} not implemented", id),
         }
-    }
-}
-
-impl<'a> PrettySexpr for MacroCall<'a> {
-    fn pretty_sexpr(&self) -> D<()> {
-        Ast::sexpr(
-            vec![D::text(self.name.clone())]
-                .into_iter()
-                .chain(self.args.iter().map(|n| n.pretty_sexpr()))
-                .collect_vec(),
-        )
     }
 }
 
@@ -640,129 +577,6 @@ impl<'a> typescript::Pretty for Ast<'a> {
 impl<'a> From<ExtendsExpr<'a>> for Ast<'a> {
     fn from(v: ExtendsExpr<'a>) -> Self {
         Ast::ExtendsExpr(v)
-    }
-}
-
-impl<'a> PrettySexpr for Ast<'a> {
-    fn pretty_sexpr(&self) -> D {
-        match self {
-            Ast::Access { lhs, rhs, is_dot } => {
-                let op = if *is_dot { "." } else { ".[]" };
-
-                Ast::sexpr(vec![D::text(op), lhs.pretty_sexpr(), rhs.pretty_sexpr()])
-            }
-            Ast::Any => D::text("any"),
-            Ast::Application(Application { name, args }) => Ast::sexpr(
-                vec![name.pretty()]
-                    .into_iter()
-                    .chain(args.iter().map(|n| n.pretty_sexpr()))
-                    .collect_vec(),
-            ),
-            Ast::Array(value) => Ast::sexpr(vec![D::text("[]"), value.pretty_sexpr()]),
-            Ast::InfixOp { lhs, op, rhs } => Ast::sexpr(vec![
-                D::text(match op {
-                    Op::Union => "&",
-                    Op::Intersection => "|",
-                }),
-                lhs.pretty_sexpr(),
-                rhs.pretty_sexpr(),
-            ]),
-
-            Ast::Builtin { name, argument } => {
-                let name = match name {
-                    BuiltInKeyword::Keyof => "keyof",
-                };
-
-                Ast::sexpr(vec![D::text(name), argument.pretty_sexpr()])
-            }
-            Ast::CondExpr(cond_expr) => cond_expr.pretty_sexpr(),
-            Ast::ExtendsInfixOp { lhs, op, rhs } => {
-                let op = match op {
-                    InfixOp::Extends => "<:",
-                    InfixOp::NotExtends => "</",
-                    InfixOp::Equals => "==",
-                    InfixOp::NotEquals => "!=",
-                    InfixOp::StrictEquals => "===",
-                    InfixOp::StrictNotEquals => "!==",
-                    InfixOp::And => "and",
-                    InfixOp::Or => "or",
-                };
-
-                Ast::sexpr(vec![D::text(op), lhs.pretty_sexpr(), rhs.pretty_sexpr()])
-            }
-            Ast::ExtendsExpr(ExtendsExpr {
-                lhs,
-                rhs,
-                then_branch,
-                else_branch,
-            }) => Ast::sexpr(vec![
-                D::text("extends"),
-                lhs.pretty_sexpr(),
-                rhs.pretty_sexpr(),
-                then_branch.pretty_sexpr(),
-                else_branch.pretty_sexpr(),
-            ]),
-            Ast::ExtendsPrefixOp { op, value } => {
-                let op = match op {
-                    PrefixOp::Not => "not",
-                    PrefixOp::Infer => "infer",
-                };
-
-                Ast::sexpr(vec![D::text(op), value.pretty_sexpr()])
-            }
-            Ast::Ident(ident) => ident.pretty_sexpr(),
-            Ast::IfExpr(if_expr) => if_expr.pretty_sexpr(),
-            Ast::ImportStatement { .. } => todo!(),
-            Ast::LetExpr(let_expr) => let_expr.pretty_sexpr(),
-            Ast::MappedType(MappedType { .. }) => todo!(),
-            Ast::MatchExpr(match_expr::Expr { .. }) => todo!(),
-            Ast::NamespaceAccess(namespace_access) => namespace_access.pretty_sexpr(),
-            Ast::Never => todo!(),
-            Ast::NoOp => todo!(),
-            Ast::Number(number) => D::text(number),
-            Ast::ObjectLiteral(..) => todo!(),
-            Ast::Primitive(primitive) => D::text(primitive.to_string()),
-            Ast::Program(statements) => {
-                let mut vec = vec![D::text("program")];
-
-                vec.extend(statements.iter().map(|s| s.pretty_sexpr()));
-
-                Ast::sexpr(vec)
-            }
-            Ast::Statement(inner) => inner.pretty_sexpr(),
-            Ast::String(str) => string_literal(str),
-            Ast::TemplateString(_) => todo!(),
-            Ast::Tuple(tuple) => tuple.pretty_sexpr(),
-            Ast::TypeAlias {
-                export,
-                name,
-                params,
-                body,
-            } => {
-                let mut vec = vec![D::text("type"), name.pretty()];
-
-                if *export {
-                    vec.push(D::text(":export"));
-                }
-
-                if !params.is_empty() {
-                    vec.push(Ast::sexpr(
-                        params.iter().map(|p| p.pretty_sexpr()).collect(),
-                    ));
-                }
-
-                vec.push(D::text("as:"));
-
-                vec.push(body.pretty_sexpr());
-
-                Ast::sexpr(vec)
-            }
-            Ast::Unknown => todo!(),
-            Ast::Interface(Interface { .. }) => todo!(),
-            Ast::UnitTest(x) => x.pretty_sexpr(),
-            Ast::MacroCall(x) => x.pretty_sexpr(),
-            Ast::Boolean(_) => todo!(),
-        }
     }
 }
 
@@ -1207,8 +1021,16 @@ mod simplify_tests {
         assert_eq!(
             parse!(expr, "if a <: b then c else d end")
                 .simplify()
-                .to_sexpr(80),
-            "(extends a b c d)"
+                .to_sexp()
+                .unwrap()
+                .to_string(),
+            lexpr::sexp!(
+                (ExtendsExpr
+                    (lhs Ident . "a")
+                    (rhs Ident . "b")
+                    (then_branch Ident . "c")
+                    (else_branch Ident . "d")))
+            .to_string()
         )
     }
 
@@ -1226,7 +1048,8 @@ mod simplify_tests {
                 "#
             )
             .simplify()
-            .to_sexpr(80),
+            .to_sexp()
+            .unwrap(),
             parse!(
                 expr,
                 r#"
@@ -1238,7 +1061,8 @@ mod simplify_tests {
                 "#
             )
             .simplify()
-            .to_sexpr(80),
+            .to_sexp()
+            .unwrap(),
         )
     }
 
@@ -1256,7 +1080,8 @@ mod simplify_tests {
                 "#
             )
             .simplify()
-            .to_sexpr(80),
+            .to_sexp()
+            .unwrap(),
             parse!(
                 expr,
                 r#"
@@ -1272,7 +1097,8 @@ mod simplify_tests {
                 "#
             )
             .simplify()
-            .to_sexpr(80),
+            .to_sexp()
+            .unwrap(),
         )
     }
 
@@ -1289,7 +1115,8 @@ mod simplify_tests {
                 "#
             )
             .simplify()
-            .to_sexpr(80),
+            .to_sexp()
+            .unwrap(),
             parse!(
                 expr,
                 r#"
@@ -1302,7 +1129,8 @@ mod simplify_tests {
                 "#
             )
             .simplify()
-            .to_sexpr(80),
+            .to_sexp()
+            .unwrap(),
         )
     }
 
@@ -1320,7 +1148,8 @@ mod simplify_tests {
                 "#
             )
             .simplify()
-            .to_sexpr(80),
+            .to_sexp()
+            .unwrap(),
             parse!(
                 expr,
                 r#"
@@ -1333,7 +1162,8 @@ mod simplify_tests {
                 "#
             )
             .simplify()
-            .to_sexpr(80)
+            .to_sexp()
+            .unwrap()
         )
     }
 }
@@ -1574,12 +1404,6 @@ impl From<&str> for Identifier {
     }
 }
 
-impl PrettySexpr for Identifier {
-    fn pretty_sexpr(&self) -> D<()> {
-        self.pretty()
-    }
-}
-
 impl Identifier {
     fn pretty(&self) -> D<()> {
         D::text(&self.0)
@@ -1613,19 +1437,6 @@ impl<'a> TypeParameter<'a> {
             default,
             rest,
         }
-    }
-
-    fn pretty_sexpr(&self) -> D<()> {
-        Ast::sexpr(vec![
-            D::text("type-parameter"),
-            D::text(self.name.clone()),
-            self.constraint
-                .as_ref()
-                .map_or_else(D::nil, |v| v.pretty_sexpr()),
-            self.default
-                .as_ref()
-                .map_or_else(D::nil, |v| v.pretty_sexpr()),
-        ])
     }
 }
 

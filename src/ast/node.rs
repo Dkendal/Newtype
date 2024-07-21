@@ -37,6 +37,10 @@ impl<'a> Node<'a> {
         }
     }
 
+    pub fn to_sexp(&self) -> serde_lexpr::Result<serde_lexpr::Value> {
+        serde_lexpr::to_value(self)
+    }
+
     pub fn from_span(span: Span<'a>, value: Ast<'a>) -> Self {
         Self {
             span: Some(span),
@@ -485,12 +489,6 @@ impl<'a> Default for Node<'a> {
 impl<'a> typescript::Pretty for Node<'a> {
     fn to_ts(&self) -> pretty::RcDoc<()> {
         self.value.to_ts()
-    }
-}
-
-impl<'a> PrettySexpr for Node<'a> {
-    fn pretty_sexpr(&self) -> D {
-        self.value.pretty_sexpr()
     }
 }
 

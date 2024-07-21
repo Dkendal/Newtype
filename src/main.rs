@@ -25,9 +25,9 @@ mod pretty;
 mod runtime;
 mod typescript;
 
+mod extends_result;
 #[cfg(test)]
 mod test_support;
-mod extends_result;
 
 use clap::Parser;
 use std::io::Read;

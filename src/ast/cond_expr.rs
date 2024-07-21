@@ -27,32 +27,8 @@ impl<'a> Expr<'a> {
     }
 }
 
-impl<'a> PrettySexpr for Expr<'a> {
-    fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
-        let mut vec = vec![pretty::RcDoc::text("cond")];
-
-        for arm in &self.arms {
-            vec.push(arm.pretty_sexpr());
-        }
-
-        vec.push(self.else_arm.pretty_sexpr());
-
-        super::Ast::sexpr(vec)
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Arm<'a> {
     pub condition: Node<'a>,
     pub body: Node<'a>,
 }
-
-impl<'a> PrettySexpr for Arm<'a> {
-    fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
-        super::Ast::sexpr(vec![
-            pretty::RcDoc::text("when"),
-            self.condition.pretty_sexpr(),
-        ])
-    }
-}
-

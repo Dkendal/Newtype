@@ -35,21 +35,3 @@ impl<'a> Expr<'a> {
         tree
     }
 }
-
-impl PrettySexpr for Expr<'_> {
-    fn pretty_sexpr(&self) -> D<()> {
-        let mut bindings = vec![];
-
-        for (ident, value) in &self.bindings {
-            bindings.push(ident.pretty_sexpr().append(":"));
-            bindings.push(value.pretty_sexpr());
-        }
-
-        Ast::sexpr(vec![
-            D::text("let"),
-            Ast::sexpr(bindings),
-            self.body.pretty_sexpr(),
-        ])
-    }
-}
-

@@ -18,24 +18,6 @@ impl<'a> Expr<'a> {
     }
 }
 
-impl<'a> PrettySexpr for Expr<'a> {
-    fn pretty_sexpr(&self) -> pretty::RcDoc<()> {
-        let mut vec = vec![
-            D::text("if"),
-            self.condition.pretty_sexpr(),
-            D::text("then:"),
-            self.then_branch.pretty_sexpr(),
-        ];
-
-        if let Some(else_branch) = &self.else_branch {
-            vec.push(D::text("else:"));
-            vec.push(else_branch.pretty_sexpr());
-        }
-
-        Ast::sexpr(vec)
-    }
-}
-
 /// Expands an if expression into a series of nested ternary expressions
 pub(crate) fn expand_to_extends<'a>(
     condition: &Node<'a>,
@@ -53,9 +35,7 @@ pub(crate) fn expand_to_extends<'a>(
                 }
                 PrefixOp::Infer => todo!(),
                 _ => {
-                    unreachable!(
-                        "Expected `not` or `infer` prefix operator, found {condition:#?}"
-                    )
+                    unreachable!("Expected `not` or `infer` prefix operator, found {condition:#?}")
                 }
             }
         }
@@ -89,7 +69,7 @@ pub(crate) fn expand_to_extends<'a>(
             }
 
             if !rhs.value.is_typescript_feature() {
-                dbg!(rhs.value.to_sexpr(80));
+                dbg!(rhs.to_sexp().unwrap());
                 unreachable!("value must be desugared before this point");
             }
 
@@ -125,4 +105,3 @@ pub(crate) fn expand_to_extends<'a>(
         _ => panic!("Expected extends operator, found {condition:#?}"),
     }
 }
-

@@ -41,4 +41,3 @@ pub struct Arm<'a> {
     pub pattern: Node<'a>,
     pub body: Node<'a>,
 }
-

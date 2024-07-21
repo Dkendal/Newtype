@@ -267,7 +267,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
                 _ => unreachable!(),
             };
             new(Ast::Boolean(value))
-        },
+        }
         Rule::tuple => parse_tuple(pair),
         Rule::macro_call => new(Ast::MacroCall(parse_macro_call(pair))),
         Rule::application => {
@@ -888,7 +888,7 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "A <: B",
-            "(<: A B)"
+            lexpr::sexp!((ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")))
         );
     }
 
@@ -898,7 +898,7 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "(A <: B)",
-            "(<: A B)"
+            lexpr::sexp!((ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")))
         );
     }
 
@@ -908,7 +908,7 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "((A <: B))",
-            "(<: A B)"
+            lexpr::sexp!((ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")))
         );
     }
 
@@ -918,7 +918,7 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "not (A <: B)",
-            "(not (<: A B))"
+            lexpr::sexp!((ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B"))))
         );
     }
 
@@ -928,7 +928,7 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "A <: B and C <: D",
-            "(and (<: A B) (<: C D))"
+            lexpr::sexp!((ExtendsInfixOp (lhs ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")) (op . And) (rhs ExtendsInfixOp (lhs Ident . "C") (op . Extends) (rhs Ident . "D"))))
         );
     }
 
@@ -938,21 +938,21 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "not (A <: B) and C <: D",
-            "(and (not (<: A B)) (<: C D))"
+            lexpr::sexp!((ExtendsInfixOp (lhs ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B"))) (op . And) (rhs ExtendsInfixOp (lhs Ident . "C") (op . Extends) (rhs Ident . "D"))))
         );
 
         assert_sexpr!(
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "A <: B and (not (C <: D))",
-            "(and (<: A B) (not (<: C D)))"
+            lexpr::sexp!((ExtendsInfixOp (lhs ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")) (op . And) (rhs ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "C") (op . Extends) (rhs Ident . "D")))))
         );
 
         assert_sexpr!(
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "not (A <: B) and (not (C <: D))",
-            "(and (not (<: A B)) (not (<: C D)))"
+            lexpr::sexp!((ExtendsInfixOp (lhs ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B"))) (op . And) (rhs ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "C") (op . Extends) (rhs Ident . "D")))))
         );
     }
 
@@ -1853,32 +1853,6 @@ mod parser_tests {
                 "#
             );
         }
-
-        #[test]
-        fn unittest_ast() {
-            let ast = parse!(
-                R,
-                r#"
-                unittest "test" do
-                    1
-                end
-                "#
-            );
-
-            assert_eq!(
-                ast.to_sexpr(0),
-                dedent!(
-                    r#"
-                    (program
-                        (unit-test
-                            "test"
-                            :do
-                            1))
-                    "#
-                )
-                .trim()
-            );
-        }
     }
 
     mod unquote {
@@ -1888,22 +1862,11 @@ mod parser_tests {
 
         #[test]
         fn parsing() {
-            let ast = parse!(
+            assert_sexpr!(
                 R,
-                r#"
-                unquote!(1)
-                "#
-            );
-
-            assert_eq!(
-                ast.to_sexpr(0),
-                dedent!(
-                    r#"
-                    (unquote!
-                        1)
-                    "#
-                )
-                .trim()
+                crate::parser::parse_expr,
+                "unquote!(1)",
+                lexpr::sexp!((MacroCall (name . "unquote!") (args (Number . "1"))))
             );
         }
 
