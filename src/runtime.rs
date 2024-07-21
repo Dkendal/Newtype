@@ -7,6 +7,11 @@ pub mod builtin {
 
     use super::*;
 
+    pub fn assert_equal<'a>(left: Node<'a>, right: Node<'a>) -> Node<'a> {
+        pretty_assertions::assert_eq!(left, right);
+        Default::default()
+    }
+
     pub fn unquote(tree: Node) -> Node {
         let (out, _) = tree.prewalk((), &|tree, acc| match &*tree.value {
             Ast::MacroCall(_) => todo!(),
@@ -79,6 +84,34 @@ mod tests {
                     .unwrap(),
                     sexpr!("true").unwrap()
                 );
+            }
+        }
+
+        mod assert_equal {
+            use super::*;
+            use pretty_assertions::assert_eq;
+            use serde_lexpr::to_value;
+
+            #[test]
+            fn equal_values() {
+                assert_eq!(
+                    to_value(runtime::builtin::assert_equal(ast!("1"), ast!("1"))).unwrap(),
+                    lexpr::sexp!(NoOp)
+                );
+            }
+
+            #[test]
+            fn equal_values_with_whitespace() {
+                assert_eq!(
+                    to_value(runtime::builtin::assert_equal(ast!(" 1 "), ast!("1"))).unwrap(),
+                    lexpr::sexp!(NoOp)
+                );
+            }
+
+            #[test]
+            #[should_panic(expected = "assertion failed")]
+            fn diff_values() {
+                runtime::builtin::assert_equal(ast!("1"), ast!("2"));
             }
         }
     }

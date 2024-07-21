@@ -4,11 +4,17 @@ use super::*;
 use pest::Span;
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Eq, Clone)]
 pub struct Node<'a> {
     /// Generated nodes have no span
     pub span: Option<Span<'a>>,
     pub value: Box<Ast<'a>>,
+}
+
+impl<'a> PartialEq for Node<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
 }
 
 impl<'a> serde::Serialize for Node<'a> {
