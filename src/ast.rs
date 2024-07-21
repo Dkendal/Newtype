@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use itertools::Itertools;
 use node::{Node, Nodes};
 use pest::Span;
@@ -129,6 +131,20 @@ pub struct MappedType<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct ObjectLiteral<'a> {
     pub properties: Vec<ObjectProperty<'a>>,
+}
+
+impl<'a> ObjectLiteral<'a> {
+    pub fn is_empty(&self) -> bool {
+        self.properties.is_empty()
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, ObjectProperty<'a>> {
+        self.properties.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, ObjectProperty<'a>> {
+        self.properties.iter_mut()
+    }
 }
 
 impl<'a> typescript::Pretty for ObjectLiteral<'a> {
@@ -283,6 +299,7 @@ pub enum Ast<'a> {
         rhs: Node<'a>,
         is_dot: bool,
     },
+    Boolean(bool),
     Any,
     MacroCall(MacroCall<'a>),
     Application(Application<'a>),
@@ -307,7 +324,6 @@ pub enum Ast<'a> {
         op: PrefixOp,
         value: Node<'a>,
     },
-    False,
     Ident(Identifier),
     IfExpr(if_expr::Expr<'a>),
     ImportStatement {
@@ -320,7 +336,6 @@ pub enum Ast<'a> {
     NamespaceAccess(NamespaceAccess<'a>),
     Never,
     NoOp,
-    Null,
     Number(String),
     ObjectLiteral(ObjectLiteral<'a>),
     Primitive(PrimitiveType),
@@ -329,7 +344,6 @@ pub enum Ast<'a> {
     UnitTest(UnitTest<'a>),
     String(String),
     TemplateString(String),
-    True,
     Tuple(Tuple<'a>),
     TypeAlias {
         export: bool,
@@ -337,7 +351,6 @@ pub enum Ast<'a> {
         params: Vec<TypeParameter<'a>>,
         body: Node<'a>,
     },
-    Undefined,
     Unknown,
     Interface(Interface<'a>),
 }
@@ -415,11 +428,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }
             Ast::Ident(identifier) => identifier.pretty(),
             Ast::Number(number) => D::text(number),
-            Ast::Primitive(primitive) => D::text(match primitive {
-                PrimitiveType::Boolean => "boolean",
-                PrimitiveType::Number => "number",
-                PrimitiveType::String => "string",
-            }),
+            Ast::Primitive(primitive) => D::text(primitive.to_string()),
             Ast::String(string) => string_literal(string),
             Ast::TemplateString(string) => D::text(string),
             Ast::IfExpr(..) => {
@@ -465,14 +474,10 @@ impl<'a> typescript::Pretty for Ast<'a> {
 
                 doc.append(D::text("[]"))
             }
-            Ast::Null => D::text("null"),
-            Ast::Undefined => D::text("undefined"),
             Ast::Never => D::text("never"),
             Ast::Any => D::text("any"),
             Ast::Unknown => D::text("unknown"),
-            Ast::True => D::text("true"),
-            Ast::False => D::text("false"),
-
+            Ast::Boolean(value) => D::text(value.to_string()),
             Ast::InfixOp { lhs, op, rhs } => {
                 fn fmt<'a>(v: &'a Node<'a>) -> D<'a, ()> {
                     match &*v.value {
@@ -705,7 +710,6 @@ impl<'a> PrettySexpr for Ast<'a> {
 
                 Ast::sexpr(vec![D::text(op), value.pretty_sexpr()])
             }
-            Ast::False => D::text("false"),
             Ast::Ident(ident) => ident.pretty_sexpr(),
             Ast::IfExpr(if_expr) => if_expr.pretty_sexpr(),
             Ast::ImportStatement { .. } => todo!(),
@@ -715,10 +719,9 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::NamespaceAccess(namespace_access) => namespace_access.pretty_sexpr(),
             Ast::Never => todo!(),
             Ast::NoOp => todo!(),
-            Ast::Null => todo!(),
             Ast::Number(number) => D::text(number),
             Ast::ObjectLiteral(..) => todo!(),
-            Ast::Primitive(primitive) => primitive.pretty_sexpr(),
+            Ast::Primitive(primitive) => D::text(primitive.to_string()),
             Ast::Program(statements) => {
                 let mut vec = vec![D::text("program")];
 
@@ -729,7 +732,6 @@ impl<'a> PrettySexpr for Ast<'a> {
             Ast::Statement(inner) => inner.pretty_sexpr(),
             Ast::String(str) => string_literal(str),
             Ast::TemplateString(_) => todo!(),
-            Ast::True => D::text("true"),
             Ast::Tuple(tuple) => tuple.pretty_sexpr(),
             Ast::TypeAlias {
                 export,
@@ -755,11 +757,11 @@ impl<'a> PrettySexpr for Ast<'a> {
 
                 Ast::sexpr(vec)
             }
-            Ast::Undefined => todo!(),
             Ast::Unknown => todo!(),
             Ast::Interface(Interface { .. }) => todo!(),
             Ast::UnitTest(x) => x.pretty_sexpr(),
             Ast::MacroCall(x) => x.pretty_sexpr(),
+            Ast::Boolean(_) => todo!(),
         }
     }
 }
@@ -787,11 +789,116 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_nullish(&self) -> bool {
-        matches!(self, Ast::Null | Ast::Undefined)
+        matches!(
+            self,
+            Ast::Primitive(PrimitiveType::Undefined | PrimitiveType::Null | PrimitiveType::Void)
+        )
+    }
+
+    fn is_non_nullish(&self) -> bool {
+        !self.is_nullish()
+    }
+
+    fn is_non_primitive(&self) -> bool {
+        !self.is_primitive()
+    }
+
+    fn is_object_interface(&self) -> bool {
+        self.has_identifier("Object")
+    }
+
+    fn has_identifier(&self, name: &str) -> bool {
+        matches!(self, Ast::Ident(Identifier(value)) if value == name)
+    }
+
+    fn is_primitive(&self) -> bool {
+        matches!(self, Ast::Primitive(_))
     }
 
     pub fn is_bottom_type(&self) -> bool {
         matches!(self, Ast::Never)
+    }
+
+    pub fn get_primitive_type(&self) -> Option<PrimitiveType> {
+        type P = PrimitiveType;
+
+        let value = match self {
+            Ast::String(_) => P::String,
+
+            Ast::Number(_) => P::Number,
+
+            Ast::Boolean(_) => P::Boolean,
+
+            Ast::ObjectLiteral(_) => P::Object,
+
+            Ast::Ident(Identifier(name)) => match name.as_str() {
+                "String" => P::String,
+                "Number" => P::Number,
+                "Boolean" => P::Boolean,
+                "Object" => P::Object,
+                "Symbol" => P::Symbol,
+                "BigInt" => P::BigInt,
+                _ => return None,
+            },
+            _ => return None,
+        };
+
+        Some(value)
+    }
+
+    pub fn is_object_wrapper(&self) -> bool {
+        matches!(self, Ast::Ident(Identifier(name)) if matches!(name.as_str(),
+                "Boolean" | "Number" | "String" | "Object" | "Symbol" | "BigInt"
+        ))
+    }
+
+    pub fn is_object_wrapper_for(&self, object_wrapper_name: &str) -> bool {
+        matches!(self, Ast::Ident(Identifier(name)) if name.as_str() == object_wrapper_name)
+    }
+
+    pub fn is_string_object_wrapper(&self) -> bool {
+        self.is_object_wrapper_for("String")
+    }
+
+    pub fn is_number_object_wrapper(&self) -> bool {
+        self.is_object_wrapper_for("Number")
+    }
+
+    pub fn is_boolean_object_wrapper(&self) -> bool {
+        self.is_object_wrapper_for("Boolean")
+    }
+
+    pub fn is_object_object_wrapper(&self) -> bool {
+        self.is_object_wrapper_for("Object")
+    }
+
+    pub fn is_symbol_object_wrapper(&self) -> bool {
+        self.is_object_wrapper_for("Symbol")
+    }
+
+    pub fn is_bigint_object_wrapper(&self) -> bool {
+        self.is_object_wrapper_for("BigInt")
+    }
+
+    pub fn get_object_wrapper(&self) -> Option<Ast> {
+        let name = match self {
+            Ast::Primitive(p) => {
+                type P = PrimitiveType;
+
+                match p {
+                    P::Boolean => "Boolean",
+                    P::Number => "Number",
+                    P::String => "String",
+                    P::Object => "Object",
+                    P::Symbol => "Symbol",
+                    P::BigInt => "BigInt",
+                    P::Void | P::Undefined | P::Null => return None,
+                }
+            }
+            ast if ast.is_object_interface() => return None,
+            _ => "Object",
+        };
+        Some(Ast::Ident(Identifier(name.to_string())))
     }
 
     /// Anything that returns true is a feature that has a direct equivalent in TypeScript.
@@ -808,7 +915,6 @@ impl<'a> Ast<'a> {
             Ast::ExtendsInfixOp { .. } => false,
             Ast::ExtendsExpr(_) => true,
             Ast::ExtendsPrefixOp { .. } => false,
-            Ast::False => true,
             Ast::Ident(_) => true,
             Ast::IfExpr { .. } => false,
             Ast::ImportStatement { .. } => true,
@@ -818,7 +924,6 @@ impl<'a> Ast<'a> {
             Ast::NamespaceAccess(_) => true,
             Ast::Never => true,
             Ast::NoOp => false,
-            Ast::Null => true,
             Ast::Number(_) => true,
             Ast::ObjectLiteral(_) => true,
             Ast::Primitive(_) => true,
@@ -826,14 +931,13 @@ impl<'a> Ast<'a> {
             Ast::Statement(_) => true,
             Ast::String(_) => true,
             Ast::TemplateString(_) => true,
-            Ast::True => true,
             Ast::Tuple(Tuple { items: _ }) => true,
             Ast::TypeAlias { .. } => false,
-            Ast::Undefined => true,
             Ast::Unknown => true,
-            Ast::Interface(Interface { .. }) => todo!(),
-            Ast::UnitTest(_) => todo!(),
-            Ast::MacroCall(_) => todo!(),
+            Ast::Interface(Interface { .. }) => true,
+            Ast::UnitTest(_) => false,
+            Ast::MacroCall(_) => false,
+            Ast::Boolean(_) => true,
         }
     }
 
@@ -873,89 +977,82 @@ impl<'a> Ast<'a> {
         type A<'a> = Ast<'a>;
         type T = ExtendsResult;
 
-        // comparisons with never always result in never
-        if self.is_bottom_type() {
-            return T::Never;
+        if let Ast::Primitive(other) = other {
+            if let Some(value) = self.get_primitive_type() {
+                if value == *other {
+                    return T::True;
+                }
+            }
         }
 
-        // everything extends both top types
-        if other.is_top_type() {
-            return T::True;
-        }
-
-        match self {
-            x if !x.is_typescript_feature() => {
+        match (self, other) {
+            (x, _) if !x.is_typescript_feature() => {
                 unreachable!()
             }
 
-            A::Any => T::Both,
+            (A::Never, _) => T::Never,
 
-            A::Unknown => T::False,
+            (lhs, rhs) if lhs == rhs => T::True,
 
-            A::True => match other {
-                A::True => T::True,
-                A::Primitive(PrimitiveType::Boolean) => T::True,
+            (_, rhs) if rhs.is_top_type() => T::True,
+
+            (A::Any, _) => T::Both,
+
+            (A::Unknown, _) => T::False,
+
+            (_, A::Never) => T::False,
+
+            (A::Access { .. }, _) => todo!(),
+
+            (A::Application(_), _) => todo!(),
+
+            (A::Array(_), _) => todo!(),
+
+            (A::InfixOp { .. }, _) => todo!(),
+
+            (A::Builtin { .. }, _) => todo!(),
+
+            (A::NamespaceAccess(_), _) => todo!(),
+
+            (lhs, rhs) if lhs.is_non_nullish() && rhs.is_object_object_wrapper() => T::True,
+
+            (A::ObjectLiteral(lhs), _) if lhs.is_empty() => match other {
+                Ast::Primitive(PrimitiveType::Object) => T::True,
+                ast if ast.is_object_interface() => T::True,
                 _ => T::False,
             },
 
-            A::False => match other {
-                A::False => T::True,
-                A::Primitive(PrimitiveType::Boolean) => T::True,
-                _ => T::False,
-            },
+            (A::ObjectLiteral(_), _) => todo!(),
 
-            A::Access { .. } => todo!(),
+            (A::Primitive(lhs), A::Primitive(rhs)) => Into::into(lhs == rhs),
 
-            A::Application(_) => todo!(),
+            (A::TemplateString(_) | A::String(_), A::Primitive(PrimitiveType::String)) => T::True,
 
-            A::Array(_) => todo!(),
+            (A::Primitive(PrimitiveType::String) | A::TemplateString(_) | A::String(_), rhs)
+                if rhs.is_string_object_wrapper() =>
+            {
+                T::True
+            }
 
-            A::InfixOp { .. } => todo!(),
+            (A::Number(_), A::Primitive(PrimitiveType::Number)) => T::True,
 
-            A::Builtin { .. } => todo!(),
+            // Object wrappers are equivalent to their primitive types in
+            // this context.
+            (lhs, rhs) if lhs.is_object_wrapper() => {
+                let primitive_type = lhs.get_primitive_type().unwrap();
+                Ast::Primitive(primitive_type).is_subtype(rhs)
+            }
 
-            A::Ident(_) => todo!(),
+            (A::Ident(_), _) => {
+                todo!()
+            }
 
-            A::NamespaceAccess(_) => todo!(),
+            (A::Tuple(_), _) => todo!(),
 
-            A::Number(a) => match other {
-                A::Number(b) => Into::into(a == b),
-                A::Primitive(PrimitiveType::Number) => T::True,
-                _ => T::False,
-            },
-
-            A::ObjectLiteral(_) => todo!(),
-
-            A::Primitive(a) => match other {
-                A::Primitive(b) => Into::into(a == b),
-                _ => T::False,
-            },
-
-            A::String(a) => match other {
-                A::String(b) => Into::into(a == b),
-                A::Primitive(PrimitiveType::String) => T::True,
-                _ => T::False,
-            },
-
-            A::TemplateString(a) => match other {
-                A::TemplateString(b) => Into::into(a == b),
-                A::Primitive(PrimitiveType::String) => T::True,
-                _ => T::False,
-            },
-
-            A::Tuple(_) => todo!(),
-
-            A::Undefined => match other {
-                A::Undefined => T::True,
-                _ => T::False,
-            },
-
-            A::Null => match other {
-                A::Null => T::True,
-                _ => T::False,
-            },
-
-            _ => unreachable!(),
+            (a, b) => {
+                dbg!(a, b);
+                T::False
+            }
         }
     }
 }
@@ -963,6 +1060,7 @@ impl<'a> Ast<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{parser::Rule, test_support::*};
+    use rstest::rstest;
     static TRUE: ExtendsResult = ExtendsResult::True;
     static FALSE: ExtendsResult = ExtendsResult::False;
     static BOTH: ExtendsResult = ExtendsResult::Both;
@@ -970,17 +1068,122 @@ mod tests {
 
     use super::*;
 
-    mod is_subtype {
-        use super::*;
-
-        mod never {
-            use super::*;
-
-            // #[test]
-            // fn never() {
-            //     assert_eq!(ast!("never").is_subtype(&ast!("never")), NEVER);
-            // }
-        }
+    #[rstest]
+    // never
+    #[case("never", "any", NEVER)]
+    #[case("never", "unknown", NEVER)]
+    #[case("never", "{}", NEVER)]
+    #[case("never", "[]", NEVER)]
+    #[case("never", "string", NEVER)]
+    #[case("never", "number", NEVER)]
+    #[case("never", "object", NEVER)]
+    #[case("never", "boolean", NEVER)]
+    #[case("never", "Object", NEVER)]
+    #[case("never", "1", NEVER)]
+    #[case("never", "'string'", NEVER)]
+    #[case("never", "true", NEVER)]
+    #[case("never", "false", NEVER)]
+    #[case("never", "null", NEVER)]
+    #[case("never", "undefined", NEVER)]
+    #[case("never", "never", NEVER)]
+    // any
+    #[case("any", "any", TRUE)]
+    #[case("any", "unknown", TRUE)]
+    #[case("any", "{}", BOTH)]
+    #[case("any", "[]", BOTH)]
+    #[case("any", "string", BOTH)]
+    #[case("any", "number", BOTH)]
+    #[case("any", "boolean", BOTH)]
+    #[case("any", "object", BOTH)]
+    #[case("any", "Object", BOTH)]
+    #[case("any", "1", BOTH)]
+    #[case("any", "'string'", BOTH)]
+    #[case("any", "true", BOTH)]
+    #[case("any", "false", BOTH)]
+    #[case("any", "null", BOTH)]
+    #[case("any", "undefined", BOTH)]
+    #[case("any", "never", BOTH)]
+    // unknown
+    #[case("unknown", "any", TRUE)]
+    #[case("unknown", "unknown", TRUE)]
+    #[case("unknown", "{}", FALSE)]
+    #[case("unknown", "[]", FALSE)]
+    #[case("unknown", "string", FALSE)]
+    #[case("unknown", "number", FALSE)]
+    #[case("unknown", "boolean", FALSE)]
+    #[case("unknown", "object", FALSE)]
+    #[case("unknown", "Object", FALSE)]
+    #[case("unknown", "1", FALSE)]
+    #[case("unknown", "'string'", FALSE)]
+    #[case("unknown", "true", FALSE)]
+    #[case("unknown", "false", FALSE)]
+    #[case("unknown", "null", FALSE)]
+    #[case("unknown", "undefined", FALSE)]
+    #[case("unknown", "never", FALSE)]
+    // {}
+    #[case("{}", "any", TRUE)]
+    #[case("{}", "unknown", TRUE)]
+    #[case("{}", "{}", TRUE)]
+    #[case("{}", "{ x: string }", FALSE)]
+    #[case("{}", "[]", FALSE)]
+    #[case("{}", "[{}]", FALSE)]
+    #[case("{}", "{}[]", FALSE)]
+    #[case("{}", "string", FALSE)]
+    #[case("{}", "number", FALSE)]
+    #[case("{}", "boolean", FALSE)]
+    #[case("{}", "bitint", FALSE)]
+    #[case("{}", "symbol", FALSE)]
+    #[case("{}", "object", TRUE)]
+    #[case("{}", "Object", TRUE)]
+    #[case("{}", "Function", FALSE)]
+    #[case("{}", "String", FALSE)]
+    #[case("{}", "1", FALSE)]
+    #[case("{}", "'string'", FALSE)]
+    #[case("{}", "`string${var}`", FALSE)]
+    #[case("{}", "true", FALSE)]
+    #[case("{}", "false", FALSE)]
+    #[case("{}", "null", FALSE)]
+    #[case("{}", "undefined", FALSE)]
+    #[case("{}", "never", FALSE)]
+    // string
+    #[case("string", "any", TRUE)]
+    #[case("string", "unknown", TRUE)]
+    #[case("string", "{}", FALSE)]
+    #[case("string", "[]", FALSE)]
+    #[case("string", "string", TRUE)]
+    #[case("string", "number", FALSE)]
+    #[case("string", "boolean", FALSE)]
+    #[case("string", "Object", TRUE)]
+    #[case("string", "Function", FALSE)]
+    #[case("string", "String", TRUE)]
+    #[case("string", "1", FALSE)]
+    #[case("string", "'string'", FALSE)]
+    #[case("string", "true", FALSE)]
+    #[case("string", "false", FALSE)]
+    #[case("string", "null", FALSE)]
+    #[case("string", "undefined", FALSE)]
+    #[case("string", "never", FALSE)]
+    // String
+    #[case("String", "any", TRUE)]
+    #[case("String", "unknown", TRUE)]
+    #[case("String", "{}", FALSE)]
+    #[case("String", "[]", FALSE)]
+    #[case("String", "string", TRUE)]
+    #[case("String", "number", FALSE)]
+    #[case("String", "boolean", FALSE)]
+    #[case("String", "Object", TRUE)]
+    #[case("String", "Function", FALSE)]
+    #[case("String", "String", TRUE)]
+    #[case("String", "1", FALSE)]
+    #[case("String", "'string'", FALSE)]
+    #[case("String", "true", FALSE)]
+    #[case("String", "false", FALSE)]
+    #[case("String", "null", FALSE)]
+    #[case("String", "undefined", FALSE)]
+    #[case("String", "never", FALSE)]
+    #[trace]
+    fn is_subtype(#[case] a: &str, #[case] b: &str, #[case] expected: ExtendsResult) {
+        assert_eq!(ast!(a).is_subtype(&ast!(b)), expected);
     }
 }
 
@@ -1215,14 +1418,26 @@ pub enum PrimitiveType {
     Boolean,
     Number,
     String,
+    Object,
+    Symbol,
+    BigInt,
+    Void,
+    Undefined,
+    Null,
 }
 
-impl PrettySexpr for PrimitiveType {
-    fn pretty_sexpr(&self) -> D<()> {
+impl Display for PrimitiveType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PrimitiveType::Boolean => D::text("boolean"),
-            PrimitiveType::Number => D::text("number"),
-            PrimitiveType::String => D::text("string"),
+            PrimitiveType::Boolean => write!(f, "boolean"),
+            PrimitiveType::Number => write!(f, "number"),
+            PrimitiveType::String => write!(f, "string"),
+            PrimitiveType::Object => write!(f, "object"),
+            PrimitiveType::Symbol => write!(f, "symbol"),
+            PrimitiveType::BigInt => write!(f, "bigint"),
+            PrimitiveType::Void => write!(f, "void"),
+            PrimitiveType::Undefined => write!(f, "undefined"),
+            PrimitiveType::Null => write!(f, "null"),
         }
     }
 }

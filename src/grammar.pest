@@ -139,11 +139,8 @@ term = _{
     top_type
   | bottom_type
   | number
-  | undefined
+  | boolean
   | primitive
-  | null
-  | literal_true
-  | literal_false
   | template_string
   | string
   | ident
@@ -151,17 +148,15 @@ term = _{
   | object_literal
 }
 
+boolean = {
+    literal_true | literal_false
+}
+
 tuple = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 
 top_type = _{ any | unknown }
 
 bottom_type = _{ never }
-
-primitive = {
-    type_string
-  | type_boolean
-  | type_number
-}
 
 object_literal = {
     "{" ~ (object_property ~ ("," ~ object_property)* ~ ","?)? ~ "}"
@@ -272,15 +267,35 @@ unknown = @{ "unknown" }
 
 never = @{ "never" }
 
-type_string = @{ "string" }
+primitive = {
+    primitive_string
+  | primitive_boolean
+  | primitive_number
+  | primitive_object
+  | primitive_bigint
+  | primitive_symbol
+  | primitive_void
+  | primitive_null
+  | primitive_undefined
+}
 
-type_boolean = @{ "boolean" }
+primitive_null = @{ "null" }
 
-type_number = @{ "number" }
+primitive_undefined = @{ "undefined" }
 
-undefined = @{ "undefined" }
+primitive_void = @{ "void" }
 
-null = @{ "null" }
+primitive_string = @{ "string" }
+
+primitive_boolean = @{ "boolean" }
+
+primitive_number = @{ "number" }
+
+primitive_object = @{ "object" }
+
+primitive_bigint = @{ "bigint" }
+
+primitive_symbol = @{ "symbol" }
 
 literal_true = @{ "true" }
 
@@ -312,8 +327,6 @@ ident_chars = @{ ASCII_ALPHANUMERIC | "$" | "_" }
 
 keyword = _{
     "as"
-  | "any"
-  | "boolean"
   | "class"
   | "const"
   | "export"
@@ -332,20 +345,16 @@ keyword = _{
   | "readonly"
   | "never"
   | "not"
-  | "null"
-  | "number"
-  | "string"
-  | "symbol"
   | "then"
   | "true"
   | "type"
   | "typeof"
-  | "undefined"
-  | "unknown"
-  | "void"
   | "unittest"
   | else_keyword
   | "end"
+  | primitive
+  | bottom_type
+  | top_type
 }
 
 number = @{

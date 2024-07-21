@@ -94,11 +94,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
 /// A |> B
 /// # B(A)
 /// ```
-fn replace_pipe_with_type_application<'a>(
-    rhs: Node<'a>,
-    lhs: Node<'a>,
-    op: Pair<'a>,
-) -> Node<'a> {
+fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair<'a>) -> Node<'a> {
     match &*rhs.value {
         Ast::Ident(rhs_name) => {
             // FIXME missing span
@@ -241,14 +237,18 @@ pub(crate) fn parse(pair: Pair) -> Node {
         Rule::object_literal => new(Ast::ObjectLiteral(parse_object_literal(pair))),
         Rule::primitive => {
             let value = pair.into_inner().next().unwrap();
+
             let primitive = match value.as_rule() {
-                Rule::type_string => PrimitiveType::String,
-                Rule::type_number => PrimitiveType::Number,
-                Rule::type_boolean => PrimitiveType::Boolean,
-                _ => unreachable!(
-                    "unexpected rule while parsing primitive: {:?}",
-                    value.as_rule()
-                ),
+                Rule::primitive_string => PrimitiveType::String,
+                Rule::primitive_number => PrimitiveType::Number,
+                Rule::primitive_boolean => PrimitiveType::Boolean,
+                Rule::primitive_bigint => PrimitiveType::BigInt,
+                Rule::primitive_symbol => PrimitiveType::Symbol,
+                Rule::primitive_object => PrimitiveType::Object,
+                Rule::primitive_null => PrimitiveType::Null,
+                Rule::primitive_void => PrimitiveType::Void,
+                Rule::primitive_undefined => PrimitiveType::Undefined,
+                _ => unimplemented!("{:?}", rule),
             };
             new(Ast::Primitive(primitive))
         }
@@ -259,10 +259,15 @@ pub(crate) fn parse(pair: Pair) -> Node {
         Rule::never => new(Ast::Never),
         Rule::any => new(Ast::Any),
         Rule::unknown => new(Ast::Unknown),
-        Rule::literal_true => new(Ast::True),
-        Rule::literal_false => new(Ast::False),
-        Rule::null => new(Ast::Null),
-        Rule::undefined => new(Ast::Undefined),
+        Rule::boolean => {
+            let value = pair.into_inner().next().unwrap();
+            let value = match value.as_rule() {
+                Rule::literal_true => true,
+                Rule::literal_false => false,
+                _ => unreachable!(),
+            };
+            new(Ast::Boolean(value))
+        },
         Rule::tuple => parse_tuple(pair),
         Rule::macro_call => new(Ast::MacroCall(parse_macro_call(pair))),
         Rule::application => {

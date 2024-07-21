@@ -463,6 +463,10 @@ impl<'a> Node<'a> {
     pub(crate) fn is_subtype(&self, other: &Self) -> ExtendsResult {
         self.value.as_ref().is_subtype(&other.value)
     }
+
+    pub(crate) fn is_super_type(&self, other: &Self) -> ExtendsResult {
+        other.is_subtype(self)
+    }
 }
 
 pub(crate) type Nodes<'a> = Vec<Node<'a>>;
