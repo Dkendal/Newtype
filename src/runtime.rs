@@ -7,6 +7,11 @@ pub mod builtin {
 
     use super::*;
 
+    pub fn dbg(tree: Node) -> Node {
+        println!("{:#?}", tree);
+        tree
+    }
+
     pub fn assert_equal<'a>(left: Node<'a>, right: Node<'a>) -> Node<'a> {
         pretty_assertions::assert_eq!(left, right);
         Default::default()

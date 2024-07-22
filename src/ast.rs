@@ -219,8 +219,18 @@ pub struct MacroCall<'a> {
 
 impl<'a> MacroCall<'a> {
     fn eval(&self) -> Node<'a> {
-        match self.name.as_str() {
-            "unquote!" => match self.args.as_slice() {
+        let name = self.name.strip_suffix("!").unwrap();
+
+        match name {
+            "dbg!" => match self.args.as_slice() {
+                [node] => builtin::dbg(node.to_owned()),
+                _ => panic!("dbg! expects exactly one argument"),
+            },
+            "assert_equal" => match self.args.as_slice() {
+                [lhs, rhs] => builtin::assert_equal(lhs.to_owned(), rhs.to_owned()),
+                _ => panic!("assert_equal! expects exactly two arguments"),
+            },
+            "unquote" => match self.args.as_slice() {
                 [node] => builtin::unquote(node.to_owned()),
                 _ => panic!("unquote! expects exactly one argument"),
             },
