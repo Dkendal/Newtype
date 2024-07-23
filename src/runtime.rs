@@ -37,8 +37,7 @@ pub mod builtin {
                     let mut tree = tree.clone();
 
                     let value = Ast::UnionType {
-                        lhs: then_branch.clone(),
-                        rhs: else_branch.clone(),
+                        types: vec![then_branch.clone(), else_branch.clone()],
                     };
 
                     tree.set_value(Box::new(value));

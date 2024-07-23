@@ -252,12 +252,10 @@ pub enum Ast<'a> {
     Application(Application<'a>),
     Array(Node<'a>),
     UnionType {
-        lhs: Node<'a>,
-        rhs: Node<'a>,
+        types: Vec<Node<'a>>,
     },
     IntersectionType {
-        lhs: Node<'a>,
-        rhs: Node<'a>,
+        types: Vec<Node<'a>>,
     },
     Builtin {
         name: BuiltInKeyword,
@@ -417,7 +415,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 D::text("[").append(items).append(D::text("]"))
             }
             Ast::Array(node) => {
-                let doc = if node.value.is_infix_op() {
+                let doc = if node.value.is_set_op() {
                     parens(node.to_ts())
                 } else {
                     node.to_ts()
@@ -552,27 +550,20 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }
             Ast::UnitTest(_) => D::nil(),
             Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
-            Ast::UnionType { lhs, rhs } => {
-                let lhs = lhs.to_ts();
-                let rhs = rhs.to_ts();
-
-                D::nil()
-                    .append(lhs)
-                    .append(D::space())
-                    .append("|")
-                    .append(D::space())
-                    .append(rhs)
+            Ast::UnionType { types } => {
+                let sep = D::line().append(D::text("|")).append(D::space());
+                D::intersperse(
+                    types.iter().map(|t| match t.value.as_ref() {
+                        Ast::IntersectionType { .. } => surround(t.to_ts(), "(", ")"),
+                        _ => t.to_ts(),
+                    }),
+                    sep,
+                )
+                .group()
             }
-            Ast::IntersectionType { lhs, rhs } => {
-                let lhs = lhs.to_ts();
-                let rhs = rhs.to_ts();
-
-                D::nil()
-                    .append(lhs)
-                    .append(D::space())
-                    .append("&")
-                    .append(D::space())
-                    .append(rhs)
+            Ast::IntersectionType { types } => {
+                let sep = D::line().append(D::text("&")).append(D::space());
+                D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
             }
             Ast::NoOp => unimplemented!(),
             node @ (Ast::ExtendsPrefixOp { .. }
@@ -791,8 +782,18 @@ impl<'a> Ast<'a> {
     ///
     /// [`InfixOp`]: Ast::InfixOp
     #[must_use]
-    pub fn is_infix_op(&self) -> bool {
+    pub fn is_set_op(&self) -> bool {
         matches!(self, Self::UnionType { .. } | Self::IntersectionType { .. })
+    }
+
+    #[must_use]
+    pub fn is_union(&self) -> bool {
+        matches!(self, Self::UnionType { .. })
+    }
+
+    #[must_use]
+    pub fn is_intersection(&self) -> bool {
+        matches!(self, Self::IntersectionType { .. })
     }
 
     pub fn as_ident(&self) -> Option<&Identifier> {

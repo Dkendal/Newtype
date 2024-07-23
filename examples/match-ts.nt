@@ -19,14 +19,48 @@ import {
 type True as 1
 
 type ExtractSubcapture(T) as
-    if T <: M::Primitive | M::BuiltIn and T <: object then
-        T[ Exclude(keyof(T), keyof([]) | keyof({})) ]
-    end
+  match T do
+    M::Primitive | M::BuiltIn => never,
+    object => T[ Exclude(keyof(T), keyof([]) | keyof({})) ],
+  end
 
 type PartialAssignment(K, V) as
-    if not (V <: never) and K <: string then
+  match V do
+    never => never,
+    string =>
         for k in K do
             v
-        end
-    end
+        end,
+  end
 
+type EmptyToNever(T) as
+  if not ({} <: T) then
+    T
+  end
+
+type Kind as
+  :string
+  | :number
+  | :bigint
+  | :boolean
+  | :symbol
+  | :object
+  | :function
+  | :any
+  | :rest
+
+export interface Hole(Type, Label)
+defaults
+  Type = any,
+  Label = any
+{
+  T: Type,
+  readonly [__kind__]: Label
+}
+
+export type HoleInnerType(T) as
+  if T <: Hole(?U) then
+    U
+  else
+    T
+  end

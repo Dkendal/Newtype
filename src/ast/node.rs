@@ -75,7 +75,7 @@ impl<'a> Node<'a> {
         }
     }
 
-    pub(crate) fn new(span: Option<Span<'a>>, value: Ast<'a>) -> Self {
+    pub fn new(span: Option<Span<'a>>, value: Ast<'a>) -> Self {
         Self {
             span,
             value: Box::new(value),
@@ -118,7 +118,7 @@ impl<'a> Node<'a> {
         Post: Fn(Self, Context) -> (Self, Context),
     {
         /// Extract the node from the tuple
-        pub(crate) fn pick_node<T>((node, _ctx): (Node, T)) -> Node {
+        pub fn pick_node<T>((node, _ctx): (Node, T)) -> Node {
             node
         }
 
@@ -428,18 +428,24 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::UnionType { lhs, rhs } => {
-                let (lhs, _) = red(lhs, ctx.clone());
-                let (rhs, _) = red(rhs, ctx.clone());
-                let ast = Ast::UnionType { lhs, rhs };
+            Ast::UnionType { types } => {
+                let types = types
+                    .iter()
+                    .map(|ty| red_pick_node(ty, ctx.clone()))
+                    .collect_vec();
+
+                let ast = Ast::UnionType { types };
 
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::IntersectionType { lhs, rhs } => {
-                let (lhs, _) = red(lhs, ctx.clone());
-                let (rhs, _) = red(rhs, ctx.clone());
-                let ast = Ast::UnionType { lhs, rhs };
+            Ast::IntersectionType { types } => {
+                let types = types
+                    .iter()
+                    .map(|ty| red_pick_node(ty, ctx.clone()))
+                    .collect_vec();
+
+                let ast = Ast::IntersectionType { types };
 
                 (self.clone().replace(ast), ctx)
             }
@@ -456,13 +462,40 @@ impl<'a> Node<'a> {
         let bindings: Bindings = Default::default();
         let (tree, _) = self.traverse(
             bindings,
-            &|node, ctx| (node, ctx),
-            &|node, ctx| match &*node.value {
+            &|node, ctx| match node.value.as_ref() {
+                Ast::UnionType { types } => match types.as_slice() {
+                    [lhs, Node {
+                        span: _,
+                        value: box Ast::UnionType { types: rhs_types },
+                    }] => {
+                        let mut types = rhs_types.clone();
+                        types.push(lhs.clone());
+                        let ast = Ast::UnionType { types };
+                        let node = Node::new(node.span, ast);
+
+                        (node, ctx)
+                    }
+                    [Node {
+                        span: _,
+                        value: box Ast::UnionType { types: lhs_types },
+                    }, rhs] => {
+                        let mut types = lhs_types.clone();
+                        types.push(rhs.clone());
+                        let ast = Ast::UnionType { types };
+                        let node = Node::new(node.span, ast);
+
+                        (node, ctx)
+                    }
+                    _ => (node, ctx),
+                },
+                _ => (node, ctx),
+            },
+            &|node, ctx| match node.value.as_ref() {
                 Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
                 Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
                 Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
                 Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
-                _ast => (node, ctx),
+                _ => (node, ctx),
             },
         );
         tree
@@ -477,18 +510,22 @@ impl<'a> Node<'a> {
         tree
     }
 
-    pub(crate) fn is_subtype(&self, other: &Self) -> ExtendsResult {
+    pub fn is_subtype(&self, other: &Self) -> ExtendsResult {
         self.value.as_ref().is_subtype(&other.value)
     }
 
-    pub(crate) fn is_super_type(&self, other: &Self) -> ExtendsResult {
+    pub fn is_super_type(&self, other: &Self) -> ExtendsResult {
         other.is_subtype(self)
+    }
+
+    pub fn is_set_op(&self) -> bool {
+        self.value.is_set_op()
     }
 }
 
-pub(crate) type Nodes<'a> = Vec<Node<'a>>;
+pub type Nodes<'a> = Vec<Node<'a>>;
 
-pub(crate) type Bindings<'a> = HashMap<Identifier, Node<'a>>;
+pub type Bindings<'a> = HashMap<Identifier, Node<'a>>;
 
 impl<'a> Default for Node<'a> {
     fn default() -> Self {

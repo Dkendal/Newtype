@@ -12,6 +12,30 @@ type Extends<A, B> = A extends B ? true : false;
 type Pass = 1;
 type Fail = 0;
 
+
+declare function dbg<T>(x?: T): T;
+
+type a = {a: unknown};
+type b = {b: unknown};
+type c = {c: unknown};
+type d = {d: unknown};
+type e = {e: unknown};
+type f = {f: unknown};
+type g = {g: unknown};
+type h = {h: unknown};
+type T = a | b | c
+type T = a | b & c
+type T = a & b | c
+type T = a & b & c
+type T = a & b & c | d
+type T = a & b | c & d
+type T = a | b & c | d
+dbg<a | b & c | d>();
+dbg<a & b | c & d>();
+dbg<e | a & b | c & d>();
+dbg<a & b | c & d | e>();
+dbg<a & b | e | b & c | d | f>();
+
 {
   type t = any;
 

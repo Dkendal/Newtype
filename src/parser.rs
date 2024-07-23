@@ -82,18 +82,25 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 return replace_pipe_with_type_application(rhs, lhs, op);
             }
 
-            let span = if let [Some(span1), Some(span2), Some(span3)] =
-                [lhs.span, Some(op.as_span()), rhs.span]
-            {
-                dbg!(span1, span2, span3);
-                None
+            let span = if let [Some(a), Some(b)] = [lhs.span, rhs.span] {
+                pest::Span::new(a.get_input(), a.start(), b.end())
             } else {
                 None
             };
 
             match op.as_rule() {
-                union => Node::new(span, Ast::UnionType { lhs, rhs }),
-                intersection => Node::new(span, Ast::IntersectionType { lhs, rhs }),
+                union => Node::new(
+                    span,
+                    Ast::UnionType {
+                        types: vec![lhs, rhs],
+                    },
+                ),
+                intersection => Node::new(
+                    span,
+                    Ast::IntersectionType {
+                        types: vec![lhs, rhs],
+                    },
+                ),
                 rule => unreachable!("Expected infix operator, found {:?}", rule),
             }
         })
@@ -1124,6 +1131,8 @@ mod parser_tests {
 
     mod bin_ops {
         const R: Rule = Rule::expr;
+        use rstest::rstest;
+
         use super::*;
 
         #[test]
@@ -1154,7 +1163,6 @@ mod parser_tests {
             );
         }
 
-        #[test]
         fn union() {
             assert_typescript!("type A = 1 | 2;", "type A as 1 | 2");
         }
@@ -1164,19 +1172,24 @@ mod parser_tests {
             assert_typescript!("type A = 1 & 2;", "type A as 1 & 2");
         }
 
-        #[test]
-        fn union_with_intersection() {
-            assert_typescript!("type A = 1 | (2 & 3);", "type A as 1 | 2 & 3");
-        }
-
-        #[test]
-        fn intersection_with_union() {
-            assert_typescript!("type A = 1 & (2 | 3);", "type A as 1 & 2 | 3");
-        }
-
-        #[test]
-        fn grouped_union_and_intersection() {
-            assert_typescript!("type A = (1 | 2) & 3;", "type A as (1 | 2) & 3");
+        #[rstest]
+        #[case("A | B", "A | B")]
+        #[case("A & B", "A & B")]
+        #[case("A | B | C", "A | B | C")]
+        #[case("A | (B & C)", "A | B & C")]
+        #[case("C | (A & B)", "A & B | C")]
+        #[case("C | (A & B)", "(A & B) | C")]
+        #[case("A | (B & C)", "A | (B & C)")]
+        #[case("(A & B) | (C & D)", "(A & B) | (C & D)")]
+        #[case("A | (B & C & D)", "A | (B & C & D)")]
+        #[case("A | B | (C & D)", "A | B | C & D")]
+        fn infix_op(#[case] ts: &str, #[case] nt: &str) {
+            let source = nt.trim();
+            let expected = ts.trim();
+            let pairs = parse!(crate::parser::Rule::expr, source);
+            let simplified = pairs.simplify();
+            let actual = simplified.render_pretty_ts(80);
+            pretty_assertions::assert_eq!(expected, actual.trim());
         }
     }
 
