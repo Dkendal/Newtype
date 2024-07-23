@@ -1,3 +1,14 @@
+macro_rules! node {
+    ($value: pat) => {
+        $crate::ast::Node {
+            span: _,
+            value: box $value,
+        }
+    };
+}
+
+pub(crate) use node;
+
 macro_rules! assert_ast {
     ($pair:expr, $rule:expr) => {
         assert_eq!($pair.clone().as_rule(), $rule, "Rule mismatch");

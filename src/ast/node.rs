@@ -464,6 +464,25 @@ impl<'a> Node<'a> {
             bindings,
             &|node, ctx| match node.value.as_ref() {
                 Ast::UnionType { types } => match types.as_slice() {
+                    // Flatten nested union types (both)
+                    [Node {
+                        span: _,
+                        value: box Ast::UnionType { types: lhs_types },
+                    }, Node {
+                        span: _,
+                        value: box Ast::UnionType { types: rhs_types },
+                    }] => {
+                        let types = lhs_types
+                            .clone()
+                            .into_iter()
+                            .chain(rhs_types.clone())
+                            .collect();
+                        let ast = Ast::UnionType { types };
+                        let node = Node::new(node.span, ast);
+
+                        (node, ctx)
+                    }
+                    // Flatten nested union types (rhs)
                     [lhs, Node {
                         span: _,
                         value: box Ast::UnionType { types: rhs_types },
@@ -475,6 +494,7 @@ impl<'a> Node<'a> {
 
                         (node, ctx)
                     }
+                    // Flatten nested union types (lhs)
                     [Node {
                         span: _,
                         value: box Ast::UnionType { types: lhs_types },
@@ -486,7 +506,20 @@ impl<'a> Node<'a> {
 
                         (node, ctx)
                     }
-                    _ => (node, ctx),
+                    // Move all intersection to the right
+                    types => {
+                        let types = types
+                            .iter()
+                            .sorted_by(|a, b| {
+                                a.value.is_intersection().cmp(&b.value.is_intersection())
+                            })
+                            .cloned()
+                            .collect_vec();
+
+                        let node = Node::new(node.span, Ast::UnionType { types });
+
+                        (node, ctx)
+                    }
                 },
                 _ => (node, ctx),
             },
