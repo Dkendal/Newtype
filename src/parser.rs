@@ -35,7 +35,12 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
     use Rule::*;
     EXPR_PARSER
         .map_primary(parse)
-        .map_prefix(|op, _rhs| unreachable!("Expected prefix operator, found {:?}", op.as_rule()))
+        .map_prefix(|op, child| match op.as_rule() {
+            infer => Node::from_pair(&op, Ast::Infer(child)),
+            rule => {
+                parse_error!(op, vec![infer], vec![rule]);
+            }
+        })
         .map_postfix(|lhs, op| match op.as_rule() {
             indexed_access => {
                 let inner = op.into_inner().next().unwrap();
@@ -77,14 +82,20 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 return replace_pipe_with_type_application(rhs, lhs, op);
             }
 
-            let op = match op.as_rule() {
-                union => Op::Union,
-                intersection => Op::Intersection,
-                rule => unreachable!("Expected infix operator, found {:?}", rule),
+            let span = if let [Some(span1), Some(span2), Some(span3)] =
+                [lhs.span, Some(op.as_span()), rhs.span]
+            {
+                dbg!(span1, span2, span3);
+                None
+            } else {
+                None
             };
 
-            // FIXME missing span
-            Ast::InfixOp { lhs, op, rhs }.into()
+            match op.as_rule() {
+                union => Node::new(span, Ast::UnionType { lhs, rhs }),
+                intersection => Node::new(span, Ast::IntersectionType { lhs, rhs }),
+                rule => unreachable!("Expected infix operator, found {:?}", rule),
+            }
         })
         .parse(pairs)
 }
@@ -176,9 +187,8 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
             }
 
             let op = match op.as_rule() {
-                Rule::infer => PrefixOp::Infer,
                 Rule::not => PrefixOp::Not,
-                rule => parse_error!(op, vec![Rule::infer, Rule::not], vec![rule]),
+                rule => parse_error!(op, vec![Rule::not], vec![rule]),
             };
 
             Node::new(
@@ -307,10 +317,6 @@ pub(crate) fn parse(pair: Pair) -> Node {
             })
         }
         Rule::expr => parse_expr(pair.into_inner()),
-        Rule::infer => parse_error!(
-            pair,
-            format!("Infer operator must be used in an extends expression")
-        ),
         Rule::match_expr => {
             let mut inner = pair.into_inner();
 
@@ -520,8 +526,6 @@ fn parse_interface(pair: Pair) -> Node {
     let definition = body.properties;
 
     let params = parse_definition_options(inner);
-
-    dbg!(&params);
 
     let extends = None;
 

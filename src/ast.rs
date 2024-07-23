@@ -251,9 +251,12 @@ pub enum Ast<'a> {
     MacroCall(MacroCall<'a>),
     Application(Application<'a>),
     Array(Node<'a>),
-    InfixOp {
+    UnionType {
         lhs: Node<'a>,
-        op: Op,
+        rhs: Node<'a>,
+    },
+    IntersectionType {
+        lhs: Node<'a>,
         rhs: Node<'a>,
     },
     Builtin {
@@ -267,6 +270,7 @@ pub enum Ast<'a> {
         rhs: Node<'a>,
     },
     ExtendsExpr(ExtendsExpr<'a>),
+    Infer(Node<'a>),
     ExtendsPrefixOp {
         op: PrefixOp,
         value: Node<'a>,
@@ -425,29 +429,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::Any => D::text("any"),
             Ast::Unknown => D::text("unknown"),
             Ast::Boolean(value) => D::text(value.to_string()),
-            Ast::InfixOp { lhs, op, rhs } => {
-                fn fmt<'a>(v: &'a Node<'a>) -> D<'a, ()> {
-                    match &*v.value {
-                        Ast::InfixOp { .. } => parens(v.to_ts()),
-                        _ => v.to_ts(),
-                    }
-                }
-
-                let lhs = fmt(lhs);
-                let rhs = fmt(rhs);
-
-                let op = match op {
-                    Op::Union => D::text("|"),
-                    Op::Intersection => D::text("&"),
-                };
-
-                D::nil()
-                    .append(lhs)
-                    .append(D::space())
-                    .append(op)
-                    .append(D::space())
-                    .append(rhs)
-            }
+            Ast::Infer(value) => D::text("infer").append(D::space()).append(value.to_ts()),
 
             Ast::Builtin { name, argument } => name.to_ts().append(" ").append(argument.to_ts()),
 
@@ -565,7 +547,34 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::NamespaceAccess(NamespaceAccess { lhs, rhs }) => {
                 lhs.to_ts().append(".").append(rhs.to_ts())
             }
-            Ast::NoOp => todo!(),
+            Ast::Interface(value) => {
+                return value.to_ts();
+            }
+            Ast::UnitTest(_) => D::nil(),
+            Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
+            Ast::UnionType { lhs, rhs } => {
+                let lhs = lhs.to_ts();
+                let rhs = rhs.to_ts();
+
+                D::nil()
+                    .append(lhs)
+                    .append(D::space())
+                    .append("|")
+                    .append(D::space())
+                    .append(rhs)
+            }
+            Ast::IntersectionType { lhs, rhs } => {
+                let lhs = lhs.to_ts();
+                let rhs = rhs.to_ts();
+
+                D::nil()
+                    .append(lhs)
+                    .append(D::space())
+                    .append("&")
+                    .append(D::space())
+                    .append(rhs)
+            }
+            Ast::NoOp => unimplemented!(),
             node @ (Ast::ExtendsPrefixOp { .. }
             | Ast::MatchExpr(match_expr::Expr { .. })
             | Ast::CondExpr(cond_expr::Expr { .. })
@@ -575,11 +584,6 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     node
                 )
             }
-            Ast::Interface(value) => {
-                return value.to_ts();
-            }
-            Ast::UnitTest(_) => D::nil(),
-            Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
         }
     }
 }
@@ -729,39 +733,41 @@ impl<'a> Ast<'a> {
     /// Anything that's false is a feature that needs to be desugared.
     pub fn is_typescript_feature(&self) -> bool {
         match self {
-            Ast::Access { .. } => true,
-            Ast::Any => true,
-            Ast::Application(Application { name: _, args: _ }) => true,
-            Ast::Array(_) => true,
-            Ast::InfixOp { .. } => true,
-            Ast::Builtin { .. } => true,
-            Ast::CondExpr(cond_expr::Expr { .. }) => false,
-            Ast::ExtendsInfixOp { .. } => false,
-            Ast::ExtendsExpr(_) => true,
-            Ast::ExtendsPrefixOp { .. } => false,
-            Ast::Ident(_) => true,
-            Ast::IfExpr { .. } => false,
-            Ast::ImportStatement { .. } => true,
-            Ast::LetExpr(let_expr::Expr { .. }) => false,
-            Ast::MappedType(MappedType { .. }) => true,
-            Ast::MatchExpr(match_expr::Expr { .. }) => false,
-            Ast::NamespaceAccess(_) => true,
-            Ast::Never => true,
-            Ast::NoOp => false,
-            Ast::Number(_) => true,
-            Ast::ObjectLiteral(_) => true,
-            Ast::Primitive(_) => true,
-            Ast::Program(_) => true,
-            Ast::Statement(_) => true,
-            Ast::String(_) => true,
-            Ast::TemplateString(_) => true,
-            Ast::Tuple(Tuple { items: _ }) => true,
-            Ast::TypeAlias { .. } => false,
-            Ast::Unknown => true,
-            Ast::Interface(Interface { .. }) => true,
-            Ast::UnitTest(_) => false,
-            Ast::MacroCall(_) => false,
-            Ast::Boolean(_) => true,
+            Ast::ExtendsPrefixOp { .. }
+            | Ast::IfExpr { .. }
+            | Ast::LetExpr(_)
+            | Ast::MatchExpr(_)
+            | Ast::NoOp
+            | Ast::TypeAlias { .. }
+            | Ast::UnitTest(_)
+            | Ast::MacroCall(_)
+            | Ast::CondExpr(_)
+            | Ast::ExtendsInfixOp { .. } => false,
+            Ast::IntersectionType { .. }
+            | Ast::ExtendsExpr(_)
+            | Ast::Ident(_)
+            | Ast::Infer { .. }
+            | Ast::ImportStatement { .. }
+            | Ast::MappedType(_)
+            | Ast::NamespaceAccess(_)
+            | Ast::Never
+            | Ast::Number(_)
+            | Ast::ObjectLiteral(_)
+            | Ast::Primitive(_)
+            | Ast::Program(_)
+            | Ast::Statement(_)
+            | Ast::String(_)
+            | Ast::TemplateString(_)
+            | Ast::Tuple(_)
+            | Ast::Unknown
+            | Ast::Interface(_)
+            | Ast::Boolean(_)
+            | Ast::UnionType { .. }
+            | Ast::Access { .. }
+            | Ast::Any
+            | Ast::Application(_)
+            | Ast::Array(_)
+            | Ast::Builtin { .. } => true,
         }
     }
 
@@ -786,7 +792,7 @@ impl<'a> Ast<'a> {
     /// [`InfixOp`]: Ast::InfixOp
     #[must_use]
     pub fn is_infix_op(&self) -> bool {
-        matches!(self, Self::InfixOp { .. })
+        matches!(self, Self::UnionType { .. } | Self::IntersectionType { .. })
     }
 
     pub fn as_ident(&self) -> Option<&Identifier> {
@@ -831,8 +837,6 @@ impl<'a> Ast<'a> {
             (A::Application(_), _) => todo!(),
 
             (A::Array(_), _) => todo!(),
-
-            (A::InfixOp { .. }, _) => todo!(),
 
             (A::Builtin { .. }, _) => todo!(),
 
@@ -1245,12 +1249,6 @@ impl typescript::Pretty for BuiltInKeyword {
             BuiltInKeyword::Keyof => D::text("keyof"),
         }
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-pub enum Op {
-    Union,
-    Intersection,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]

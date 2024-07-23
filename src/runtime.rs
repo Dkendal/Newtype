@@ -35,11 +35,12 @@ pub mod builtin {
                 }
                 ExtendsResult::Both => {
                     let mut tree = tree.clone();
-                    let value = Ast::InfixOp {
+
+                    let value = Ast::UnionType {
                         lhs: then_branch.clone(),
-                        op: Op::Union,
                         rhs: else_branch.clone(),
                     };
+
                     tree.set_value(Box::new(value));
                     (tree, acc)
                 }

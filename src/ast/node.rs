@@ -174,16 +174,6 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::InfixOp { lhs, op, rhs } => {
-                let ast = Ast::InfixOp {
-                    lhs: red_pick_node(lhs, ctx.clone()),
-                    op: op.clone(),
-                    rhs: red_pick_node(rhs, ctx.clone()),
-                };
-
-                result(ast, ctx)
-            }
-
             Ast::Builtin { name, argument } => {
                 let (argument, _) = red(argument, ctx.clone());
 
@@ -437,6 +427,23 @@ impl<'a> Node<'a> {
 
                 result(ast, ctx)
             }
+
+            Ast::UnionType { lhs, rhs } => {
+                let (lhs, _) = red(lhs, ctx.clone());
+                let (rhs, _) = red(rhs, ctx.clone());
+                let ast = Ast::UnionType { lhs, rhs };
+
+                (self.clone().replace(ast), ctx)
+            }
+
+            Ast::IntersectionType { lhs, rhs } => {
+                let (lhs, _) = red(lhs, ctx.clone());
+                let (rhs, _) = red(rhs, ctx.clone());
+                let ast = Ast::UnionType { lhs, rhs };
+
+                (self.clone().replace(ast), ctx)
+            }
+
             _ => (node, ctx),
         };
 

@@ -80,11 +80,11 @@ type_constraint = {
 
 type_parameters = { ident ~ ("," ~ ident)* }
 
-expr = { expr1 ~ (infix ~ expr1)* }
+expr = { expr1 ~ (expr_infix ~ expr1)* }
 
-expr1 = _{ prefix* ~ primary ~ postfix* }
+expr1 = _{ expr_prefix* ~ expr_primary ~ expr_postfix* }
 
-primary = _{
+expr_primary = _{
     if_expr
   | for_expr
   | match_expr
@@ -97,11 +97,11 @@ primary = _{
   | "(" ~ expr ~ ")"
 }
 
-prefix = _{ infer }
+expr_prefix = _{ infer }
 
-infix = _{ union | intersection | pipe }
+expr_infix = _{ union | intersection | pipe }
 
-postfix = _{ namespace_access | indexed_access | dot_access | array_modifier }
+expr_postfix = _{ namespace_access | indexed_access | dot_access | array_modifier }
 
 namespace_access = { "::" ~ ident }
 

@@ -55,7 +55,7 @@ fn main() {
 
     let input = input_source.as_str();
 
-    let result = parser::parse_newtype_program(&input);
+    let result = parser::parse_newtype_program(input);
 
     match result {
         Ok(result) => {
