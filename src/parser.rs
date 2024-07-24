@@ -2001,9 +2001,9 @@ mod parser_tests {
             "#,
             r#"
             type A(x) as match x do
-                number => 1,
-                string => 2,
-                else => 3
+                number -> 1,
+                string -> 2,
+                else -> 3
             end
             "#
         );
@@ -2024,8 +2024,8 @@ mod parser_tests {
             "#,
             r#"
             type A(x) as cond do
-                x <: number => 1,
-                x <: {} and x <: {a: 1} => 2,
+                x <: number -> 1,
+                x <: {} and x <: {a: 1} -> 2,
             end
             "#
         );
@@ -2039,9 +2039,9 @@ mod parser_tests {
             "#,
             r#"
             type A(x) as cond do
-                x <: number => 1,
-                x <: {} and x <: {a: 1} => 2,
-                else => 3
+                x <: number -> 1,
+                x <: {} and x <: {a: 1} -> 2,
+                else -> 3
             end
             "#
         );

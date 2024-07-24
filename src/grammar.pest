@@ -207,7 +207,7 @@ match_expr = {
 }
 
 match_arm = {
-    #pattern = expr ~ "=>" ~ #body = expr
+    #pattern = expr ~ "->" ~ #body = expr
 }
 
 cond_expr = {
@@ -215,11 +215,11 @@ cond_expr = {
 }
 
 cond_arm = {
-    #condition = extends_expr ~ "=>" ~ #body = expr
+    #condition = extends_expr ~ "->" ~ #body = expr
 }
 
 else_arm = {
-    "else" ~ "=>" ~ #body = expr
+    "else" ~ "->" ~ #body = expr
 }
 
 extends_expr = {

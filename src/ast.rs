@@ -579,7 +579,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .append(string_literal(module))
             }
             Ast::Path(Path { segments }) => {
-                let sep = D::text(".").append(D::space());
+                let sep = D::text(".");
 
                 let segments = D::intersperse(segments.iter().map(|seg| seg.to_ts()), sep);
 
@@ -1222,9 +1222,9 @@ mod simplify_tests {
                 expr,
                 r#"
                 match A do
-                    number => 1,
-                    string => 2,
-                    else => 3
+                    number -> 1,
+                    string -> 2,
+                    else -> 3
                 end
                 "#
             )
