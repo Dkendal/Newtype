@@ -2,16 +2,16 @@ use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Expr<'a> {
+pub struct CondExpr<'a> {
     pub arms: Vec<Arm<'a>>,
     /// Unlike match and if expressions, the else arm is *not* optional
     pub else_arm: Node<'a>,
 }
 
-impl<'a> Expr<'a> {
+impl<'a> CondExpr<'a> {
     pub(crate) fn simplify(&self) -> Node<'a> {
         // Convert a CondExpr to a series of nested ternary expressions
-        let Expr { arms, else_arm } = self;
+        let CondExpr { arms, else_arm } = self;
 
         let init_else: Node<'a> = (else_arm).clone();
 

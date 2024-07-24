@@ -1,6 +1,7 @@
 use crate::extends_result::ExtendsResult;
 
 use super::*;
+use cond_expr::CondExpr;
 use pest::Span;
 use std::collections::HashMap;
 
@@ -188,7 +189,7 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::CondExpr(cond_expr::Expr { arms, else_arm }) => {
+            Ast::CondExpr(CondExpr { arms, else_arm }) => {
                 let arms = arms
                     .iter()
                     .map(|arm| {
@@ -201,7 +202,7 @@ impl<'a> Node<'a> {
 
                 let else_arm = red_pick_node(else_arm, ctx.clone());
 
-                let ast = Ast::CondExpr(cond_expr::Expr { arms, else_arm });
+                let ast = Ast::CondExpr(CondExpr { arms, else_arm });
 
                 result(ast, ctx)
             }

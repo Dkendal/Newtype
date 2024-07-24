@@ -171,4 +171,4 @@ export type VariableCapture(T) as
   |> ExpandCapture()
 
 export type PatternHandler(Pattern) as
-  (VariableCapture(Pattern)) -> unknown
+  (VariableCapture(Pattern)) => unknown

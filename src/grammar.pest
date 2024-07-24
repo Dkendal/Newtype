@@ -91,6 +91,7 @@ expr_primary = _{
   | map_expr
   | match_expr
   | cond_expr
+  | cond_expr
   | let_expr
   | builtin
   | macro_call
@@ -139,6 +140,7 @@ intersection = @{ "&" }
 term = _{
     top_type
   | bottom_type
+  | function_type
   | number
   | boolean
   | primitive
@@ -147,6 +149,30 @@ term = _{
   | ident
   | tuple
   | object_literal
+}
+
+function_type = {
+    parameters ~ "=>" ~ expr
+}
+
+parameters = {
+    "(" ~ (unnamed_parameters | named_parameters)? ~ ")"
+}
+
+unnamed_parameters = {
+    (unnamed_parameter ~ ("," ~ unnamed_parameter)* ~ ","?)
+}
+
+named_parameters = {
+    (named_parameter ~ ("," ~ named_parameter)* ~ ","?)
+}
+
+named_parameter = {
+    #name = ident ~ ":" ~ #type = expr
+}
+
+unnamed_parameter = {
+    expr
 }
 
 boolean = {

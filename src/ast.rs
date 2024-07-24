@@ -267,6 +267,50 @@ impl<'a> MacroCall<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub struct FunctionType<'a> {
+    pub params: Vec<Parameter<'a>>,
+    pub return_type: Node<'a>,
+}
+
+impl<'a> typescript::Pretty for FunctionType<'a> {
+    fn to_ts(&self) -> D<()> {
+        let sep = D::text(",").append(D::line());
+
+        let params = D::intersperse(self.params.iter().map(|param| param.to_ts()), sep);
+
+        let params = D::text("(").append(params).append(D::text(")"));
+
+        let return_type = self.return_type.to_ts();
+
+        params
+            .append(D::space())
+            .append("=>")
+            .append(D::space())
+            .append(return_type)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Parameter<'a> {
+    pub name: String,
+    pub kind: Node<'a>,
+}
+
+impl<'a> typescript::Pretty for Parameter<'a> {
+    fn to_ts(&self) -> D<()> {
+        let kind = self.kind.to_ts();
+
+        D::nil()
+            .append(self.name.clone())
+            .append(":")
+            .append(D::space())
+            .append(kind)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
     Access {
@@ -290,10 +334,10 @@ pub enum Ast<'a> {
         types: Vec<Node<'a>>,
     },
     Builtin {
-        name: BuiltInKeyword,
+        name: BuiltinKeyword,
         argument: Node<'a>,
     },
-    CondExpr(cond_expr::Expr<'a>),
+    CondExpr(cond_expr::CondExpr<'a>),
     ExtendsInfixOp {
         lhs: Node<'a>,
         op: InfixOp,
@@ -338,6 +382,7 @@ pub enum Ast<'a> {
     },
     Unknown,
     Interface(Interface<'a>),
+    FunctionType(FunctionType<'a>),
 }
 
 impl<'a> From<if_expr::IfExpr<'a>> for Ast<'a> {
@@ -352,8 +397,8 @@ impl<'a> From<match_expr::MatchExpr<'a>> for Ast<'a> {
     }
 }
 
-impl<'a> From<cond_expr::Expr<'a>> for Ast<'a> {
-    fn from(v: cond_expr::Expr<'a>) -> Self {
+impl<'a> From<cond_expr::CondExpr<'a>> for Ast<'a> {
+    fn from(v: cond_expr::CondExpr<'a>) -> Self {
         Self::CondExpr(v)
     }
 }
@@ -608,13 +653,14 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::NoOp => unimplemented!(),
             node @ (Ast::ExtendsPrefixOp { .. }
             | Ast::MatchExpr(match_expr::MatchExpr { .. })
-            | Ast::CondExpr(cond_expr::Expr { .. })
+            | Ast::CondExpr(cond_expr::CondExpr { .. })
             | Ast::ExtendsInfixOp { .. }) => {
                 unreachable!(
                     "ASTNode<'a> should be desugared before this point {:#?}",
                     node
                 )
             }
+            Ast::FunctionType(ty) => ty.to_ts(),
         }
     }
 }
@@ -763,43 +809,35 @@ impl<'a> Ast<'a> {
     /// Anything that returns true is a feature that has a direct equivalent in TypeScript.
     /// Anything that's false is a feature that needs to be desugared.
     pub fn is_typescript_feature(&self) -> bool {
-        match self {
-            Ast::ExtendsPrefixOp { .. }
-            | Ast::IfExpr { .. }
-            | Ast::LetExpr(_)
-            | Ast::MatchExpr(_)
-            | Ast::NoOp
-            | Ast::TypeAlias { .. }
-            | Ast::UnitTest(_)
-            | Ast::MacroCall(_)
-            | Ast::CondExpr(_)
-            | Ast::ExtendsInfixOp { .. } => false,
+        matches!(
+            self,
             Ast::IntersectionType { .. }
-            | Ast::ExtendsExpr(_)
-            | Ast::Ident(_)
-            | Ast::Infer { .. }
-            | Ast::ImportStatement { .. }
-            | Ast::MappedType(_)
-            | Ast::Path(_)
-            | Ast::Never
-            | Ast::Number(_)
-            | Ast::TypeLiteral(_)
-            | Ast::Primitive(_)
-            | Ast::Program(_)
-            | Ast::Statement(_)
-            | Ast::String(_)
-            | Ast::TemplateString(_)
-            | Ast::Tuple(_)
-            | Ast::Unknown
-            | Ast::Interface(_)
-            | Ast::Boolean(_)
-            | Ast::UnionType { .. }
-            | Ast::Access { .. }
-            | Ast::Any
-            | Ast::ApplyGeneric(_)
-            | Ast::Array(_)
-            | Ast::Builtin { .. } => true,
-        }
+                | Ast::ExtendsExpr(_)
+                | Ast::Ident(_)
+                | Ast::Infer { .. }
+                | Ast::ImportStatement { .. }
+                | Ast::MappedType(_)
+                | Ast::Path(_)
+                | Ast::Never
+                | Ast::Number(_)
+                | Ast::TypeLiteral(_)
+                | Ast::Primitive(_)
+                | Ast::Program(_)
+                | Ast::Statement(_)
+                | Ast::String(_)
+                | Ast::TemplateString(_)
+                | Ast::Tuple(_)
+                | Ast::Unknown
+                | Ast::Interface(_)
+                | Ast::Boolean(_)
+                | Ast::UnionType { .. }
+                | Ast::Access { .. }
+                | Ast::Any
+                | Ast::ApplyGeneric(_)
+                | Ast::Array(_)
+                | Ast::FunctionType(_)
+                | Ast::Builtin { .. }
+        )
     }
 
     /// Returns `true` if the node is [`ExtendsPrefixOp`].
@@ -1309,14 +1347,14 @@ impl typescript::Pretty for ImportSpecifier {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum BuiltInKeyword {
+pub enum BuiltinKeyword {
     Keyof,
 }
 
-impl typescript::Pretty for BuiltInKeyword {
+impl typescript::Pretty for BuiltinKeyword {
     fn to_ts(&self) -> D<()> {
         match self {
-            BuiltInKeyword::Keyof => D::text("keyof"),
+            BuiltinKeyword::Keyof => D::text("keyof"),
         }
     }
 }

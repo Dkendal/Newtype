@@ -11,8 +11,11 @@ use crate::{
     typescript,
 };
 
+use cond_expr::CondExpr;
 use itertools::Itertools;
 
+use let_expr::LetExpr;
+use match_expr::MatchExpr;
 use node::Node;
 use pest::{
     error::{Error, ErrorVariant},
@@ -286,140 +289,13 @@ pub(crate) fn parse(pair: Pair) -> Node {
         }
         Rule::tuple => parse_tuple(pair),
         Rule::macro_call => new(Ast::MacroCall(parse_macro_call(pair))),
-        Rule::builtin => {
-            let mut inner = pair.into_inner();
-
-            let name = inner.find(match_tag("name")).unwrap();
-
-            let name = match name.as_rule() {
-                Rule::keyof => BuiltInKeyword::Keyof,
-                _ => unreachable!(
-                    "unexpected rule while parsing builtin: {:?}",
-                    name.as_rule()
-                ),
-            };
-
-            let argument = inner.find(match_tag("argument")).map(parse).unwrap();
-
-            new(Ast::Builtin {
-                name,
-                argument: (argument),
-            })
-        }
+        Rule::builtin => new(parse_builtin(pair)),
         Rule::expr => parse_expr(pair.into_inner()),
-        Rule::match_expr => {
-            let mut inner = pair.into_inner();
-
-            let value = inner.find(match_tag("value")).map(parse).unwrap();
-
-            let arms: Vec<match_expr::Arm> = inner
-                .clone()
-                .filter(match_tag("arm"))
-                .map(|arm| {
-                    let mut inner = arm.into_inner();
-                    let pattern = inner.find(match_tag("pattern")).map(parse).unwrap();
-                    let body = inner.find(match_tag("body")).map(parse).unwrap();
-                    match_expr::Arm { pattern, body }
-                })
-                .collect();
-
-            let else_arm = inner
-                .find(match_tag("else"))
-                .and_then(|p| p.into_inner().find(match_tag("body")))
-                .map(parse)
-                .unwrap_or_else(|| Ast::Never.into());
-
-            new(Ast::MatchExpr(match_expr::MatchExpr {
-                value,
-                arms,
-                else_arm,
-            }))
-        }
-        Rule::cond_expr => {
-            let inner = pair.into_inner();
-
-            let else_arm = inner
-                .clone()
-                .find(match_tag("else"))
-                .and_then(|p| p.into_inner().find(match_tag("body")))
-                .map(parse)
-                .unwrap_or_else(|| Ast::Never.into());
-
-            let arms: Vec<cond_expr::Arm> = inner
-                .clone()
-                .filter(match_tag("arm"))
-                .map(|arm| {
-                    let mut inner = arm.into_inner();
-
-                    let condition = inner
-                        .find(match_tag("condition"))
-                        .map(|p| p.into_inner())
-                        .map(parse_extends_expr)
-                        .unwrap();
-
-                    let body = inner.find(match_tag("body")).map(parse).unwrap();
-
-                    cond_expr::Arm { condition, body }
-                })
-                .collect();
-
-            new(Ast::CondExpr(cond_expr::Expr { arms, else_arm }))
-        }
-        Rule::map_expr => {
-            let mut inner = pair.into_inner();
-
-            let ipk = next_pair!(inner, Rule::index_property_key);
-
-            let body = inner.find(match_tag("body")).map(parse).unwrap();
-
-            let mut inner = ipk.into_inner();
-
-            let index = inner
-                .next()
-                .and_then(filter_rule(Rule::ident))
-                .unwrap()
-                .as_str()
-                .to_string();
-
-            let iterable = inner.find(match_tag("iterable")).map(parse).unwrap();
-
-            new(Ast::MappedType(MappedType {
-                index,
-                iterable,
-                body,
-                remapped_as: None,
-                readonly_mod: None,
-                optional_mod: None,
-            }))
-        }
-        Rule::let_expr => {
-            let bindings: HashMap<_, _> = pair
-                .clone()
-                .into_inner()
-                .filter(match_tag("binding"))
-                .map(|pair| {
-                    let mut inner = pair.into_inner();
-                    let name = inner.next().unwrap();
-                    assert_eq!(name.as_rule(), Rule::ident);
-
-                    let name = name.as_str().to_string();
-                    let value = inner.next().unwrap();
-                    assert_eq!(value.as_rule(), Rule::expr);
-                    let value = parse(value);
-
-                    (Identifier(name), value)
-                })
-                .collect();
-
-            let body = pair
-                .clone()
-                .into_inner()
-                .find(match_tag("body"))
-                .map(parse)
-                .unwrap();
-
-            new(Ast::LetExpr(let_expr::LetExpr { bindings, body }))
-        }
+        Rule::match_expr => new(Ast::MatchExpr(parse_match_expr(pair))),
+        Rule::cond_expr => new(Ast::CondExpr(parse_cond_expr(pair))),
+        Rule::map_expr => new(Ast::MappedType(parse_map_expr(pair))),
+        Rule::let_expr => new(Ast::LetExpr(parse_let_expr(pair))),
+        Rule::function_type => new(Ast::FunctionType(parse_function_type(pair))),
 
         Rule::EOI => {
             parse_error!(pair, format!("Unexpected end of input"));
@@ -428,6 +304,198 @@ pub(crate) fn parse(pair: Pair) -> Node {
         rule => {
             parse_error!(pair, format!("Unexpected rule: {:?}", rule));
         }
+    }
+}
+
+fn parse_builtin(pair: Pair) -> Ast {
+    let mut inner = pair.into_inner();
+
+    let name = inner.find(match_tag("name")).unwrap();
+
+    let name = match name.as_rule() {
+        Rule::keyof => BuiltinKeyword::Keyof,
+        _ => unreachable!(
+            "unexpected rule while parsing builtin: {:?}",
+            name.as_rule()
+        ),
+    };
+
+    let argument = inner.find(match_tag("argument")).map(parse).unwrap();
+
+    let ast = Ast::Builtin {
+        name,
+        argument: (argument),
+    };
+    ast
+}
+
+fn parse_match_expr(pair: Pair) -> MatchExpr {
+    let mut inner = pair.into_inner();
+
+    let value = inner.find(match_tag("value")).map(parse).unwrap();
+
+    let arms: Vec<match_expr::Arm> = inner
+        .clone()
+        .filter(match_tag("arm"))
+        .map(|arm| {
+            let mut inner = arm.into_inner();
+            let pattern = inner.find(match_tag("pattern")).map(parse).unwrap();
+            let body = inner.find(match_tag("body")).map(parse).unwrap();
+            match_expr::Arm { pattern, body }
+        })
+        .collect();
+
+    let else_arm = inner
+        .find(match_tag("else"))
+        .and_then(|p| p.into_inner().find(match_tag("body")))
+        .map(parse)
+        .unwrap_or_else(|| Ast::Never.into());
+
+    match_expr::MatchExpr {
+        value,
+        arms,
+        else_arm,
+    }
+}
+
+fn parse_cond_expr(pair: Pair) -> CondExpr {
+    let inner = pair.into_inner();
+
+    let else_arm = inner
+        .clone()
+        .find(match_tag("else"))
+        .and_then(|p| p.into_inner().find(match_tag("body")))
+        .map(parse)
+        .unwrap_or_else(|| Ast::Never.into());
+
+    let arms: Vec<cond_expr::Arm> = inner
+        .clone()
+        .filter(match_tag("arm"))
+        .map(|arm| {
+            let mut inner = arm.into_inner();
+
+            let condition = inner
+                .find(match_tag("condition"))
+                .map(|p| p.into_inner())
+                .map(parse_extends_expr)
+                .unwrap();
+
+            let body = inner.find(match_tag("body")).map(parse).unwrap();
+
+            cond_expr::Arm { condition, body }
+        })
+        .collect();
+
+    CondExpr { arms, else_arm }
+}
+
+fn parse_map_expr(pair: Pair) -> MappedType {
+    let mut inner = pair.into_inner();
+
+    let ipk = next_pair!(inner, Rule::index_property_key);
+
+    let body = inner.find(match_tag("body")).map(parse).unwrap();
+
+    let mut inner = ipk.into_inner();
+
+    let index = inner
+        .next()
+        .and_then(filter_rule(Rule::ident))
+        .unwrap()
+        .as_str()
+        .to_string();
+
+    let iterable = inner.find(match_tag("iterable")).map(parse).unwrap();
+
+    MappedType {
+        index,
+        iterable,
+        body,
+        remapped_as: None,
+        readonly_mod: None,
+        optional_mod: None,
+    }
+}
+
+fn parse_let_expr(pair: Pair) -> LetExpr {
+    let bindings: HashMap<_, _> = pair
+        .clone()
+        .into_inner()
+        .filter(match_tag("binding"))
+        .map(|pair| {
+            let mut inner = pair.into_inner();
+            let name = inner.next().unwrap();
+            assert_eq!(name.as_rule(), Rule::ident);
+
+            let name = name.as_str().to_string();
+            let value = inner.next().unwrap();
+            assert_eq!(value.as_rule(), Rule::expr);
+            let value = parse(value);
+
+            (Identifier(name), value)
+        })
+        .collect();
+
+    let body = pair
+        .clone()
+        .into_inner()
+        .find(match_tag("body"))
+        .map(parse)
+        .unwrap();
+
+    let_expr::LetExpr { bindings, body }
+}
+
+fn parse_function_type(pair: Pair) -> FunctionType {
+    let mut inner = pair.into_inner();
+
+    let next = next_pair!(inner, Rule::parameters);
+
+    let next = next.into_inner().next();
+
+    let params = match next.as_ref().map(|p| p.as_rule()) {
+        Some(Rule::unnamed_parameters) => next
+            .unwrap()
+            .into_inner()
+            .enumerate()
+            .map(|(idx, pair)| {
+                assert_eq!(pair.as_rule(), Rule::unnamed_parameter);
+                let kind = next_pair!(pair.into_inner(), Rule::expr);
+
+                Parameter {
+                    name: format!("arg{}", idx),
+                    kind: parse(kind),
+                }
+            })
+            .collect_vec(),
+
+        Some(Rule::named_parameters) => next
+            .unwrap()
+            .into_inner()
+            .map(|p| {
+                assert_eq!(p.as_rule(), Rule::named_parameter);
+
+                let (name, ty) = take_pairs!(p.clone().into_inner(), Rule::ident, Rule::expr);
+
+                Parameter {
+                    name: name.as_str().to_string(),
+                    kind: parse(ty),
+                }
+            })
+            .collect_vec(),
+
+        Some(_) => unreachable!(),
+
+        None => vec![],
+    };
+
+    let return_type = next_pair!(inner, Rule::expr);
+
+    let return_type = parse(return_type);
+
+    FunctionType {
+        params,
+        return_type,
     }
 }
 
@@ -869,7 +937,7 @@ mod parser_tests {
                 (args (ident . "T") any))
         )
     )]
-    fn test_parse_expr(#[case] input: &str, #[case] expected: lexpr::Value) {
+    fn test_parse_expr_sexp_repr(#[case] input: &str, #[case] expected: lexpr::Value) {
         use crate::parser;
 
         let result = parser::NewtypeParser::parse(Rule::expr, input);
@@ -882,6 +950,31 @@ mod parser_tests {
                     actual.to_sexp().unwrap().to_string(),
                     expected.to_string()
                 );
+            }
+            Err(err) => {
+                panic!("{}", err);
+            }
+        }
+    }
+
+    #[rstest]
+    #[case("1", "1")]
+    #[case("true", "true")]
+    #[case("false", "false")]
+    // #[case("{}", "{}")]
+    #[case("() => void", "() => void")]
+    #[case("(any) => void", "(arg0: any) => void")]
+    // #[case("(x: any) => void", "(x: any) => void")]
+    fn test_parse_expr_typescript_repr(#[case] input: &str, #[case] expected: &str) {
+        use crate::parser;
+
+        let result = parser::NewtypeParser::parse(Rule::expr, input);
+
+        match result {
+            Ok(pairs) => {
+                let actual = parser::parse_expr(pairs).simplify().render_pretty_ts(0);
+
+                pretty_assertions::assert_eq!(actual, expected);
             }
             Err(err) => {
                 panic!("{}", err);
