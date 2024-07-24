@@ -159,11 +159,11 @@ impl<'a> Node<'a> {
 
                 (self.clone().replace(ast), ctx)
             }
-            Ast::Application(Application {
+            Ast::ApplyGeneric(ApplyGeneric {
                 receiver: name,
                 args,
             }) => {
-                let ast = Ast::Application(Application {
+                let ast = Ast::ApplyGeneric(ApplyGeneric {
                     receiver: name.clone(),
                     args: red_items(args, ctx.clone()),
                 });

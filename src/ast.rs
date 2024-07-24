@@ -86,12 +86,12 @@ pub struct Tuple<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Application<'a> {
+pub struct ApplyGeneric<'a> {
     pub receiver: Node<'a>,
     pub args: Nodes<'a>,
 }
 
-impl<'a> typescript::Pretty for Application<'a> {
+impl<'a> typescript::Pretty for ApplyGeneric<'a> {
     fn to_ts(&self) -> D<()> {
         let sep = D::text(",").append(D::space());
 
@@ -279,7 +279,7 @@ pub enum Ast<'a> {
     #[serde(rename(serialize = "macro"))]
     MacroCall(MacroCall<'a>),
     #[serde(rename(serialize = "apply"))]
-    Application(Application<'a>),
+    ApplyGeneric(ApplyGeneric<'a>),
     Array(Node<'a>),
     #[serde(rename(serialize = "|"))]
     UnionType {
@@ -442,7 +442,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 .append(D::text("]"))
                 .group(),
             Ast::TypeLiteral(value) => value.to_ts(),
-            Ast::Application(value) => value.to_ts(),
+            Ast::ApplyGeneric(value) => value.to_ts(),
             Ast::Tuple(Tuple { items }) => {
                 let sep = D::text(",").append(D::space());
 
@@ -796,7 +796,7 @@ impl<'a> Ast<'a> {
             | Ast::UnionType { .. }
             | Ast::Access { .. }
             | Ast::Any
-            | Ast::Application(_)
+            | Ast::ApplyGeneric(_)
             | Ast::Array(_)
             | Ast::Builtin { .. } => true,
         }
@@ -875,7 +875,7 @@ impl<'a> Ast<'a> {
 
             (A::Access { .. }, _) => todo!(),
 
-            (A::Application(_), _) => todo!(),
+            (A::ApplyGeneric(_), _) => todo!(),
 
             (A::Array(_), _) => todo!(),
 
