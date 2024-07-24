@@ -19,12 +19,31 @@ pub(crate) mod macros;
 pub(crate) mod node;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-pub struct NamespaceAccess<'a> {
-    pub lhs: Node<'a>,
-    pub rhs: Node<'a>,
+#[serde(rename_all = "kebab-case")]
+pub struct Path<'a> {
+    pub segments: Nodes<'a>,
+}
+
+impl<'a> Path<'a> {
+    fn simplify(&self, span: Option<Span<'a>>) -> Node<'a> {
+        let mut acc = vec![];
+
+        for seg in self.segments.iter() {
+            if let Ast::Path(path) = seg.value.as_ref() {
+                acc.extend(path.segments.clone());
+            } else {
+                acc.push(seg.clone());
+            }
+        }
+
+        let ast = Ast::Path(Path { segments: acc });
+
+        Node::new(span, ast)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct ExtendsExpr<'a> {
     pub lhs: Node<'a>,
     pub rhs: Node<'a>,
@@ -60,13 +79,15 @@ impl<'a> ExtendsExpr<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Tuple<'a> {
     pub items: Nodes<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Application<'a> {
-    pub name: Identifier,
+    pub receiver: Node<'a>,
     pub args: Nodes<'a>,
 }
 
@@ -78,11 +99,12 @@ impl<'a> typescript::Pretty for Application<'a> {
 
         let generic_params = D::text("<").append(generic_inner).append(D::text(">"));
 
-        self.name.pretty().append(generic_params)
+        self.receiver.to_ts().append(generic_params)
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct MappedType<'a> {
     pub index: String,
     pub iterable: Node<'a>,
@@ -93,6 +115,7 @@ pub struct MappedType<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct ObjectLiteral<'a> {
     pub properties: Vec<ObjectProperty<'a>>,
 }
@@ -130,6 +153,7 @@ impl<'a> typescript::Pretty for ObjectLiteral<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Interface<'a> {
     pub export: bool,
     pub name: String,
@@ -206,12 +230,14 @@ impl<'a> typescript::Pretty for Interface<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct UnitTest<'a> {
     pub name: String,
     pub body: Vec<Node<'a>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct MacroCall<'a> {
     pub name: String,
     pub args: Vec<Node<'a>>,
@@ -240,7 +266,9 @@ impl<'a> MacroCall<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Ast<'a> {
+    #[serde(rename(serialize = "."))]
     Access {
         lhs: Node<'a>,
         rhs: Node<'a>,
@@ -248,12 +276,16 @@ pub enum Ast<'a> {
     },
     Boolean(bool),
     Any,
+    #[serde(rename(serialize = "macro"))]
     MacroCall(MacroCall<'a>),
+    #[serde(rename(serialize = "apply"))]
     Application(Application<'a>),
     Array(Node<'a>),
+    #[serde(rename(serialize = "|"))]
     UnionType {
         types: Vec<Node<'a>>,
     },
+    #[serde(rename(serialize = "&"))]
     IntersectionType {
         types: Vec<Node<'a>>,
     },
@@ -274,7 +306,9 @@ pub enum Ast<'a> {
         value: Node<'a>,
     },
     Ident(Identifier),
+    #[serde(rename(serialize = "if"))]
     IfExpr(if_expr::Expr<'a>),
+    #[serde(rename(serialize = "import"))]
     ImportStatement {
         import_clause: ImportClause,
         module: String,
@@ -282,11 +316,12 @@ pub enum Ast<'a> {
     LetExpr(let_expr::Expr<'a>),
     MappedType(MappedType<'a>),
     MatchExpr(match_expr::Expr<'a>),
-    NamespaceAccess(NamespaceAccess<'a>),
+    #[serde(rename(serialize = "::"))]
+    Path(Path<'a>),
     Never,
     NoOp,
     Number(String),
-    ObjectLiteral(ObjectLiteral<'a>),
+    TypeLiteral(ObjectLiteral<'a>),
     Primitive(PrimitiveType),
     Program(Nodes<'a>),
     Statement(Node<'a>),
@@ -294,6 +329,7 @@ pub enum Ast<'a> {
     String(String),
     TemplateString(String),
     Tuple(Tuple<'a>),
+    #[serde(rename(serialize = "type"))]
     TypeAlias {
         export: bool,
         name: Identifier,
@@ -405,7 +441,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 .append(rhs.to_ts())
                 .append(D::text("]"))
                 .group(),
-            Ast::ObjectLiteral(value) => value.to_ts(),
+            Ast::TypeLiteral(value) => value.to_ts(),
             Ast::Application(value) => value.to_ts(),
             Ast::Tuple(Tuple { items }) => {
                 let sep = D::text(",").append(D::space());
@@ -542,8 +578,12 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .append(D::space())
                     .append(string_literal(module))
             }
-            Ast::NamespaceAccess(NamespaceAccess { lhs, rhs }) => {
-                lhs.to_ts().append(".").append(rhs.to_ts())
+            Ast::Path(Path { segments }) => {
+                let sep = D::text(".").append(D::space());
+
+                let segments = D::intersperse(segments.iter().map(|seg| seg.to_ts()), sep);
+
+                segments
             }
             Ast::Interface(value) => {
                 return value.to_ts();
@@ -604,7 +644,7 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_empty_object(&self) -> bool {
-        matches!(self, Ast::ObjectLiteral(ObjectLiteral { properties }) if properties.is_empty())
+        matches!(self, Ast::TypeLiteral(ObjectLiteral { properties }) if properties.is_empty())
     }
 
     pub fn is_nullish(&self) -> bool {
@@ -648,7 +688,7 @@ impl<'a> Ast<'a> {
 
             Ast::Boolean(_) => P::Boolean,
 
-            Ast::ObjectLiteral(_) => P::Object,
+            Ast::TypeLiteral(_) => P::Object,
 
             Ast::Ident(Identifier(name)) => match name.as_str() {
                 "String" => P::String,
@@ -740,10 +780,10 @@ impl<'a> Ast<'a> {
             | Ast::Infer { .. }
             | Ast::ImportStatement { .. }
             | Ast::MappedType(_)
-            | Ast::NamespaceAccess(_)
+            | Ast::Path(_)
             | Ast::Never
             | Ast::Number(_)
-            | Ast::ObjectLiteral(_)
+            | Ast::TypeLiteral(_)
             | Ast::Primitive(_)
             | Ast::Program(_)
             | Ast::Statement(_)
@@ -841,17 +881,17 @@ impl<'a> Ast<'a> {
 
             (A::Builtin { .. }, _) => todo!(),
 
-            (A::NamespaceAccess(_), _) => todo!(),
+            (A::Path(_), _) => todo!(),
 
             (lhs, rhs) if lhs.is_non_nullish() && rhs.is_object_object_wrapper() => T::True,
 
-            (A::ObjectLiteral(lhs), _) if lhs.is_empty() => match other {
+            (A::TypeLiteral(lhs), _) if lhs.is_empty() => match other {
                 Ast::Primitive(PrimitiveType::Object) => T::True,
                 ast if ast.is_object_interface() => T::True,
                 _ => T::False,
             },
 
-            (A::ObjectLiteral(_), _) => todo!(),
+            (A::TypeLiteral(_), _) => todo!(),
 
             (A::Primitive(lhs), A::Primitive(rhs)) => Into::into(lhs == rhs),
 
@@ -1018,7 +1058,6 @@ mod tests {
 
 #[cfg(test)]
 mod simplify_tests {
-
     use super::*;
     use crate::{
         ast::{
@@ -1029,7 +1068,34 @@ mod simplify_tests {
         pest::Parser,
         test_support::parse,
     };
+    use lexpr::sexp;
     use pretty_assertions::{assert_eq, assert_ne};
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(
+        "A::B::C::D",
+        sexp!((:: (segments (ident . "A") (ident . "B") (ident . "C") (ident . "D"))))
+    )]
+    fn test_simplify_expr(#[case] input: &str, #[case] expected: lexpr::Value) {
+        use crate::parser::{self, Rule};
+
+        let result = parser::NewtypeParser::parse(Rule::expr, input);
+
+        match result {
+            Ok(pairs) => {
+                let actual = parser::parse_expr(pairs).simplify();
+
+                pretty_assertions::assert_eq!(
+                    actual.to_sexp().unwrap().to_string(),
+                    expected.to_string()
+                );
+            }
+            Err(err) => {
+                panic!("{}", err);
+            }
+        }
+    }
 
     #[test]
     fn simplify_basic() {
@@ -1040,11 +1106,11 @@ mod simplify_tests {
                 .unwrap()
                 .to_string(),
             lexpr::sexp!(
-                (ExtendsExpr
-                    (lhs Ident . "a")
-                    (rhs Ident . "b")
-                    (then_branch Ident . "c")
-                    (else_branch Ident . "d")))
+                (#"extends-expr"
+                    (lhs ident . "a")
+                    (rhs ident . "b")
+                    (#"then-branch" ident . "c")
+                    (#"else-branch" ident . "d")))
             .to_string()
         )
     }
@@ -1184,6 +1250,7 @@ mod simplify_tests {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ImportClause {
     Named(Vec<ImportSpecifier>),
     Namespace { alias: Identifier },
@@ -1219,6 +1286,7 @@ impl typescript::Pretty for ImportClause {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct ImportSpecifier {
     pub module_export_name: Identifier,
     pub alias: Option<Identifier>,
@@ -1240,6 +1308,7 @@ impl typescript::Pretty for ImportSpecifier {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum BuiltInKeyword {
     Keyof,
 }
@@ -1253,6 +1322,7 @@ impl typescript::Pretty for BuiltInKeyword {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum PrimitiveType {
     Boolean,
     Number,
@@ -1282,6 +1352,7 @@ impl Display for PrimitiveType {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum PrefixOp {
     Infer,
     Not,
@@ -1298,6 +1369,7 @@ impl PrefixOp {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum InfixOp {
     Extends,
     NotExtends,
@@ -1310,12 +1382,14 @@ pub enum InfixOp {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum MappingModifier {
     Add,
     Remove,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ObjectPropertyKey<'a> {
     Index(PropertyKeyIndex<'a>),
     Key(String),
@@ -1333,6 +1407,7 @@ impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct PropertyKeyIndex<'a> {
     pub key: String,
     pub iterable: Node<'a>,
@@ -1366,6 +1441,7 @@ impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct ObjectProperty<'a> {
     pub readonly: bool,
     pub optional: bool,
@@ -1399,6 +1475,7 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Identifier(pub String);
 
 impl From<String> for Identifier {
@@ -1426,6 +1503,7 @@ impl typescript::Pretty for Identifier {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct TypeParameter<'a> {
     pub name: String,
     pub constraint: Option<Node<'a>>,

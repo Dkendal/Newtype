@@ -1,6 +1,7 @@
 use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Expr<'a> {
     pub condition: Node<'a>,
     pub then_branch: Node<'a>,

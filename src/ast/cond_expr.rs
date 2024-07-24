@@ -1,6 +1,7 @@
 use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Expr<'a> {
     pub arms: Vec<Arm<'a>>,
     /// Unlike match and if expressions, the else arm is *not* optional

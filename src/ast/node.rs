@@ -159,9 +159,12 @@ impl<'a> Node<'a> {
 
                 (self.clone().replace(ast), ctx)
             }
-            Ast::Application(Application { name, args }) => {
+            Ast::Application(Application {
+                receiver: name,
+                args,
+            }) => {
                 let ast = Ast::Application(Application {
-                    name: name.clone(),
+                    receiver: name.clone(),
                     args: red_items(args, ctx.clone()),
                 });
 
@@ -336,15 +339,17 @@ impl<'a> Node<'a> {
 
                 result(ast, ctx)
             }
-            Ast::NamespaceAccess(access) => {
-                let lhs = red_pick_node(&access.lhs, ctx.clone());
-                let rhs = red_pick_node(&access.rhs, ctx.clone());
+            Ast::Path(Path { segments }) => {
+                let segments = segments
+                    .iter()
+                    .map(|node| red_pick_node(node, ctx.clone()))
+                    .collect_vec();
 
-                let ast = Ast::NamespaceAccess(NamespaceAccess { lhs, rhs });
+                let ast = Ast::Path(Path { segments });
 
                 result(ast, ctx)
             }
-            Ast::ObjectLiteral(object) => {
+            Ast::TypeLiteral(object) => {
                 let properties = object
                     .properties
                     .iter()
@@ -355,7 +360,7 @@ impl<'a> Node<'a> {
                     })
                     .collect_vec();
 
-                let ast = Ast::ObjectLiteral(ObjectLiteral { properties });
+                let ast = Ast::TypeLiteral(ObjectLiteral { properties });
 
                 result(ast, ctx)
             }
@@ -463,6 +468,14 @@ impl<'a> Node<'a> {
         let (tree, _) = self.traverse(
             bindings,
             &|node, ctx| match node.value.as_ref() {
+                _ => (node, ctx),
+            },
+            &|node, ctx| match node.value.as_ref() {
+                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
+                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
+                Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
+                Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
+                Ast::Path(path) => (path.simplify(node.span), ctx),
                 Ast::UnionType { types } => match types.as_slice() {
                     // Flatten nested union types (both)
                     [Node {
@@ -521,13 +534,6 @@ impl<'a> Node<'a> {
                         (node, ctx)
                     }
                 },
-                _ => (node, ctx),
-            },
-            &|node, ctx| match node.value.as_ref() {
-                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
-                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
-                Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
-                Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
                 _ => (node, ctx),
             },
         );

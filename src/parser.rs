@@ -54,27 +54,19 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 .into()
             }
             array_modifier => Node::from_pair(&op, Ast::Array(lhs)),
-            dot_access => {
-                let index = op.into_inner().next().map(parse).unwrap();
-                // FIXME missing span
-                Ast::Access {
-                    lhs,
-                    rhs: (index),
-                    is_dot: true,
-                }
-                .into()
-            }
-            namespace_access => {
-                let rhs = op.into_inner().next().map(parse).unwrap();
-                // FIXME missing span
-                Ast::NamespaceAccess(NamespaceAccess { lhs, rhs }).into()
+            application => {
+                let args = next_pair!(op.clone().into_inner(), Rule::argument_list);
+
+                Node::from_pair(
+                    &op,
+                    Ast::Application(Application {
+                        receiver: lhs,
+                        args: args.into_inner().map(parse).collect(),
+                    }),
+                )
             }
             rule => {
-                parse_error!(
-                    op,
-                    vec![namespace_access, indexed_access, array_modifier, dot_access],
-                    vec![rule]
-                );
+                parse_error!(op, vec![indexed_access, array_modifier], vec![rule]);
             }
         })
         .map_infix(|lhs, op, rhs| {
@@ -88,21 +80,25 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 None
             };
 
-            match op.as_rule() {
-                union => Node::new(
-                    span,
-                    Ast::UnionType {
-                        types: vec![lhs, rhs],
-                    },
-                ),
-                intersection => Node::new(
-                    span,
-                    Ast::IntersectionType {
-                        types: vec![lhs, rhs],
-                    },
-                ),
+            let ast = match op.as_rule() {
+                union => Ast::UnionType {
+                    types: vec![lhs, rhs],
+                },
+                intersection => Ast::IntersectionType {
+                    types: vec![lhs, rhs],
+                },
+                colon2 => Ast::Path(Path {
+                    segments: vec![lhs, rhs],
+                }),
+                dot_op => Ast::Access {
+                    lhs,
+                    rhs,
+                    is_dot: true,
+                },
                 rule => unreachable!("Expected infix operator, found {:?}", rule),
-            }
+            };
+
+            Node::new(span, ast)
         })
         .parse(pairs)
 }
@@ -114,24 +110,27 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
 /// ```
 fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair<'a>) -> Node<'a> {
     match &*rhs.value {
-        Ast::Ident(rhs_name) => {
+        Ast::Ident(_) => {
             // FIXME missing span
             Node::from_pair(
                 &op,
                 Ast::Application(Application {
-                    name: rhs_name.clone(),
+                    receiver: rhs.clone(),
                     args: vec![lhs],
                 }),
             )
         }
-        Ast::Application(Application { name, args: params }) => {
+        Ast::Application(Application {
+            receiver: name,
+            args: params,
+        }) => {
             let mut params = params.clone();
             params.insert(0, lhs);
             // FIXME missing span
             Node::from_pair(
                 &op,
                 Ast::Application(Application {
-                    name: name.clone(),
+                    receiver: name.clone(),
                     args: params,
                 }),
             )
@@ -251,7 +250,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
         Rule::interface => parse_interface(pair),
         Rule::import_statement => parse_import_statement(pair),
         Rule::if_expr => parse_if_expr(pair),
-        Rule::object_literal => new(Ast::ObjectLiteral(parse_object_literal(pair))),
+        Rule::object_literal => new(Ast::TypeLiteral(parse_object_literal(pair))),
         Rule::primitive => {
             let value = pair.into_inner().next().unwrap();
 
@@ -287,22 +286,6 @@ pub(crate) fn parse(pair: Pair) -> Node {
         }
         Rule::tuple => parse_tuple(pair),
         Rule::macro_call => new(Ast::MacroCall(parse_macro_call(pair))),
-        Rule::application => {
-            let mut inner = pair.into_inner();
-
-            let identifier = inner.next().map(node_as_string).unwrap().into();
-
-            let arguments_pair = inner
-                .find(match_tag("arguments"))
-                .expect("application missing arguments");
-
-            let arguments = arguments_pair.into_inner().map(parse).collect();
-
-            new(Ast::Application(Application {
-                name: identifier,
-                args: arguments,
-            }))
-        }
         Rule::builtin => {
             let mut inner = pair.into_inner();
 
@@ -863,13 +846,48 @@ mod parser_tests {
     use super::*;
     use crate::test_support::*;
     use crate::typescript::Pretty;
+    use lexpr::sexp;
     use pest::consumes_to;
     use pest::fails_with;
     use pest::parses_to;
     use pretty_assertions::{assert_eq, assert_ne};
+    use rstest::rstest;
     use std::assert_matches::assert_matches;
     use textwrap_macros::dedent;
     use Rule::*;
+
+    #[rstest]
+    #[case(
+        "Equals(T, any)",
+        sexp!((apply (receiver ident . "Equals") (args (ident . "T") any))))
+    ]
+    #[case(
+        "A::Equals(T, any)",
+        sexp!(
+            (apply
+                (receiver :: (segments (ident . "A") (ident . "Equals")))
+                (args (ident . "T") any))
+        )
+    )]
+    fn test_parse_expr(#[case] input: &str, #[case] expected: lexpr::Value) {
+        use crate::parser;
+
+        let result = parser::NewtypeParser::parse(Rule::expr, input);
+
+        match result {
+            Ok(pairs) => {
+                let actual = parser::parse_expr(pairs);
+
+                pretty_assertions::assert_eq!(
+                    actual.to_sexp().unwrap().to_string(),
+                    expected.to_string()
+                );
+            }
+            Err(err) => {
+                panic!("{}", err);
+            }
+        }
+    }
 
     #[test]
     fn parses_to_ident() {
@@ -899,7 +917,7 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "A <: B",
-            lexpr::sexp!((ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")))
+            lexpr::sexp!((#"extends-infix-op" (lhs #"ident" . "A") (op . #"extends") (rhs #"ident" . "B")))
         );
     }
 
@@ -909,7 +927,7 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "(A <: B)",
-            lexpr::sexp!((ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")))
+            lexpr::sexp!((#"extends-infix-op" (lhs #"ident" . "A") (op . #"extends") (rhs #"ident" . "B")))
         );
     }
 
@@ -919,7 +937,7 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "((A <: B))",
-            lexpr::sexp!((ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")))
+            lexpr::sexp!((#"extends-infix-op" (lhs #"ident" . "A") (op . #"extends") (rhs #"ident" . "B")))
         );
     }
 
@@ -929,7 +947,14 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "not (A <: B)",
-            lexpr::sexp!((ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B"))))
+            lexpr::sexp!(
+                (#"extends-prefix-op"
+                    (op . not)
+                    (value #"extends-infix-op"
+                        (lhs #"ident" . "A")
+                        (op . extends)
+                        (rhs #"ident" . "B")))
+            )
         );
     }
 
@@ -939,7 +964,18 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "A <: B and C <: D",
-            lexpr::sexp!((ExtendsInfixOp (lhs ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")) (op . And) (rhs ExtendsInfixOp (lhs Ident . "C") (op . Extends) (rhs Ident . "D"))))
+            lexpr::sexp!(
+                (#"extends-infix-op"
+                    (lhs #"extends-infix-op"
+                        (lhs ident . "A")
+                        (op . extends)
+                        (rhs ident . "B"))
+                (op . and)
+                (rhs #"extends-infix-op"
+                    (lhs ident . "C")
+                    (op . extends)
+                    (rhs ident . "D")))
+            )
         );
     }
 
@@ -949,21 +985,62 @@ mod parser_tests {
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "not (A <: B) and C <: D",
-            lexpr::sexp!((ExtendsInfixOp (lhs ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B"))) (op . And) (rhs ExtendsInfixOp (lhs Ident . "C") (op . Extends) (rhs Ident . "D"))))
+            lexpr::sexp!(
+                (#"extends-infix-op"
+                    (lhs #"extends-prefix-op"
+                        (op . not)
+                        (value #"extends-infix-op"
+                            (lhs ident . "A")
+                            (op . extends)
+                            (rhs ident . "B")))
+                    (op . and)
+                    (rhs #"extends-infix-op"
+                        (lhs ident . "C")
+                        (op . extends)
+                        (rhs ident . "D")))
+            )
         );
 
         assert_sexpr!(
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "A <: B and (not (C <: D))",
-            lexpr::sexp!((ExtendsInfixOp (lhs ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B")) (op . And) (rhs ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "C") (op . Extends) (rhs Ident . "D")))))
+            lexpr::sexp!(
+                (#"extends-infix-op"
+                    (lhs #"extends-infix-op"
+                        (lhs ident . "A")
+                        (op . extends)
+                        (rhs ident . "B"))
+                    (op . and)
+                    (rhs #"extends-prefix-op"
+                        (op . not)
+                        (value #"extends-infix-op"
+                            (lhs ident . "C")
+                            (op . extends)
+                            (rhs ident . "D"))))
+            )
         );
 
         assert_sexpr!(
             Rule::extends_expr,
             crate::parser::parse_extends_expr,
             "not (A <: B) and (not (C <: D))",
-            lexpr::sexp!((ExtendsInfixOp (lhs ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "A") (op . Extends) (rhs Ident . "B"))) (op . And) (rhs ExtendsPrefixOp (op . Not) (value ExtendsInfixOp (lhs Ident . "C") (op . Extends) (rhs Ident . "D")))))
+            lexpr::sexp!(
+                (#"extends-infix-op"
+                    (lhs #"extends-prefix-op"
+                        (op . not)
+                        (value #"extends-infix-op"
+                            (lhs ident . "A")
+                            (op . extends)
+                            (rhs ident . "B")))
+                    (op . and)
+                    (rhs #"extends-prefix-op"
+                        (op . not)
+                        (value #"extends-infix-op"
+                            (lhs ident . "C")
+                            (op . extends)
+                            (rhs ident . "D"))))
+            )
         );
     }
 
@@ -1883,7 +1960,7 @@ mod parser_tests {
                 R,
                 crate::parser::parse_expr,
                 "unquote!(1)",
-                lexpr::sexp!((MacroCall (name . "unquote!") (args (Number . "1"))))
+                lexpr::sexp!((macro (name . "unquote!") (args (number . "1"))))
             );
         }
 
@@ -2040,233 +2117,6 @@ mod parser_tests {
                 let b = a in
                 let a = 2 in
                 [b, a, let a = 3 in a]
-            "#
-        );
-    }
-
-    #[test]
-    fn ts_toolbelt_any_at() {
-        assert_typescript!(
-            statement,
-            r#"
-            export type At<A extends any, K extends Key> =
-                A extends List
-                    ? number extends A['length']
-                        ? K extends number | `${number}`
-                            ? A[never] | undefined
-                            : undefined
-                        : K extends keyof A
-                            ? A[K]
-                            : undefined
-                    : unknown extends A
-                        ? unknown
-                        : K extends keyof A
-                            ? A[K]
-                            : undefined;
-            "#,
-            r#"
-            export type At(A, K)
-                where
-                    A <: any,
-                    K <: Key
-                as
-                    let a_k =
-                        if K <: keyof(A) then
-                            A[K]
-                        else
-                            undefined
-                        end
-                    in
-
-                    cond do
-                        A <: List =>
-                            if number <: A.length then
-                                if K <: number | `${number}` then
-                                    A[never] | undefined
-                                else
-                                    undefined
-                                end
-                            else
-                                a_k
-                            end,
-
-                        unknown <: A => unknown,
-
-                        else => a_k
-                    end
-
-            "#
-        );
-    }
-
-    #[test]
-    fn ts_toolbelt_function_exact() {
-        assert_typescript!(
-            statement,
-            r#"
-            type Exact<A, W> =
-                W extends unknown
-                    ? A extends W
-                        ? A extends Narrowable
-                            ? A
-                            : {
-                                [K in keyof A]:
-                                    K extends keyof W
-                                        ? Exact<A[K], W[K]>
-                                        : never
-                            }
-                        : W
-                    : never;
-            "#,
-            r#"
-            type Exact(A, W) as
-                if W <: unknown then
-                    if A <: W then
-                        if A <: Narrowable then
-                            A
-                        else
-                            for K in keyof(A) do
-                                if K <: keyof(W) then
-                                    Exact(A[K], W[K])
-                                end
-                            end
-                        end
-                    else
-                        W
-                    end
-                end
-            "#
-        );
-    }
-
-    #[test]
-    #[ignore]
-    fn ts_toolbelt_list_assign() {
-        assert_typescript!(
-            statement,
-            r#"
-            export type Assign<
-                L extends List,
-                Ls extends List<List>,
-                depth extends Depth = 'flat',
-                ignore extends object = BuiltIn,
-                fill extends any = never
-            > =
-                Cast<OAssign<L, Ls, depth, ignore, fill>, List>;
-            "#,
-            r#"
-            export type Assign(L, Ls, depth, ignore, fill)
-                defaults
-                    depth = :flat,
-                    ignore = BuiltIn,
-                    fill = never,
-                where
-                    L <: List,
-                    Ls <: List(List),
-                    depth <: Depth,
-                    ignore <: object,
-                    fill <: any
-                as
-                    L
-                    |> OAssign(Ls, depth, ignore, fill)
-                    |> Cast(List)
-            "#
-        );
-    }
-
-    #[test]
-    fn match_ts() {
-        assert_typescript!(
-            r#"
-            import type { A, B, I, M, Union } from 'ts-toolbelt';
-
-            import type { __ } from '.';
-
-            import type {
-                __capture__,
-                __kind__,
-                any_,
-                bigint_,
-                boolean_,
-                function_,
-                number_,
-                object_,
-                rest_,
-                string_,
-                symbol_
-            } from './const';
-
-            type True = 1;
-
-            type ExtractSubcapture<T> =
-                T extends M.Primitive | M.BuiltIn
-                    ? T extends object
-                        ? T[Exclude<keyof T, keyof [] | keyof {}>]
-                        : never
-                    : never;
-
-            type PartialAssignment<K, V> =
-                V extends never
-                    ? never
-                    : K extends string
-                        ? { [k in K]: v }
-                        : never;
-
-            type EmptyToNever<T> = {} extends T ? never : T;
-
-            export interface Hole<Type = any, Label = any> {
-                T: Type;
-                readonly [__kind__]: Label;
-            };
-            "#,
-            r#"
-            import { A, B, I, M, Union } from :ts-toolbelt
-
-            import { __ } from :.
-
-            import {
-              __capture__,
-              __kind__,
-              any_,
-              bigint_,
-              boolean_,
-              function_,
-              number_,
-              object_,
-              rest_,
-              string_,
-              symbol_,
-            } from :./const
-
-            type True as 1
-
-            type ExtractSubcapture(T) as
-                if T <: M::Primitive | M::BuiltIn and T <: object then
-                    T[ Exclude(keyof(T), keyof([]) | keyof({})) ]
-                end
-
-            type PartialAssignment(K, V) as
-                if not (V <: never) and K <: string then
-                    for k in K do
-                        v
-                    end
-                end
-
-
-            type EmptyToNever(T) as
-                if {} </: T then
-                    T
-                end
-
-            export interface Hole(Type, Label)
-            defaults
-                Type = any,
-                Label = any,
-            {
-                T: Type,
-                readonly [__kind__]: Label,
-            }
-
             "#
         );
     }

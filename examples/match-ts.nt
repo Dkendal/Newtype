@@ -64,3 +64,39 @@ export type HoleInnerType(T) as
   else
     T
   end
+
+export interface Capture(Name, Pattern)
+defaults
+  Name = any,
+  Pattern = any,
+where
+  Name <: string,
+  Pattern <: any,
+{
+  readonly [__capture__]: Name,
+  readonly pattern: Pattern,
+}
+
+type CapturePattern(T) as
+  if T <: Capture(any, ?Pattern) then
+    Pattern
+  else
+    T
+  end
+
+type RecursiveExpandCapture(T) as
+  if A::Equals(T, any) <: True then
+    T
+  else
+    if T <: Hole | Capture then
+      ExpandCapture(T)
+    else
+      if T <: Record(string, any) then
+        for K in keyof(T) do
+          ExpandCapture(T[K])
+        end
+      else
+        never
+      end
+    end
+  end

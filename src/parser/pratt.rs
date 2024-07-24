@@ -12,9 +12,11 @@ lazy_static::lazy_static! {
             .op(Op::infix(union, Left))
             .op(Op::infix(intersection, Left))
             .op(Op::infix(pipe, Left))
+            .op(Op::postfix(application))
             .op(Op::postfix(array_modifier))
-            .op(Op::postfix(namespace_access) | Op::postfix(dot_access) | Op::postfix(indexed_access))
             .op(Op::prefix(infer))
+            .op(Op::infix(colon2, Left) | Op::infix(dot_op, Left))
+            .op(Op::postfix(indexed_access))
     };
 
     pub(crate) static ref EXTENDS_PARSER: PrattParser<Rule> = {

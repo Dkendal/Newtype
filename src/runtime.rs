@@ -101,7 +101,7 @@ mod tests {
             fn equal_values() {
                 assert_eq!(
                     to_value(runtime::builtin::assert_equal(ast!("1"), ast!("1"))).unwrap(),
-                    lexpr::sexp!(NoOp)
+                    lexpr::sexp!(#"no-op")
                 );
             }
 
@@ -109,7 +109,7 @@ mod tests {
             fn equal_values_with_whitespace() {
                 assert_eq!(
                     to_value(runtime::builtin::assert_equal(ast!(" 1 "), ast!("1"))).unwrap(),
-                    lexpr::sexp!(NoOp)
+                    lexpr::sexp!(#"no-op")
                 );
             }
 

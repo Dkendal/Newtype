@@ -1,5 +1,7 @@
 program = { SOI ~ NEWLINE* ~ statement* ~ NEWLINE* ~ EOI }
 
+test_expr = _{ SOI ~ expr ~ EOI }
+
 statement = {
     type_alias
   | interface
@@ -92,24 +94,23 @@ expr_primary = _{
   | let_expr
   | builtin
   | macro_call
-  | application
   | term
   | "(" ~ expr ~ ")"
 }
 
 expr_prefix = _{ infer }
 
-expr_infix = _{ union | intersection | pipe }
+expr_infix = _{ union | intersection | pipe | dot_op | colon2 }
 
-expr_postfix = _{ namespace_access | indexed_access | dot_access | array_modifier }
+expr_postfix = _{ indexed_access | array_modifier | application }
 
-namespace_access = { "::" ~ ident }
+colon2 = { "::" }
+
+dot_op = { "." }
 
 array_modifier = @{ "[]" }
 
 indexed_access = { "[" ~ expr ~ "]" }
-
-dot_access = { "." ~ ident }
 
 builtin = { #name = builtin_keyword ~ "(" ~ #argument = expr ~ ")" }
 
@@ -119,7 +120,7 @@ keyof = @{ "keyof" }
 
 builtin_typeof = @{ "typeof" }
 
-application = { ident ~ "(" ~ #arguments = argument_list ~ ")" }
+application = { "(" ~ #arguments = argument_list ~ ")" }
 
 macro_call = { macro_ident ~ "(" ~ #arguments = argument_list ~ ")" }
 

@@ -6,6 +6,7 @@ use super::*;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Expr<'a> {
     pub bindings: HashMap<Identifier, Node<'a>>,
     pub body: Node<'a>,
