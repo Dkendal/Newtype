@@ -88,7 +88,7 @@ expr1 = _{ expr_prefix* ~ expr_primary ~ expr_postfix* }
 
 expr_primary = _{
     if_expr
-  | for_expr
+  | map_expr
   | match_expr
   | cond_expr
   | let_expr
@@ -124,7 +124,7 @@ application = { "(" ~ #arguments = argument_list ~ ")" }
 
 macro_call = { macro_ident ~ "(" ~ #arguments = argument_list ~ ")" }
 
-argument_list = { expr ~ ("," ~ expr)* }
+argument_list = { (expr ~ ("," ~ expr)* ~ ","?)? }
 
 infer = @{ "?" }
 
@@ -194,12 +194,12 @@ let_binding = {
     ident ~ "=" ~ expr
 }
 
-for_expr = {
-    "for" ~ property_key_prefix ~ index_property_key ~ "do" ~ #body = expr ~ "end"
+map_expr = {
+    "map" ~ property_key_prefix ~ index_property_key ~ "do" ~ #body = expr ~ "end"
 }
 
 if_expr = {
-    "if" ~ #condition = extends_expr ~ "then" ~ #then = expr ~ (else_keyword ~ #else = expr)? ~ "end"
+    "if" ~ #condition = extends_expr ~ "then" ~ #then = expr ~ ("else" ~ #else = expr)? ~ "end"
 }
 
 match_expr = {
@@ -219,7 +219,7 @@ cond_arm = {
 }
 
 else_arm = {
-    else_keyword ~ "=>" ~ #body = expr
+    "else" ~ "=>" ~ #body = expr
 }
 
 extends_expr = {
@@ -308,8 +308,6 @@ export = @{ "export" }
 
 optional_modifier = @{ "?" }
 
-else_keyword = @{ "else" }
-
 string = { atom_string | double_quote_string | single_quote_string }
 
 atom_string = @{ ":" ~ (!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_" | "-" | "/" | "\\" | "."))+ }
@@ -334,6 +332,7 @@ keyword = _{
   | "extends"
   | "false"
   | "for"
+  | "map"
   | "function"
   | "if"
   | "import"
@@ -351,7 +350,7 @@ keyword = _{
   | "type"
   | "typeof"
   | "unittest"
-  | else_keyword
+  | "else"
   | "end"
   | primitive
   | bottom_type

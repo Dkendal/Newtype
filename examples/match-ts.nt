@@ -28,7 +28,7 @@ type PartialAssignment(K, V) as
   match V do
     never => never,
     string =>
-        for k in K do
+        map k in K do
             v
         end,
   end
@@ -92,7 +92,7 @@ type RecursiveExpandCapture(T) as
       ExpandCapture(T)
     else
       if T <: Record(string, any) then
-        for K in keyof(T) do
+        map K in keyof(T) do
           ExpandCapture(T[K])
         end
       else
@@ -100,3 +100,19 @@ type RecursiveExpandCapture(T) as
       end
     end
   end
+
+type RecursiveExpandCapture(T) as
+  cond do
+    A::Equals(T, any) <: True => T,
+    T <: Hole | Capture => ExpandCapture(T),
+    T <: Record(string, any) =>
+        map K in keyof(T) do
+          ExpandCapture(T[K])
+        end
+  end
+
+export type ExpandCapture(T) as
+  T
+  |> HoleInnerType()
+  |> CapturePattern()
+  |> RecursiveExpandCapture()

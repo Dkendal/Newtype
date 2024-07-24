@@ -365,7 +365,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
 
             new(Ast::CondExpr(cond_expr::Expr { arms, else_arm }))
         }
-        Rule::for_expr => {
+        Rule::map_expr => {
             let mut inner = pair.into_inner();
 
             let ipk = next_pair!(inner, Rule::index_property_key);
@@ -1595,12 +1595,12 @@ mod parser_tests {
     #[test]
     fn for_in() {
         assert_typescript!(
-            for_expr,
+            map_expr,
             r#"
             { [k in t]: 1 }
             "#,
             r#"
-            for k in t do 1 end
+            map k in t do 1 end
             "#
         );
     }

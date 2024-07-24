@@ -20,7 +20,7 @@ type Exact(A, W) as
             if A <: Narrowable then
                 A
             else
-                for K in keyof(A) do
+                map K in keyof(A) do
                     if K <: keyof(W) then
                         Exact(A[K], W[K])
                     end
@@ -56,8 +56,8 @@ export type At(A, K)
                     a_k
                 end,
 
-                        unknown <: A => unknown,
+          unknown <: A => unknown,
 
-                        else => a_k
-                    end
+          else => a_k
+      end
 
