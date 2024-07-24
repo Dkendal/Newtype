@@ -2,17 +2,17 @@ use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Expr<'a> {
+pub struct MatchExpr<'a> {
     pub value: Node<'a>,
     pub arms: Vec<Arm<'a>>,
     pub else_arm: Node<'a>,
 }
 
-impl<'a> Expr<'a> {
+impl<'a> MatchExpr<'a> {
     pub(crate) fn simplify(&self) -> Node<'a> {
         // Convert match arms to a series of extends expressions.
         // Allows for a single wildcard pattern ("_") to be used as the default case.
-        let Expr {
+        let MatchExpr {
             value,
             arms,
             else_arm,

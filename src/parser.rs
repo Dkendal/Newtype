@@ -329,7 +329,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
                 .map(parse)
                 .unwrap_or_else(|| Ast::Never.into());
 
-            new(Ast::MatchExpr(match_expr::Expr {
+            new(Ast::MatchExpr(match_expr::MatchExpr {
                 value,
                 arms,
                 else_arm,
@@ -418,7 +418,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
                 .map(parse)
                 .unwrap();
 
-            new(Ast::LetExpr(let_expr::Expr { bindings, body }))
+            new(Ast::LetExpr(let_expr::LetExpr { bindings, body }))
         }
 
         Rule::EOI => {
@@ -718,7 +718,7 @@ fn parse_if_expr(pair: Pair) -> Node {
         // Other conditions are desugared later in the simplification step
         Ast::ExtendsInfixOp { .. } | Ast::ExtendsPrefixOp { .. } => Node::from_pair(
             &pair,
-            Ast::IfExpr(if_expr::Expr {
+            Ast::IfExpr(if_expr::IfExpr {
                 condition,
                 then_branch,
                 else_branch: Some(else_branch),

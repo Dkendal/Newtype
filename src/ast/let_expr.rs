@@ -7,12 +7,12 @@ use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Expr<'a> {
+pub struct LetExpr<'a> {
     pub bindings: HashMap<Identifier, Node<'a>>,
     pub body: Node<'a>,
 }
 
-impl<'a> Expr<'a> {
+impl<'a> LetExpr<'a> {
     /// Replace all identifiers in the body of the let expression with their corresponding
     /// values
     pub(crate) fn simplify(&self) -> super::node::Node<'a> {

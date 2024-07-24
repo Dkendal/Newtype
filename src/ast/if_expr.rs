@@ -2,13 +2,13 @@ use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Expr<'a> {
+pub struct IfExpr<'a> {
     pub condition: Node<'a>,
     pub then_branch: Node<'a>,
     pub else_branch: Option<Node<'a>>,
 }
 
-impl<'a> Expr<'a> {
+impl<'a> IfExpr<'a> {
     pub(crate) fn simplify(&self) -> Node<'a> {
         let else_branch = self
             .else_branch

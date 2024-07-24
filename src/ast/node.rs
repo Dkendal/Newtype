@@ -250,7 +250,7 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::IfExpr(if_expr::Expr {
+            Ast::IfExpr(if_expr::IfExpr {
                 condition,
                 then_branch,
                 else_branch,
@@ -259,7 +259,7 @@ impl<'a> Node<'a> {
                 let (then_branch, _) = red(then_branch, ctx.clone());
                 let else_branch = else_branch.as_ref().map(fn_red_pick_node(ctx.clone()));
 
-                let ast = Ast::IfExpr(if_expr::Expr {
+                let ast = Ast::IfExpr(if_expr::IfExpr {
                     condition,
                     then_branch,
                     else_branch,
@@ -282,7 +282,7 @@ impl<'a> Node<'a> {
             Ast::LetExpr(let_expr) => {
                 let (body, _) = red(&let_expr.body, ctx.clone());
 
-                let ast = Ast::LetExpr(let_expr::Expr {
+                let ast = Ast::LetExpr(let_expr::LetExpr {
                     bindings: let_expr.bindings.clone(),
                     body,
                 });
@@ -312,7 +312,7 @@ impl<'a> Node<'a> {
 
                 result(ast, ctx)
             }
-            Ast::MatchExpr(match_expr::Expr {
+            Ast::MatchExpr(match_expr::MatchExpr {
                 value,
                 arms,
                 else_arm,
@@ -331,7 +331,7 @@ impl<'a> Node<'a> {
 
                 let else_arm = red_pick_node(else_arm, ctx.clone());
 
-                let ast = Ast::MatchExpr(match_expr::Expr {
+                let ast = Ast::MatchExpr(match_expr::MatchExpr {
                     value,
                     arms,
                     else_arm,

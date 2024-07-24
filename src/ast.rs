@@ -307,15 +307,15 @@ pub enum Ast<'a> {
     },
     Ident(Identifier),
     #[serde(rename(serialize = "if"))]
-    IfExpr(if_expr::Expr<'a>),
+    IfExpr(if_expr::IfExpr<'a>),
     #[serde(rename(serialize = "import"))]
     ImportStatement {
         import_clause: ImportClause,
         module: String,
     },
-    LetExpr(let_expr::Expr<'a>),
+    LetExpr(let_expr::LetExpr<'a>),
     MappedType(MappedType<'a>),
-    MatchExpr(match_expr::Expr<'a>),
+    MatchExpr(match_expr::MatchExpr<'a>),
     #[serde(rename(serialize = "::"))]
     Path(Path<'a>),
     Never,
@@ -340,14 +340,14 @@ pub enum Ast<'a> {
     Interface(Interface<'a>),
 }
 
-impl<'a> From<if_expr::Expr<'a>> for Ast<'a> {
-    fn from(v: if_expr::Expr<'a>) -> Self {
+impl<'a> From<if_expr::IfExpr<'a>> for Ast<'a> {
+    fn from(v: if_expr::IfExpr<'a>) -> Self {
         Self::IfExpr(v)
     }
 }
 
-impl<'a> From<match_expr::Expr<'a>> for Ast<'a> {
-    fn from(v: match_expr::Expr<'a>) -> Self {
+impl<'a> From<match_expr::MatchExpr<'a>> for Ast<'a> {
+    fn from(v: match_expr::MatchExpr<'a>) -> Self {
         Self::MatchExpr(v)
     }
 }
@@ -607,7 +607,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }
             Ast::NoOp => unimplemented!(),
             node @ (Ast::ExtendsPrefixOp { .. }
-            | Ast::MatchExpr(match_expr::Expr { .. })
+            | Ast::MatchExpr(match_expr::MatchExpr { .. })
             | Ast::CondExpr(cond_expr::Expr { .. })
             | Ast::ExtendsInfixOp { .. }) => {
                 unreachable!(
