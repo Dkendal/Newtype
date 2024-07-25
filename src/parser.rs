@@ -331,7 +331,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
         Rule::template_string => new(Ast::TemplateString(node_as_string(pair))),
         Rule::ident => new(Ast::Ident(pair.as_str().into())),
         Rule::never => new(Ast::NeverKeyword(span)),
-        Rule::any => new(Ast::Any),
+        Rule::any => new(Ast::AnyKeyword(span)),
         Rule::unknown => new(Ast::UnknownKeyword(span)),
         Rule::boolean => {
             let value = pair.into_inner().next().unwrap();

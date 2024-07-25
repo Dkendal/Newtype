@@ -416,7 +416,6 @@ pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
     Access(Access<'a>),
     BooleanLiteral(bool),
-    Any,
     #[serde(rename(serialize = "macro"))]
     MacroCall(MacroCall<'a>),
     #[serde(rename(serialize = "apply"))]
@@ -437,12 +436,13 @@ pub enum Ast<'a> {
     IfExpr(IfExpr<'a>),
     #[serde(rename(serialize = "import"))]
     ImportStatement(ImportStatement<'a>),
+    #[serde(rename(serialize = "let"))]
     LetExpr(LetExpr<'a>),
     MappedType(MappedType<'a>),
+    #[serde(rename(serialize = "match"))]
     MatchExpr(MatchExpr<'a>),
     #[serde(rename(serialize = "::"))]
     Path(Path<'a>),
-    NoOp,
     Number(String),
     TypeLiteral(ObjectLiteral<'a>),
     Primitive(PrimitiveType),
@@ -457,9 +457,12 @@ pub enum Ast<'a> {
     #[serde(rename(serialize = "never"))]
     NeverKeyword(#[serde(skip)] Span<'a>),
     #[serde(rename(serialize = "unknown"))]
-    UnknownKeyword(#[serde(skip)] Span<'a>),
     Interface(Interface<'a>),
     FunctionType(FunctionType<'a>),
+    UnknownKeyword(#[serde(skip)] Span<'a>),
+    #[serde(rename(serialize = "any"))]
+    AnyKeyword(#[serde(skip)] Span<'a>),
+    NoOp,
 }
 
 impl<'a> From<if_expr::IfExpr<'a>> for Ast<'a> {
@@ -582,7 +585,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 doc.append(D::text("[]"))
             }
             Ast::NeverKeyword(_) => D::text("never"),
-            Ast::Any => D::text("any"),
+            Ast::AnyKeyword(_) => D::text("any"),
             Ast::UnknownKeyword(_) => D::text("unknown"),
             Ast::BooleanLiteral(value) => D::text(value.to_string()),
             Ast::Infer(value) => D::text("infer").append(D::space()).append(value.to_ts()),
@@ -769,7 +772,7 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_top_type(&self) -> bool {
-        matches!(self, Ast::Any | Ast::UnknownKeyword(_))
+        matches!(self, Ast::AnyKeyword(_) | Ast::UnknownKeyword(_))
     }
 
     pub fn is_empty_object(&self) -> bool {
@@ -915,7 +918,7 @@ impl<'a> Ast<'a> {
                 | Ast::BooleanLiteral(_)
                 | Ast::UnionType { .. }
                 | Ast::Access { .. }
-                | Ast::Any
+                | Ast::AnyKeyword(_)
                 | Ast::ApplyGeneric(_)
                 | Ast::Array(_)
                 | Ast::FunctionType(_)
@@ -993,7 +996,7 @@ impl<'a> Ast<'a> {
 
             (_, rhs) if rhs.is_top_type() => T::True,
 
-            (A::Any, _) => T::Both,
+            (A::AnyKeyword(_), _) => T::Both,
 
             (A::UnknownKeyword(_), _) => T::False,
 
