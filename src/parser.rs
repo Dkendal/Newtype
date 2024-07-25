@@ -12,6 +12,7 @@ use crate::{
 };
 
 use cond_expr::CondExpr;
+use if_expr::IfExpr;
 use itertools::Itertools;
 
 use let_expr::LetExpr;
@@ -20,7 +21,7 @@ use node::Node;
 use pest::{
     error::{Error, ErrorVariant},
     pratt_parser::PrattParser,
-    Parser,
+    Parser, Span,
 };
 
 use pratt::{EXPR_PARSER, EXTENDS_PARSER};
@@ -58,11 +59,19 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
             }
             array_modifier => Node::from_pair(&op, Ast::Array(lhs)),
             application => {
+                let span = Span::new(
+                    op.as_span().get_input(),
+                    lhs.as_span().start(),
+                    op.as_span().end(),
+                )
+                .unwrap();
+
                 let args = next_pair!(op.clone().into_inner(), Rule::argument_list);
 
                 Node::from_pair(
                     &op,
                     Ast::ApplyGeneric(ApplyGeneric {
+                        span,
                         receiver: lhs,
                         args: args.into_inner().map(parse).collect(),
                     }),
@@ -91,10 +100,17 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                     types: vec![lhs, rhs],
                 },
                 colon2 => {
+                    let span = Span::new(
+                        op.as_span().get_input(),
+                        lhs.as_span().start(),
+                        rhs.as_span().end(),
+                    )
+                    .unwrap();
+
                     let mut acc = vec![];
 
                     match lhs.value.as_ref() {
-                        Ast::Path(Path { segments }) => acc.extend(segments.to_owned()),
+                        Ast::Path(Path { segments, .. }) => acc.extend(segments.to_owned()),
                         Ast::Ident(_) => acc.push(lhs),
                         _ => parse_error!(
                             lhs,
@@ -106,7 +122,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                     };
 
                     match rhs.value.as_ref() {
-                        Ast::Path(Path { segments }) => acc.extend(segments.to_owned()),
+                        Ast::Path(Path { segments, .. }) => acc.extend(segments.to_owned()),
                         Ast::Ident(_) => acc.push(rhs),
                         _ => parse_error!(
                             rhs,
@@ -117,7 +133,10 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                         ),
                     };
 
-                    Ast::Path(Path { segments: acc })
+                    Ast::Path(Path {
+                        span,
+                        segments: acc,
+                    })
                 }
                 dot_op => Ast::Access {
                     lhs,
@@ -138,12 +157,20 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
 /// # B(A)
 /// ```
 fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair<'a>) -> Node<'a> {
+    let span = Span::new(
+        op.as_span().get_input(),
+        lhs.as_span().start(),
+        rhs.as_span().end(),
+    )
+    .unwrap();
+
     match &*rhs.value {
         Ast::Ident(_) => {
             // FIXME missing span
             Node::from_pair(
                 &op,
                 Ast::ApplyGeneric(ApplyGeneric {
+                    span,
                     receiver: rhs.clone(),
                     args: vec![lhs],
                 }),
@@ -152,6 +179,7 @@ fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair
         Ast::ApplyGeneric(ApplyGeneric {
             receiver: name,
             args: params,
+            ..
         }) => {
             let mut params = params.clone();
             params.insert(0, lhs);
@@ -159,6 +187,7 @@ fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair
             Node::from_pair(
                 &op,
                 Ast::ApplyGeneric(ApplyGeneric {
+                    span,
                     receiver: name.clone(),
                     args: params,
                 }),
@@ -356,6 +385,10 @@ fn parse_builtin(pair: Pair) -> Ast {
 }
 
 fn parse_match_expr(pair: Pair) -> MatchExpr {
+    use match_expr::Arm;
+
+    let span = pair.as_span();
+
     let mut inner = pair.into_inner();
 
     let value = inner.find(match_tag("value")).map(parse).unwrap();
@@ -363,11 +396,17 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
     let arms: Vec<match_expr::Arm> = inner
         .clone()
         .filter(match_tag("arm"))
-        .map(|arm| {
-            let mut inner = arm.into_inner();
+        .map(|pair| {
+            let span = pair.as_span();
+            let mut inner = pair.into_inner();
             let pattern = inner.find(match_tag("pattern")).map(parse).unwrap();
             let body = inner.find(match_tag("body")).map(parse).unwrap();
-            match_expr::Arm { pattern, body }
+
+            Arm {
+                span,
+                pattern,
+                body,
+            }
         })
         .collect();
 
@@ -377,7 +416,8 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
         .map(parse)
         .unwrap_or_else(|| Ast::Never.into());
 
-    match_expr::MatchExpr {
+    MatchExpr {
+        span,
         value,
         arms,
         else_arm,
@@ -385,6 +425,7 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
 }
 
 fn parse_cond_expr(pair: Pair) -> CondExpr {
+    let span = pair.as_span();
     let inner = pair.into_inner();
 
     let else_arm = inner
@@ -398,6 +439,8 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
         .clone()
         .filter(match_tag("arm"))
         .map(|arm| {
+            use cond_expr::Arm;
+            let span = arm.as_span();
             let mut inner = arm.into_inner();
 
             let condition = inner
@@ -408,14 +451,24 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
 
             let body = inner.find(match_tag("body")).map(parse).unwrap();
 
-            cond_expr::Arm { condition, body }
+            Arm {
+                span,
+                condition,
+                body,
+            }
         })
         .collect();
 
-    CondExpr { arms, else_arm }
+    CondExpr {
+        span,
+        arms,
+        else_arm,
+    }
 }
 
 fn parse_map_expr(pair: Pair) -> MappedType {
+    let span = pair.as_span();
+
     let mut inner = pair.into_inner();
 
     let ipk = next_pair!(inner, Rule::index_property_key);
@@ -434,6 +487,7 @@ fn parse_map_expr(pair: Pair) -> MappedType {
     let iterable = inner.find(match_tag("iterable")).map(parse).unwrap();
 
     MappedType {
+        span,
         index,
         iterable,
         body,
@@ -444,6 +498,8 @@ fn parse_map_expr(pair: Pair) -> MappedType {
 }
 
 fn parse_let_expr(pair: Pair) -> LetExpr {
+    let span = pair.as_span();
+
     let bindings: HashMap<_, _> = pair
         .clone()
         .into_inner()
@@ -469,10 +525,16 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
         .map(parse)
         .unwrap();
 
-    let_expr::LetExpr { bindings, body }
+    LetExpr {
+        span,
+        bindings,
+        body,
+    }
 }
 
 fn parse_function_type(pair: Pair) -> FunctionType {
+    let span = pair.as_span();
+
     let mut inner = pair.into_inner();
 
     let next = next_pair!(inner, Rule::parameters);
@@ -545,28 +607,31 @@ fn parse_function_type(pair: Pair) -> FunctionType {
     let return_type = parse(return_type);
 
     FunctionType {
+        span,
         params,
         return_type,
     }
 }
 
 fn parse_macro_call(pair: Pair) -> MacroCall {
+    let span = pair.as_span();
     let mut inner = pair.into_inner();
     let name = next_pair!(inner, Rule::macro_ident);
     let args = next_pair!(inner, Rule::argument_list);
     let name = name.as_str().to_string();
     let inner = args.into_inner();
     let args = inner.map(parse).collect_vec();
-    MacroCall { name, args }
+    MacroCall { span, name, args }
 }
 
 fn parse_unittest(pair: Pair) -> UnitTest {
+    let span = pair.as_span();
     let mut inner = pair.into_inner();
     let name = next_pair!(inner, Rule::string);
     let name = name.as_str().to_string();
     let body = inner.map(parse).collect_vec();
 
-    UnitTest { name, body }
+    UnitTest { span, name, body }
 }
 
 fn parse_type_alias(pair: Pair) -> Ast {
@@ -614,6 +679,7 @@ fn parse_program(pair: Pair) -> Ast {
 }
 
 fn parse_interface(pair: Pair) -> Node {
+    let span = pair.as_span();
     let inner = pair.clone().into_inner();
 
     let export = inner
@@ -641,6 +707,7 @@ fn parse_interface(pair: Pair) -> Node {
     Node::from_pair(
         &pair,
         Ast::Interface(Interface {
+            span,
             export,
             extends,
             name,
@@ -659,12 +726,22 @@ fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypePara
         .find(match_tag("parameters"))
         .map(|p| -> HashMap<&str, TypeParameter> {
             p.into_inner()
-                .map(|param| {
-                    ordered_params.push(param.as_str());
+                .map(|pair| {
+                    let span = pair.as_span();
+                    let str = pair.as_str();
+                    let name = str.to_string();
+
+                    ordered_params.push(str);
 
                     (
-                        param.as_str(),
-                        TypeParameter::new(param.as_str().to_string(), None, None, false),
+                        str,
+                        TypeParameter {
+                            span,
+                            name,
+                            constraint: None,
+                            default: None,
+                            rest: false,
+                        },
                     )
                 })
                 .collect()
@@ -785,12 +862,14 @@ fn parse_import_statement(pair: Pair) -> Node {
                 .into_inner()
                 .find_tagged("import_specifier")
                 .map(|pair| {
+                    let span = pair.as_span();
                     let mut inner = pair.into_inner();
                     let name = inner.next().unwrap();
                     let name = pair_as_identifier(name);
                     let alias = inner.next().map(pair_as_identifier);
 
                     ImportSpecifier {
+                        span,
                         module_export_name: name,
                         alias,
                     }
@@ -837,7 +916,8 @@ fn parse_if_expr(pair: Pair) -> Node {
         // Other conditions are desugared later in the simplification step
         Ast::ExtendsInfixOp { .. } | Ast::ExtendsPrefixOp { .. } => Node::from_pair(
             &pair,
-            Ast::IfExpr(if_expr::IfExpr {
+            Ast::IfExpr(IfExpr {
+                span: pair.as_span(),
                 condition,
                 then_branch,
                 else_branch: Some(else_branch),
@@ -850,14 +930,23 @@ fn parse_if_expr(pair: Pair) -> Node {
 fn parse_tuple(pair: Pair) -> Node {
     let items = pair.clone().into_inner().map(parse).collect();
 
-    Node::from_pair(&pair, Ast::Tuple(Tuple { items }))
+    Node::from_pair(
+        &pair,
+        Ast::Tuple(Tuple {
+            span: pair.as_span(),
+            items,
+        }),
+    )
 }
 
 fn parse_object_literal(pair: Pair) -> ObjectLiteral {
+    let span = pair.as_span();
     let object_property_rules = pair.clone().into_inner();
     let mut properties = Vec::new();
 
     for prop_pair in object_property_rules {
+        let span = prop_pair.as_span();
+
         match prop_pair.as_rule() {
             Rule::object_property => {
                 let mut inner = prop_pair.into_inner();
@@ -879,6 +968,7 @@ fn parse_object_literal(pair: Pair) -> ObjectLiteral {
                 let key = parse_property_key_inner(key);
 
                 properties.push(ObjectProperty {
+                    span,
                     readonly,
                     optional,
                     key,
@@ -892,7 +982,7 @@ fn parse_object_literal(pair: Pair) -> ObjectLiteral {
         }
     }
 
-    ObjectLiteral { properties }
+    ObjectLiteral { properties, span }
 }
 
 fn parse_property_key_inner(key: Pair) -> ObjectPropertyKey {
@@ -909,6 +999,7 @@ fn parse_property_key_inner(key: Pair) -> ObjectPropertyKey {
 }
 
 fn parse_index_property_key(key: Pair) -> ObjectPropertyKey {
+    let span = key.as_span();
     let inner = key.into_inner();
 
     let [index, iterable, remap_clause] = take_tags!(inner, ["index", "iterable", "remap_clause"]);
@@ -918,6 +1009,7 @@ fn parse_index_property_key(key: Pair) -> ObjectPropertyKey {
     let remapped_as = remap_clause.map(parse);
 
     ObjectPropertyKey::Index(PropertyKeyIndex {
+        span,
         key,
         iterable,
         remapped_as,

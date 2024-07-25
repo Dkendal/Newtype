@@ -3,6 +3,8 @@ use super::*;
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MatchExpr<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub value: Node<'a>,
     pub arms: Vec<Arm<'a>>,
     pub else_arm: Node<'a>,
@@ -16,22 +18,30 @@ impl<'a> MatchExpr<'a> {
             value,
             arms,
             else_arm,
+            ..
         } = self;
 
         arms.iter()
             .rev()
             .fold(else_arm.clone(), |acc: Node, arm: &Arm| -> Node {
-                let Arm { pattern, body } = arm;
+                let Arm {
+                    span,
+                    pattern,
+                    body,
+                } = arm;
+
+                let span = span.clone();
 
                 // FIXME missing span
                 Node {
-                    span: None,
-                    value: Box::new(Ast::from(ExtendsExpr::new(
-                        value.clone(),
-                        pattern.clone(),
-                        body.clone(),
-                        acc,
-                    ))),
+                    span: Some(span),
+                    value: Box::new(Ast::from(ExtendsExpr {
+                        span,
+                        lhs: value.clone(),
+                        rhs: pattern.clone(),
+                        then_branch: body.clone(),
+                        else_branch: acc,
+                    })),
                 }
             })
     }
@@ -39,6 +49,8 @@ impl<'a> MatchExpr<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 pub struct Arm<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub pattern: Node<'a>,
     pub body: Node<'a>,
 }

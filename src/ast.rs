@@ -21,11 +21,13 @@ pub(crate) mod node;
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Path<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub segments: Nodes<'a>,
 }
 
 impl<'a> Path<'a> {
-    fn simplify(&self, span: Option<Span<'a>>) -> Node<'a> {
+    fn simplify(&self, span: Span<'a>) -> Node<'a> {
         let mut acc = vec![];
 
         for seg in self.segments.iter() {
@@ -36,15 +38,20 @@ impl<'a> Path<'a> {
             }
         }
 
-        let ast = Ast::Path(Path { segments: acc });
+        let ast = Ast::Path(Path {
+            span,
+            segments: acc,
+        });
 
-        Node::new(span, ast)
+        Node::new(Some(span), ast)
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ExtendsExpr<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub lhs: Node<'a>,
     pub rhs: Node<'a>,
     pub then_branch: Node<'a>,
@@ -52,7 +59,13 @@ pub struct ExtendsExpr<'a> {
 }
 
 impl<'a> ExtendsExpr<'a> {
-    pub fn new(lhs: Node<'a>, rhs: Node<'a>, then_branch: Node<'a>, else_branch: Node<'a>) -> Self {
+    pub fn new(
+        span: pest::Span<'a>,
+        lhs: Node<'a>,
+        rhs: Node<'a>,
+        then_branch: Node<'a>,
+        else_branch: Node<'a>,
+    ) -> Self {
         if !lhs.value.is_typescript_feature() {
             dbg!(&lhs);
             unreachable!("value must be desugared before this point");
@@ -69,7 +82,9 @@ impl<'a> ExtendsExpr<'a> {
             dbg!(&else_branch);
             unreachable!("value must be desugared before this point");
         }
+
         Self {
+            span,
             lhs,
             rhs,
             then_branch,
@@ -81,12 +96,16 @@ impl<'a> ExtendsExpr<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tuple<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub items: Nodes<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ApplyGeneric<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub receiver: Node<'a>,
     pub args: Nodes<'a>,
 }
@@ -106,6 +125,8 @@ impl<'a> typescript::Pretty for ApplyGeneric<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MappedType<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub index: String,
     pub iterable: Node<'a>,
     pub remapped_as: Option<Node<'a>>,
@@ -117,6 +138,8 @@ pub struct MappedType<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ObjectLiteral<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub properties: Vec<ObjectProperty<'a>>,
 }
 
@@ -155,6 +178,8 @@ impl<'a> typescript::Pretty for ObjectLiteral<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Interface<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub export: bool,
     pub name: String,
     pub extends: Option<String>,
@@ -170,6 +195,7 @@ impl<'a> typescript::Pretty for Interface<'a> {
             extends,
             params,
             definition,
+            ..
         } = self;
 
         let doc = if *export {
@@ -232,6 +258,8 @@ impl<'a> typescript::Pretty for Interface<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct UnitTest<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub name: String,
     pub body: Vec<Node<'a>>,
 }
@@ -239,6 +267,8 @@ pub struct UnitTest<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MacroCall<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub name: String,
     pub args: Vec<Node<'a>>,
 }
@@ -268,6 +298,8 @@ impl<'a> MacroCall<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FunctionType<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub params: Vec<Parameter<'a>>,
     pub return_type: Node<'a>,
 }
@@ -361,7 +393,7 @@ pub enum Ast<'a> {
     IfExpr(if_expr::IfExpr<'a>),
     #[serde(rename(serialize = "import"))]
     ImportStatement {
-        import_clause: ImportClause,
+        import_clause: ImportClause<'a>,
         module: String,
     },
     LetExpr(let_expr::LetExpr<'a>),
@@ -495,7 +527,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 .group(),
             Ast::TypeLiteral(value) => value.to_ts(),
             Ast::ApplyGeneric(value) => value.to_ts(),
-            Ast::Tuple(Tuple { items }) => {
+            Ast::Tuple(Tuple { items, .. }) => {
                 let sep = D::text(",").append(D::space());
 
                 let items = D::intersperse(items.iter().map(|item| item.to_ts()), sep);
@@ -524,6 +556,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 rhs,
                 then_branch: then,
                 else_branch: els,
+                ..
             }) => {
                 let condition_doc = lhs
                     .to_ts()
@@ -565,6 +598,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 readonly_mod,
                 optional_mod,
                 body,
+                ..
             }) => {
                 let remapped_as_doc = match remapped_as {
                     Some(remapped_as) => D::space()
@@ -630,7 +664,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .append(D::space())
                     .append(string_literal(module))
             }
-            Ast::Path(Path { segments }) => {
+            Ast::Path(Path { segments, .. }) => {
                 let sep = D::text(".");
 
                 let segments = D::intersperse(segments.iter().map(|seg| seg.to_ts()), sep);
@@ -697,7 +731,7 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_empty_object(&self) -> bool {
-        matches!(self, Ast::TypeLiteral(ObjectLiteral { properties }) if properties.is_empty())
+        matches!(self, Ast::TypeLiteral(ObjectLiteral { properties, .. }) if properties.is_empty())
     }
 
     pub fn is_nullish(&self) -> bool {
@@ -1301,12 +1335,12 @@ mod simplify_tests {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum ImportClause {
-    Named(Vec<ImportSpecifier>),
+pub enum ImportClause<'a> {
+    Named(Vec<ImportSpecifier<'a>>),
     Namespace { alias: Identifier },
 }
 
-impl typescript::Pretty for ImportClause {
+impl<'a> typescript::Pretty for ImportClause<'a> {
     fn to_ts(&self) -> D<()> {
         match self {
             ImportClause::Named(specifiers) => {
@@ -1337,12 +1371,14 @@ impl typescript::Pretty for ImportClause {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct ImportSpecifier {
+pub struct ImportSpecifier<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub module_export_name: Identifier,
     pub alias: Option<Identifier>,
 }
 
-impl typescript::Pretty for ImportSpecifier {
+impl<'a> typescript::Pretty for ImportSpecifier<'a> {
     fn to_ts(&self) -> D<()> {
         let alias_doc = match &self.alias {
             Some(alias) => D::space()
@@ -1459,6 +1495,8 @@ impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PropertyKeyIndex<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub key: String,
     pub iterable: Node<'a>,
     pub remapped_as: Option<Node<'a>>,
@@ -1470,6 +1508,7 @@ impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
             key,
             iterable,
             remapped_as,
+            ..
         } = self;
 
         let remapped_as = match remapped_as {
@@ -1493,6 +1532,8 @@ impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ObjectProperty<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub readonly: bool,
     pub optional: bool,
     pub key: ObjectPropertyKey<'a>,
@@ -1527,6 +1568,8 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Identifier(pub String);
+// #[serde(skip)]
+// pub span: Span<'a>,
 
 impl From<String> for Identifier {
     fn from(value: String) -> Self {
@@ -1555,6 +1598,8 @@ impl typescript::Pretty for Identifier {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypeParameter<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub name: String,
     pub constraint: Option<Node<'a>>,
     pub default: Option<Node<'a>>,
@@ -1567,12 +1612,14 @@ impl<'a> TypeParameter<'a> {
         constraint: Option<Node<'a>>,
         default: Option<Node<'a>>,
         rest: bool,
+        span: Span<'a>
     ) -> Self {
         Self {
             name,
             constraint,
             default,
             rest,
+            span,
         }
     }
 }

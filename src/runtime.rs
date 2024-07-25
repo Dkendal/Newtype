@@ -25,6 +25,7 @@ pub mod builtin {
                 rhs,
                 then_branch,
                 else_branch,
+                ..
             }) => match lhs.is_subtype(rhs) {
                 ExtendsResult::True => (then_branch.clone(), acc),
                 ExtendsResult::False => (else_branch.clone(), acc),

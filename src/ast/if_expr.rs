@@ -3,6 +3,8 @@ use super::*;
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct IfExpr<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub condition: Node<'a>,
     pub then_branch: Node<'a>,
     pub else_branch: Option<Node<'a>>,
@@ -62,6 +64,12 @@ pub(crate) fn expand_to_extends<'a>(
     match &*condition.value {
         // Binary operators
         Ast::ExtendsInfixOp { lhs, op, rhs } => {
+            let span = Span::new(
+                lhs.as_span().get_input(),
+                lhs.as_span().start(),
+                rhs.as_span().start(),
+            ).unwrap();
+
             // TODO report a syntax error here
             // need to include spans in ASTNode<'a>
             if !lhs.value.is_typescript_feature() {
@@ -79,6 +87,7 @@ pub(crate) fn expand_to_extends<'a>(
                 InfixOp::Extends => {
                     // FIXME missing span
                     Ast::from(ExtendsExpr::new(
+                        span,
                         lhs.clone(),
                         rhs.clone(),
                         then.clone(),
@@ -89,6 +98,7 @@ pub(crate) fn expand_to_extends<'a>(
                 InfixOp::NotExtends => {
                     // FIXME missing span
                     Ast::from(ExtendsExpr::new(
+                        span,
                         lhs.clone(),
                         rhs.clone(),
                         else_arm.clone(),

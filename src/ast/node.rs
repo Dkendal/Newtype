@@ -2,6 +2,9 @@ use crate::extends_result::ExtendsResult;
 
 use super::*;
 use cond_expr::CondExpr;
+use if_expr::IfExpr;
+use let_expr::LetExpr;
+use match_expr::MatchExpr;
 use pest::Span;
 use std::collections::HashMap;
 
@@ -167,10 +170,12 @@ impl<'a> Node<'a> {
             Ast::ApplyGeneric(ApplyGeneric {
                 receiver: name,
                 args,
+                span,
             }) => {
                 let ast = Ast::ApplyGeneric(ApplyGeneric {
                     receiver: name.clone(),
                     args: red_items(args, ctx.clone()),
+                    span: *span,
                 });
 
                 result(ast, ctx)
@@ -193,7 +198,11 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::CondExpr(CondExpr { arms, else_arm }) => {
+            Ast::CondExpr(CondExpr {
+                arms,
+                else_arm,
+                span,
+            }) => {
                 let arms = arms
                     .iter()
                     .map(|arm| {
@@ -206,7 +215,11 @@ impl<'a> Node<'a> {
 
                 let else_arm = red_pick_node(else_arm, ctx.clone());
 
-                let ast = Ast::CondExpr(CondExpr { arms, else_arm });
+                let ast = Ast::CondExpr(CondExpr {
+                    arms,
+                    else_arm,
+                    span: *span,
+                });
 
                 result(ast, ctx)
             }
@@ -229,6 +242,7 @@ impl<'a> Node<'a> {
                 rhs,
                 then_branch,
                 else_branch,
+                span,
             }) => {
                 let lhs = red_pick_node(lhs, ctx.clone());
                 let rhs = red_pick_node(rhs, ctx.clone());
@@ -240,6 +254,7 @@ impl<'a> Node<'a> {
                     rhs,
                     then_branch,
                     else_branch,
+                    span: *span,
                 });
                 result(ast, ctx)
             }
@@ -255,19 +270,21 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::IfExpr(if_expr::IfExpr {
+            Ast::IfExpr(IfExpr {
                 condition,
                 then_branch,
                 else_branch,
+                span,
             }) => {
                 let (condition, _) = red(condition, ctx.clone());
                 let (then_branch, _) = red(then_branch, ctx.clone());
                 let else_branch = else_branch.as_ref().map(fn_red_pick_node(ctx.clone()));
 
-                let ast = Ast::IfExpr(if_expr::IfExpr {
+                let ast = Ast::IfExpr(IfExpr {
                     condition,
                     then_branch,
                     else_branch,
+                    span: *span,
                 });
 
                 (self.clone().replace(ast), ctx)
@@ -287,9 +304,10 @@ impl<'a> Node<'a> {
             Ast::LetExpr(let_expr) => {
                 let (body, _) = red(&let_expr.body, ctx.clone());
 
-                let ast = Ast::LetExpr(let_expr::LetExpr {
+                let ast = Ast::LetExpr(LetExpr {
                     bindings: let_expr.bindings.clone(),
                     body,
+                    span: let_expr.span,
                 });
 
                 result(ast, ctx)
@@ -301,6 +319,7 @@ impl<'a> Node<'a> {
                 readonly_mod,
                 optional_mod,
                 body,
+                span,
             }) => {
                 let (iterable, _) = red(iterable, ctx.clone());
                 let remapped_as = remapped_as.as_ref().map(fn_red_pick_node(ctx.clone()));
@@ -313,14 +332,16 @@ impl<'a> Node<'a> {
                     readonly_mod: readonly_mod.clone(),
                     optional_mod: optional_mod.clone(),
                     body,
+                    span: *span,
                 });
 
                 result(ast, ctx)
             }
-            Ast::MatchExpr(match_expr::MatchExpr {
+            Ast::MatchExpr(MatchExpr {
                 value,
                 arms,
                 else_arm,
+                span,
             }) => {
                 let (value, _) = red(value, ctx.clone());
 
@@ -336,26 +357,30 @@ impl<'a> Node<'a> {
 
                 let else_arm = red_pick_node(else_arm, ctx.clone());
 
-                let ast = Ast::MatchExpr(match_expr::MatchExpr {
+                let ast = Ast::MatchExpr(MatchExpr {
                     value,
                     arms,
                     else_arm,
+                    span: *span,
                 });
 
                 result(ast, ctx)
             }
-            Ast::Path(Path { segments }) => {
+            Ast::Path(Path { segments, span }) => {
                 let segments = segments
                     .iter()
                     .map(|node| red_pick_node(node, ctx.clone()))
                     .collect_vec();
 
-                let ast = Ast::Path(Path { segments });
+                let ast = Ast::Path(Path {
+                    segments,
+                    span: *span,
+                });
 
                 result(ast, ctx)
             }
-            Ast::TypeLiteral(object) => {
-                let properties = object
+            Ast::TypeLiteral(ty) => {
+                let properties = ty
                     .properties
                     .iter()
                     .map(|prop| {
@@ -365,7 +390,10 @@ impl<'a> Node<'a> {
                     })
                     .collect_vec();
 
-                let ast = Ast::TypeLiteral(ObjectLiteral { properties });
+                let ast = Ast::TypeLiteral(ObjectLiteral {
+                    properties,
+                    span: ty.span,
+                });
 
                 result(ast, ctx)
             }
@@ -388,13 +416,13 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
             node @ Ast::TemplateString(_) => result(node.clone(), ctx.clone()),
-            Ast::Tuple(Tuple { items }) => {
+            Ast::Tuple(Tuple { items, span }) => {
                 let items = items
                     .iter()
                     .map(|item| red_pick_node(item, ctx.clone()))
                     .collect_vec();
 
-                let ast = Ast::Tuple(Tuple { items });
+                let ast = Ast::Tuple(Tuple { items, span: *span });
 
                 result(ast, ctx)
             }
@@ -410,19 +438,21 @@ impl<'a> Node<'a> {
                     .iter()
                     .map(
                         |TypeParameter {
-                             name: param_name,
+                             name,
                              constraint,
                              default,
                              rest,
+                             span,
                          }| {
                             let constraint = constraint.as_ref().map(fn_red_pick_node(ctx.clone()));
                             let default = default.as_ref().map(fn_red_pick_node(ctx.clone()));
 
                             TypeParameter {
-                                name: param_name.clone(),
+                                name: name.clone(),
                                 constraint,
                                 default,
                                 rest: *rest,
+                                span: *span,
                             }
                         },
                     )
@@ -470,17 +500,18 @@ impl<'a> Node<'a> {
 
     pub fn simplify(&self) -> Self {
         let bindings: Bindings = Default::default();
+
+        let identity = |node, ctx| (node, ctx);
+
         let (tree, _) = self.traverse(
             bindings,
-            &|node, ctx| match node.value.as_ref() {
-                _ => (node, ctx),
-            },
+            &identity,
             &|node, ctx| match node.value.as_ref() {
                 Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
                 Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
                 Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
                 Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
-                Ast::Path(path) => (path.simplify(node.span), ctx),
+                Ast::Path(path) => (path.simplify(node.span.unwrap()), ctx),
                 Ast::UnionType { types } => match types.as_slice() {
                     // Flatten nested union types (both)
                     [Node {

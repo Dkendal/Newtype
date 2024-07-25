@@ -8,6 +8,8 @@ use std::collections::HashMap;
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct LetExpr<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
     pub bindings: HashMap<Identifier, Node<'a>>,
     pub body: Node<'a>,
 }
