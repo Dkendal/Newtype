@@ -358,6 +358,12 @@ pub struct Access<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub struct IntersectionType<'a>{
+    pub types: Vec<Node<'a>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
     Access(Access<'a>),
@@ -373,9 +379,7 @@ pub enum Ast<'a> {
         types: Vec<Node<'a>>,
     },
     #[serde(rename(serialize = "&"))]
-    IntersectionType {
-        types: Vec<Node<'a>>,
-    },
+    IntersectionType(IntersectionType<'a>),
     Builtin {
         name: BuiltinKeyword,
         argument: Node<'a>,
@@ -684,14 +688,14 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 let sep = D::line().append(D::text("|")).append(D::space());
                 D::intersperse(
                     types.iter().map(|t| match t.value.as_ref() {
-                        Ast::IntersectionType { .. } => surround(t.to_ts(), "(", ")"),
+                        Ast::IntersectionType(IntersectionType { .. }) => surround(t.to_ts(), "(", ")"),
                         _ => t.to_ts(),
                     }),
                     sep,
                 )
                 .group()
             }
-            Ast::IntersectionType { types } => {
+            Ast::IntersectionType(IntersectionType { types }) => {
                 let sep = D::line().append(D::text("&")).append(D::space());
                 D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
             }

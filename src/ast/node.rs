@@ -479,13 +479,13 @@ impl<'a> Node<'a> {
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::IntersectionType { types } => {
+            Ast::IntersectionType(IntersectionType { types }) => {
                 let types = types
                     .iter()
                     .map(|ty| red_pick_node(ty, ctx.clone()))
                     .collect_vec();
 
-                let ast = Ast::IntersectionType { types };
+                let ast = Ast::IntersectionType(IntersectionType { types });
 
                 (self.clone().replace(ast), ctx)
             }

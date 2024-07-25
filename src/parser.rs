@@ -96,9 +96,9 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 union => Ast::UnionType {
                     types: vec![lhs, rhs],
                 },
-                intersection => Ast::IntersectionType {
+                intersection => Ast::IntersectionType(IntersectionType {
                     types: vec![lhs, rhs],
-                },
+                }),
                 colon2 => {
                     let span = Span::new(
                         op.as_span().get_input(),
@@ -377,11 +377,10 @@ fn parse_builtin(pair: Pair) -> Ast {
 
     let argument = inner.find(match_tag("argument")).map(parse).unwrap();
 
-    let ast = Ast::Builtin {
+     Ast::Builtin {
         name,
         argument: (argument),
-    };
-    ast
+    }
 }
 
 fn parse_match_expr(pair: Pair) -> MatchExpr {

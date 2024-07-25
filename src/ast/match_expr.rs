@@ -30,9 +30,8 @@ impl<'a> MatchExpr<'a> {
                     body,
                 } = arm;
 
-                let span = span.clone();
+                let span = *span;
 
-                // FIXME missing span
                 Node {
                     span: Some(span),
                     value: Box::new(Ast::from(ExtendsExpr {
