@@ -330,9 +330,9 @@ pub(crate) fn parse(pair: Pair) -> Node {
         Rule::string => parse_string(pair),
         Rule::template_string => new(Ast::TemplateString(node_as_string(pair))),
         Rule::ident => new(Ast::Ident(pair.as_str().into())),
-        Rule::never => new(Ast::Never),
+        Rule::never => new(Ast::NeverKeyword(span)),
         Rule::any => new(Ast::Any),
-        Rule::unknown => new(Ast::Unknown),
+        Rule::unknown => new(Ast::UnknownKeyword(span)),
         Rule::boolean => {
             let value = pair.into_inner().next().unwrap();
             let value = match value.as_rule() {
@@ -340,7 +340,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
                 Rule::literal_false => false,
                 _ => unreachable!(),
             };
-            new(Ast::Boolean(value))
+            new(Ast::BooleanLiteral(value))
         }
         Rule::tuple => parse_tuple(pair),
         Rule::macro_call => new(Ast::MacroCall(parse_macro_call(pair))),
@@ -413,7 +413,7 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
         .find(match_tag("else"))
         .and_then(|p| p.into_inner().find(match_tag("body")))
         .map(parse)
-        .unwrap_or_else(|| Ast::Never.into());
+        .unwrap_or_else(|| Ast::NeverKeyword(span).into());
 
     MatchExpr {
         span,
@@ -432,7 +432,7 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
         .find(match_tag("else"))
         .and_then(|p| p.into_inner().find(match_tag("body")))
         .map(parse)
-        .unwrap_or_else(|| Ast::Never.into());
+        .unwrap_or_else(|| Ast::NeverKeyword(span).into());
 
     let arms: Vec<cond_expr::Arm> = inner
         .clone()
@@ -895,6 +895,7 @@ fn parse_import_statement(pair: Pair) -> Node {
 }
 
 fn parse_if_expr(pair: Pair) -> Node {
+    let span = pair.as_span();
     let mut inner = pair.clone().into_inner();
 
     let condition = inner
@@ -907,7 +908,7 @@ fn parse_if_expr(pair: Pair) -> Node {
     let else_branch = inner
         .find(match_tag("else"))
         .map(parse)
-        .unwrap_or_else(|| Ast::Never.into());
+        .unwrap_or_else(|| Ast::NeverKeyword(span).into());
 
     let else_branch = else_branch;
 

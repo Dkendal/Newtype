@@ -415,7 +415,7 @@ pub struct TypeAlias<'a> {
 pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
     Access(Access<'a>),
-    Boolean(bool),
+    BooleanLiteral(bool),
     Any,
     #[serde(rename(serialize = "macro"))]
     MacroCall(MacroCall<'a>),
@@ -442,7 +442,6 @@ pub enum Ast<'a> {
     MatchExpr(MatchExpr<'a>),
     #[serde(rename(serialize = "::"))]
     Path(Path<'a>),
-    Never,
     NoOp,
     Number(String),
     TypeLiteral(ObjectLiteral<'a>),
@@ -455,7 +454,10 @@ pub enum Ast<'a> {
     Tuple(Tuple<'a>),
     #[serde(rename(serialize = "type"))]
     TypeAlias(TypeAlias<'a>),
-    Unknown,
+    #[serde(rename(serialize = "never"))]
+    NeverKeyword(#[serde(skip)] Span<'a>),
+    #[serde(rename(serialize = "unknown"))]
+    UnknownKeyword(#[serde(skip)] Span<'a>),
     Interface(Interface<'a>),
     FunctionType(FunctionType<'a>),
 }
@@ -579,10 +581,10 @@ impl<'a> typescript::Pretty for Ast<'a> {
 
                 doc.append(D::text("[]"))
             }
-            Ast::Never => D::text("never"),
+            Ast::NeverKeyword(_) => D::text("never"),
             Ast::Any => D::text("any"),
-            Ast::Unknown => D::text("unknown"),
-            Ast::Boolean(value) => D::text(value.to_string()),
+            Ast::UnknownKeyword(_) => D::text("unknown"),
+            Ast::BooleanLiteral(value) => D::text(value.to_string()),
             Ast::Infer(value) => D::text("infer").append(D::space()).append(value.to_ts()),
 
             Ast::Builtin(Builtin { name, argument }) => {
@@ -767,7 +769,7 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_top_type(&self) -> bool {
-        matches!(self, Ast::Any | Ast::Unknown)
+        matches!(self, Ast::Any | Ast::UnknownKeyword(_))
     }
 
     pub fn is_empty_object(&self) -> bool {
@@ -802,7 +804,7 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_bottom_type(&self) -> bool {
-        matches!(self, Ast::Never)
+        matches!(self, Ast::NeverKeyword(_))
     }
 
     pub fn get_primitive_type(&self) -> Option<PrimitiveType> {
@@ -813,7 +815,7 @@ impl<'a> Ast<'a> {
 
             Ast::Number(_) => P::Number,
 
-            Ast::Boolean(_) => P::Boolean,
+            Ast::BooleanLiteral(_) => P::Boolean,
 
             Ast::TypeLiteral(_) => P::Object,
 
@@ -899,7 +901,7 @@ impl<'a> Ast<'a> {
                 | Ast::ImportStatement { .. }
                 | Ast::MappedType(_)
                 | Ast::Path(_)
-                | Ast::Never
+                | Ast::NeverKeyword(_)
                 | Ast::Number(_)
                 | Ast::TypeLiteral(_)
                 | Ast::Primitive(_)
@@ -908,9 +910,9 @@ impl<'a> Ast<'a> {
                 | Ast::String(_)
                 | Ast::TemplateString(_)
                 | Ast::Tuple(_)
-                | Ast::Unknown
+                | Ast::UnknownKeyword(_)
                 | Ast::Interface(_)
-                | Ast::Boolean(_)
+                | Ast::BooleanLiteral(_)
                 | Ast::UnionType { .. }
                 | Ast::Access { .. }
                 | Ast::Any
@@ -985,7 +987,7 @@ impl<'a> Ast<'a> {
                 unreachable!()
             }
 
-            (A::Never, _) => T::Never,
+            (A::NeverKeyword(_), _) => T::Never,
 
             (lhs, rhs) if lhs == rhs => T::True,
 
@@ -993,9 +995,9 @@ impl<'a> Ast<'a> {
 
             (A::Any, _) => T::Both,
 
-            (A::Unknown, _) => T::False,
+            (A::UnknownKeyword(_), _) => T::False,
 
-            (_, A::Never) => T::False,
+            (_, A::NeverKeyword(_)) => T::False,
 
             (A::Access(Access { .. }), _) => todo!(),
 

@@ -15,7 +15,7 @@ impl<'a> IfExpr<'a> {
         let else_branch = self
             .else_branch
             .as_ref()
-            .map_or_else(|| node::Node::from(Ast::Never), |v| v.clone());
+            .map_or_else(|| node::Node::from(Ast::NeverKeyword(self.span)), |v| v.clone());
 
         expand_to_extends(&self.condition, &self.then_branch, &else_branch)
     }

@@ -27,13 +27,13 @@ pub mod builtin {
                 rhs,
                 then_branch,
                 else_branch,
-                ..
+                span,
             }) => match lhs.is_subtype(rhs) {
                 ExtendsResult::True => (then_branch.clone(), acc),
                 ExtendsResult::False => (else_branch.clone(), acc),
                 ExtendsResult::Never => {
                     let mut tree = tree.clone();
-                    tree.set_value(Box::new(Ast::Never));
+                    tree.set_value(Box::new(Ast::NeverKeyword(*span)));
                     (tree, acc)
                 }
                 ExtendsResult::Both => {
