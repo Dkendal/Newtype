@@ -257,10 +257,10 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
 
             Node::new(
                 primary_node.span,
-                Ast::ExtendsPrefixOp {
+                Ast::ExtendsPrefixOp(ExtendsPrefixOp {
                     op,
                     value: primary_node,
-                },
+                }),
             )
         })
         .map_infix(|lhs: Node, op: Pair, rhs: Node| {
@@ -289,7 +289,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
                 ),
             };
             // FIXME missing span
-            Ast::ExtendsInfixOp { lhs, op, rhs }.into()
+            Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs }).into()
         })
         .parse(pairs)
 }
@@ -652,12 +652,12 @@ fn parse_type_alias(pair: Pair) -> Ast {
 
     let params = parse_definition_options(inner);
 
-    Ast::TypeAlias {
+    Ast::TypeAlias(TypeAlias {
         export,
         name,
         params,
         body,
-    }
+    })
 }
 
 fn parse_statement(pair: Pair) -> Ast {
@@ -887,10 +887,10 @@ fn parse_import_statement(pair: Pair) -> Node {
 
     Node::from_pair(
         &pair,
-        Ast::ImportStatement {
+        Ast::ImportStatement(ImportStatement {
             import_clause,
             module,
-        },
+        }),
     )
 }
 
@@ -913,7 +913,8 @@ fn parse_if_expr(pair: Pair) -> Node {
 
     match &*condition.value {
         // Other conditions are desugared later in the simplification step
-        Ast::ExtendsInfixOp { .. } | Ast::ExtendsPrefixOp { .. } => Node::from_pair(
+        Ast::ExtendsInfixOp(ExtendsInfixOp { .. })
+        | Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. }) => Node::from_pair(
             &pair,
             Ast::IfExpr(IfExpr {
                 span: pair.as_span(),

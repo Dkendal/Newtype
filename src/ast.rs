@@ -1,6 +1,10 @@
 use std::fmt::Display;
 
+use cond_expr::CondExpr;
+use if_expr::IfExpr;
 use itertools::Itertools;
+use let_expr::LetExpr;
+use match_expr::MatchExpr;
 use node::{Node, Nodes};
 use pest::Span;
 use pretty::RcDoc as D;
@@ -371,8 +375,39 @@ pub struct Builtin<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct UnionType<'a>{
+pub struct UnionType<'a> {
     pub types: Vec<Node<'a>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ExtendsInfixOp<'a> {
+    pub lhs: Node<'a>,
+    pub op: InfixOp,
+    pub rhs: Node<'a>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ExtendsPrefixOp<'a> {
+    pub op: PrefixOp,
+    pub value: Node<'a>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ImportStatement<'a> {
+    pub import_clause: ImportClause<'a>,
+    pub module: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct TypeAlias<'a> {
+    pub export: bool,
+    pub name: Identifier,
+    pub params: Vec<TypeParameter<'a>>,
+    pub body: Node<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -392,29 +427,19 @@ pub enum Ast<'a> {
     #[serde(rename(serialize = "&"))]
     IntersectionType(IntersectionType<'a>),
     Builtin(Builtin<'a>),
-    CondExpr(cond_expr::CondExpr<'a>),
-    ExtendsInfixOp {
-        lhs: Node<'a>,
-        op: InfixOp,
-        rhs: Node<'a>,
-    },
+    CondExpr(CondExpr<'a>),
+    ExtendsInfixOp(ExtendsInfixOp<'a>),
     ExtendsExpr(ExtendsExpr<'a>),
     Infer(Node<'a>),
-    ExtendsPrefixOp {
-        op: PrefixOp,
-        value: Node<'a>,
-    },
+    ExtendsPrefixOp(ExtendsPrefixOp<'a>),
     Ident(Identifier),
     #[serde(rename(serialize = "if"))]
-    IfExpr(if_expr::IfExpr<'a>),
+    IfExpr(IfExpr<'a>),
     #[serde(rename(serialize = "import"))]
-    ImportStatement {
-        import_clause: ImportClause<'a>,
-        module: String,
-    },
-    LetExpr(let_expr::LetExpr<'a>),
+    ImportStatement(ImportStatement<'a>),
+    LetExpr(LetExpr<'a>),
     MappedType(MappedType<'a>),
-    MatchExpr(match_expr::MatchExpr<'a>),
+    MatchExpr(MatchExpr<'a>),
     #[serde(rename(serialize = "::"))]
     Path(Path<'a>),
     Never,
@@ -429,12 +454,7 @@ pub enum Ast<'a> {
     TemplateString(String),
     Tuple(Tuple<'a>),
     #[serde(rename(serialize = "type"))]
-    TypeAlias {
-        export: bool,
-        name: Identifier,
-        params: Vec<TypeParameter<'a>>,
-        body: Node<'a>,
-    },
+    TypeAlias(TypeAlias<'a>),
     Unknown,
     Interface(Interface<'a>),
     FunctionType(FunctionType<'a>),
@@ -471,12 +491,12 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 }
                 doc
             }
-            Ast::TypeAlias {
+            Ast::TypeAlias(TypeAlias {
                 export,
                 name,
                 params,
                 body,
-            } => {
+            }) => {
                 let body = (*body).to_ts();
 
                 let doc = if *export {
@@ -597,11 +617,11 @@ impl<'a> typescript::Pretty for Ast<'a> {
 
                 condition_doc.append(then_doc).append(else_doc)
             }
-            Ast::ExtendsInfixOp {
+            Ast::ExtendsInfixOp(ExtendsInfixOp {
                 lhs,
                 op: InfixOp::Extends,
                 rhs,
-            } => lhs
+            }) => lhs
                 .to_ts()
                 .append(D::space())
                 .append("extends")
@@ -668,10 +688,10 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::LetExpr(..) => {
                 unreachable!("LetExpr should be desugared before this point")
             }
-            Ast::ImportStatement {
+            Ast::ImportStatement(ImportStatement {
                 import_clause,
                 module,
-            } => {
+            }) => {
                 let import_clause = import_clause.to_ts();
 
                 D::text("import type")
@@ -712,10 +732,10 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
             }
             Ast::NoOp => unimplemented!(),
-            node @ (Ast::ExtendsPrefixOp { .. }
+            node @ (Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. })
             | Ast::MatchExpr(match_expr::MatchExpr { .. })
             | Ast::CondExpr(cond_expr::CondExpr { .. })
-            | Ast::ExtendsInfixOp { .. }) => {
+            | Ast::ExtendsInfixOp(ExtendsInfixOp { .. })) => {
                 unreachable!(
                     "ASTNode<'a> should be desugared before this point {:#?}",
                     node
@@ -740,8 +760,8 @@ impl<'a> Ast<'a> {
     /// Operators that the `not` prefix operator can be applied to.
     pub fn is_compatible_with_not_prefix_op(&self) -> bool {
         match self {
-            Ast::ExtendsPrefixOp { op, .. } if op.is_not() => true,
-            Ast::ExtendsInfixOp { .. } => true,
+            Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, .. }) if op.is_not() => true,
+            Ast::ExtendsInfixOp(ExtendsInfixOp { .. }) => true,
             _ => false,
         }
     }

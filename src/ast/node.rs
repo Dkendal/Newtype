@@ -224,15 +224,15 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::ExtendsInfixOp { lhs, op, rhs } => {
+            Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs }) => {
                 let (lhs, _) = red(lhs, ctx.clone());
                 let (rhs, _) = red(rhs, ctx.clone());
 
-                let ast = Ast::ExtendsInfixOp {
+                let ast = Ast::ExtendsInfixOp(ExtendsInfixOp {
                     lhs,
                     op: op.clone(),
                     rhs,
-                };
+                });
 
                 (self.clone().replace(ast), ctx)
             }
@@ -259,13 +259,13 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::ExtendsPrefixOp { op, value } => {
+            Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value }) => {
                 let value = red_pick_node(value, ctx.clone());
 
-                let ast = Ast::ExtendsPrefixOp {
+                let ast = Ast::ExtendsPrefixOp(ExtendsPrefixOp {
                     op: op.clone(),
                     value,
-                };
+                });
 
                 result(ast, ctx)
             }
@@ -290,14 +290,14 @@ impl<'a> Node<'a> {
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::ImportStatement {
+            Ast::ImportStatement(ImportStatement {
                 import_clause,
                 module,
-            } => {
-                let ast = Ast::ImportStatement {
+            }) => {
+                let ast = Ast::ImportStatement(ImportStatement {
                     import_clause: import_clause.clone(),
                     module: module.clone(),
-                };
+                });
 
                 result(ast, ctx)
             }
@@ -426,12 +426,12 @@ impl<'a> Node<'a> {
 
                 result(ast, ctx)
             }
-            Ast::TypeAlias {
+            Ast::TypeAlias(TypeAlias {
                 export,
                 name,
                 params,
                 body,
-            } => {
+            }) => {
                 let (body, _) = body.traverse(ctx.clone(), pre, post);
 
                 let params = params
@@ -458,12 +458,12 @@ impl<'a> Node<'a> {
                     )
                     .collect_vec();
 
-                let ast = Ast::TypeAlias {
+                let ast = Ast::TypeAlias(TypeAlias {
                     export: *export,
                     name: name.clone(),
                     params,
                     body,
-                };
+                });
 
                 result(ast, ctx)
             }

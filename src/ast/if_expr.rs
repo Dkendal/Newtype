@@ -30,7 +30,7 @@ pub(crate) fn expand_to_extends<'a>(
     // Recursive operations
     let out: Option<Node<'a>> = match &*condition.value {
         // Unary operators
-        Ast::ExtendsPrefixOp { op, value } => {
+        Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value }) => {
             match op {
                 // Swap `then` and `else` branches
                 PrefixOp::Not if value.value.is_compatible_with_not_prefix_op() => {
@@ -42,7 +42,7 @@ pub(crate) fn expand_to_extends<'a>(
                 }
             }
         }
-        Ast::ExtendsInfixOp { lhs, op, rhs } => match op {
+        Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs }) => match op {
             InfixOp::And => {
                 let then = expand_to_extends(rhs, then, else_arm);
                 Some(expand_to_extends(lhs, &then, else_arm))
@@ -63,7 +63,7 @@ pub(crate) fn expand_to_extends<'a>(
     // Terminal nodes
     match &*condition.value {
         // Binary operators
-        Ast::ExtendsInfixOp { lhs, op, rhs } => {
+        Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs }) => {
             let span = Span::new(
                 lhs.as_span().get_input(),
                 lhs.as_span().start(),
