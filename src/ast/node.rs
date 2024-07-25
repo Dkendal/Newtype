@@ -600,7 +600,7 @@ impl<'a> Node<'a> {
 
 pub type Nodes<'a> = Vec<Node<'a>>;
 
-pub type Bindings<'a> = HashMap<Identifier, Node<'a>>;
+pub type Bindings<'a> = HashMap<Ident, Node<'a>>;
 
 impl<'a> Default for Node<'a> {
     fn default() -> Self {

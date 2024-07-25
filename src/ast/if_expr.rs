@@ -12,10 +12,10 @@ pub struct IfExpr<'a> {
 
 impl<'a> IfExpr<'a> {
     pub(crate) fn simplify(&self) -> Node<'a> {
-        let else_branch = self
-            .else_branch
-            .as_ref()
-            .map_or_else(|| node::Node::from(Ast::NeverKeyword(self.span)), |v| v.clone());
+        let else_branch = self.else_branch.as_ref().map_or_else(
+            || node::Node::from(Ast::NeverKeyword(self.span)),
+            |v| v.clone(),
+        );
 
         expand_to_extends(&self.condition, &self.then_branch, &else_branch)
     }

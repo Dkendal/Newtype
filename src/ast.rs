@@ -405,7 +405,7 @@ pub struct ImportStatement<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct TypeAlias<'a> {
     pub export: bool,
-    pub name: Identifier,
+    pub name: Ident,
     pub params: Vec<TypeParameter<'a>>,
     pub body: Node<'a>,
 }
@@ -431,7 +431,7 @@ pub enum Ast<'a> {
     ExtendsExpr(ExtendsExpr<'a>),
     Infer(Node<'a>),
     ExtendsPrefixOp(ExtendsPrefixOp<'a>),
-    Ident(Identifier),
+    Ident(Ident),
     #[serde(rename(serialize = "if"))]
     IfExpr(IfExpr<'a>),
     #[serde(rename(serialize = "import"))]
@@ -799,7 +799,7 @@ impl<'a> Ast<'a> {
     }
 
     fn has_identifier(&self, name: &str) -> bool {
-        matches!(self, Ast::Ident(Identifier(value)) if value == name)
+        matches!(self, Ast::Ident(Ident(value)) if value == name)
     }
 
     fn is_primitive(&self) -> bool {
@@ -822,7 +822,7 @@ impl<'a> Ast<'a> {
 
             Ast::TypeLiteral(_) => P::Object,
 
-            Ast::Ident(Identifier(name)) => match name.as_str() {
+            Ast::Ident(Ident(name)) => match name.as_str() {
                 "String" => P::String,
                 "Number" => P::Number,
                 "Boolean" => P::Boolean,
@@ -838,13 +838,13 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_object_wrapper(&self) -> bool {
-        matches!(self, Ast::Ident(Identifier(name)) if matches!(name.as_str(),
+        matches!(self, Ast::Ident(Ident(name)) if matches!(name.as_str(),
                 "Boolean" | "Number" | "String" | "Object" | "Symbol" | "BigInt"
         ))
     }
 
     pub fn is_object_wrapper_for(&self, object_wrapper_name: &str) -> bool {
-        matches!(self, Ast::Ident(Identifier(name)) if name.as_str() == object_wrapper_name)
+        matches!(self, Ast::Ident(Ident(name)) if name.as_str() == object_wrapper_name)
     }
 
     pub fn is_string_object_wrapper(&self) -> bool {
@@ -889,7 +889,7 @@ impl<'a> Ast<'a> {
             ast if ast.is_object_interface() => return None,
             _ => "Object",
         };
-        Some(Ast::Ident(Identifier(name.to_string())))
+        Some(Ast::Ident(Ident(name.to_string())))
     }
 
     /// Anything that returns true is a feature that has a direct equivalent in TypeScript.
@@ -965,7 +965,7 @@ impl<'a> Ast<'a> {
         matches!(self, Self::Ident(_))
     }
 
-    pub fn as_ident(&self) -> Option<&Identifier> {
+    pub fn as_ident(&self) -> Option<&Ident> {
         if let Self::Ident(v) = self {
             Some(v)
         } else {
@@ -1382,7 +1382,7 @@ mod simplify_tests {
 #[serde(rename_all = "kebab-case")]
 pub enum ImportClause<'a> {
     Named(Vec<ImportSpecifier<'a>>),
-    Namespace { alias: Identifier },
+    Namespace { alias: Ident },
 }
 
 impl<'a> typescript::Pretty for ImportClause<'a> {
@@ -1419,8 +1419,8 @@ impl<'a> typescript::Pretty for ImportClause<'a> {
 pub struct ImportSpecifier<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub module_export_name: Identifier,
-    pub alias: Option<Identifier>,
+    pub module_export_name: Ident,
+    pub alias: Option<Ident>,
 }
 
 impl<'a> typescript::Pretty for ImportSpecifier<'a> {
@@ -1524,7 +1524,7 @@ pub enum MappingModifier {
 pub enum ObjectPropertyKey<'a> {
     Index(PropertyKeyIndex<'a>),
     Key(String),
-    Computed(Identifier),
+    Computed(Ident),
 }
 
 impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
@@ -1612,29 +1612,29 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Identifier(pub String);
+pub struct Ident(pub String);
 // #[serde(skip)]
 // pub span: Span<'a>,
 
-impl From<String> for Identifier {
+impl From<String> for Ident {
     fn from(value: String) -> Self {
         Self(value)
     }
 }
 
-impl From<&str> for Identifier {
+impl From<&str> for Ident {
     fn from(value: &str) -> Self {
         Self(value.to_string())
     }
 }
 
-impl Identifier {
+impl Ident {
     fn pretty(&self) -> D<()> {
         D::text(&self.0)
     }
 }
 
-impl typescript::Pretty for Identifier {
+impl typescript::Pretty for Ident {
     fn to_ts(&self) -> D<()> {
         D::text(self.0.clone())
     }

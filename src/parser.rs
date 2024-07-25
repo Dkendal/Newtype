@@ -513,7 +513,7 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
             assert_eq!(value.as_rule(), Rule::expr);
             let value = parse(value);
 
-            (Identifier(name), value)
+            (Ident(name), value)
         })
         .collect();
 
@@ -830,9 +830,9 @@ fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypePara
     params
 }
 
-fn pair_as_identifier(pair: Pair) -> Identifier {
+fn pair_as_identifier(pair: Pair) -> Ident {
     assert_ast!(pair, Rule::ident);
-    Identifier(pair.as_str().to_string())
+    Ident(pair.as_str().to_string())
 }
 
 fn pair_as_string_literal(pair: Pair) -> String {
