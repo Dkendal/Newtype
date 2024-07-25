@@ -16,7 +16,10 @@ pub mod builtin {
 
     pub fn assert_equal<'a>(left: Node<'a>, right: Node<'a>) -> Node<'a> {
         pretty_assertions::assert_eq!(left, right);
-        Default::default()
+        Node::new(
+            merge_spans(left.as_span(), right.as_span()),
+            Ast::NoOp(left.as_span()),
+        )
     }
 
     pub fn unquote(tree: Node) -> Node {

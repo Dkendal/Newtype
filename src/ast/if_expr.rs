@@ -13,7 +13,7 @@ pub struct IfExpr<'a> {
 impl<'a> IfExpr<'a> {
     pub(crate) fn simplify(&self) -> Node<'a> {
         let else_branch = self.else_branch.as_ref().map_or_else(
-            || node::Node::from(Ast::NeverKeyword(self.span)),
+            || node::Node::new(self.span, Ast::NeverKeyword(self.span)),
             |v| v.clone(),
         );
 
@@ -85,28 +85,26 @@ pub(crate) fn expand_to_extends<'a>(
 
             match op {
                 // Equivalent to `lhs extends rhs ? then : else`
-                InfixOp::Extends => {
-                    // FIXME missing span
+                InfixOp::Extends => Node::new(
+                    span,
                     Ast::from(ExtendsExpr::new(
                         span,
                         lhs.clone(),
                         rhs.clone(),
                         then.clone(),
                         else_arm.clone(),
-                    ))
-                    .into()
-                }
-                InfixOp::NotExtends => {
-                    // FIXME missing span
+                    )),
+                ),
+                InfixOp::NotExtends => Node::new(
+                    span,
                     Ast::from(ExtendsExpr::new(
                         span,
                         lhs.clone(),
                         rhs.clone(),
                         else_arm.clone(),
                         then.clone(),
-                    ))
-                    .into()
-                }
+                    )),
+                ),
                 InfixOp::Equals => todo!("equals"),
                 InfixOp::NotEquals => todo!("not equals"),
                 InfixOp::StrictEquals => todo!("strict equals"),

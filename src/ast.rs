@@ -47,7 +47,7 @@ impl<'a> Path<'a> {
             segments: acc,
         });
 
-        Node::new(Some(span), ast)
+        Node::new(span, ast)
     }
 }
 
@@ -479,7 +479,7 @@ pub enum Ast<'a> {
     UnknownKeyword(#[serde(skip)] Span<'a>),
     #[serde(rename(serialize = "any"))]
     AnyKeyword(#[serde(skip)] Span<'a>),
-    NoOp,
+    NoOp(#[serde(skip)] Span<'a>),
 }
 
 impl<'a> From<if_expr::IfExpr<'a>> for Ast<'a> {
@@ -575,7 +575,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
 
                 lhs.to_ts()
                     .append(D::text("["))
-                    .append(string_literal(rhs.0.as_str()))
+                    .append(string_literal(rhs.name.as_str()))
                     .append(D::text("]"))
                     .group()
             }
@@ -754,11 +754,11 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 )
                 .group()
             }
-            Ast::IntersectionType(IntersectionType { types , ..}) => {
+            Ast::IntersectionType(IntersectionType { types, .. }) => {
                 let sep = D::line().append(D::text("&")).append(D::space());
                 D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
             }
-            Ast::NoOp => unimplemented!(),
+            Ast::NoOp(_) => D::nil(),
             node @ (Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. })
             | Ast::MatchExpr(match_expr::MatchExpr { .. })
             | Ast::CondExpr(cond_expr::CondExpr { .. })
@@ -820,8 +820,8 @@ impl<'a> Ast<'a> {
         self.has_identifier("Object")
     }
 
-    fn has_identifier(&self, name: &str) -> bool {
-        matches!(self, Ast::Ident(Ident(value, _)) if value == name)
+    fn has_identifier(&self, test: &str) -> bool {
+        matches!(self, Ast::Ident(Ident{name, ..}) if name == test)
     }
 
     fn is_primitive(&self) -> bool {
@@ -846,7 +846,7 @@ impl<'a> Ast<'a> {
 
             Ast::TypeLiteral(_) => P::Object,
 
-            Ast::Ident(Ident(name, _)) => match name.as_str() {
+            Ast::Ident(Ident { name, .. }) => match name.as_str() {
                 "String" => P::String,
                 "Number" => P::Number,
                 "Boolean" => P::Boolean,
@@ -862,13 +862,13 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_object_wrapper(&self) -> bool {
-        matches!(self, Ast::Ident(Ident(name, _)) if matches!(name.as_str(),
+        matches!(self, Ast::Ident(Ident{name, ..}) if matches!(name.as_str(),
                 "Boolean" | "Number" | "String" | "Object" | "Symbol" | "BigInt"
         ))
     }
 
     pub fn is_object_wrapper_for(&self, object_wrapper_name: &str) -> bool {
-        matches!(self, Ast::Ident(Ident(name, _)) if name.as_str() == object_wrapper_name)
+        matches!(self, Ast::Ident(Ident{name, ..}) if name.as_str() == object_wrapper_name)
     }
 
     pub fn is_string_object_wrapper(&self) -> bool {
@@ -913,7 +913,10 @@ impl<'a> Ast<'a> {
             ast if ast.is_object_interface() => return None,
             _ => "Object",
         };
-        Some(Ast::Ident(Ident(name.to_string(), self.as_span())))
+        Some(Ast::Ident(Ident {
+            name: name.to_string(),
+            span: self.as_span(),
+        }))
     }
 
     /// Anything that returns true is a feature that has a direct equivalent in TypeScript.
@@ -1079,12 +1082,10 @@ impl<'a> Ast<'a> {
         }
     }
 
-    fn merge_spans(&'a self, other: &Ast<'a>) -> Span<'a> {
+    fn merge_spans(&'a self, other: &'a Ast<'a>) -> Span<'a> {
         let a = self.as_span();
         let b = other.as_span();
-        let start = a.start().min(b.start());
-        let end = a.end().min(b.end());
-        Span::new(a.get_input(), start, end).unwrap()
+        merge_spans(a, b)
     }
 
     fn as_span(&self) -> Span {
@@ -1101,9 +1102,9 @@ impl<'a> Ast<'a> {
             Ast::CondExpr(x) => x.span,
             Ast::ExtendsInfixOp(x) => x.span,
             Ast::ExtendsExpr(x) => x.span,
-            Ast::Infer(x) => x.span.unwrap(),
+            Ast::Infer(x) => x.span,
             Ast::ExtendsPrefixOp(x) => x.span,
-            Ast::Ident(Ident(_, span)) => *span,
+            Ast::Ident(x) => x.span,
             Ast::IfExpr(x) => x.span,
             Ast::ImportStatement(x) => x.span,
             Ast::LetExpr(x) => x.span,
@@ -1114,7 +1115,7 @@ impl<'a> Ast<'a> {
             Ast::TypeLiteral(x) => x.span,
             Ast::Primitive(_) => todo!(),
             Ast::Program(x) => todo!(),
-            Ast::Statement(x) => x.span.unwrap(),
+            Ast::Statement(x) => x.span,
             Ast::UnitTest(x) => x.span,
             Ast::String(x) => todo!(),
             Ast::TemplateString(x) => todo!(),
@@ -1125,9 +1126,15 @@ impl<'a> Ast<'a> {
             Ast::FunctionType(x) => x.span,
             Ast::UnknownKeyword(span) => *span,
             Ast::AnyKeyword(span) => *span,
-            Ast::NoOp => todo!(),
+            Ast::NoOp(span) => *span,
         }
     }
+}
+
+pub fn merge_spans<'a>(a: Span<'a>, b: Span<'a>) -> Span<'a> {
+    let start = a.start().min(b.start());
+    let end = a.end().min(b.end());
+    Span::new(a.get_input(), start, end).unwrap()
 }
 
 #[cfg(test)]
@@ -1687,21 +1694,22 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Ident<'a>(
-    pub String,
+#[serde(transparent)]
+pub struct Ident<'a> {
+    pub name: String,
     #[serde(skip)]
-    pub Span<'a>,
-);
+    pub span: Span<'a>,
+}
 
 impl<'a> Ident<'a> {
     fn pretty(&self) -> D<()> {
-        D::text(&self.0)
+        D::text(&self.name)
     }
 }
 
 impl<'a> typescript::Pretty for Ident<'a> {
     fn to_ts(&self) -> D<()> {
-        D::text(self.0.clone())
+        D::text(self.name.clone())
     }
 }
 

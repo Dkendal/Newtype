@@ -10,8 +10,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Eq, Clone)]
 pub struct Node<'a> {
-    /// Generated nodes have no span
-    pub span: Option<Span<'a>>,
+    pub span: Span<'a>,
     pub value: Box<Ast<'a>>,
 }
 
@@ -30,25 +29,19 @@ impl<'a> serde::Serialize for Node<'a> {
     }
 }
 
-impl<'a> From<Ast<'a>> for Node<'a> {
-    fn from(v: Ast<'a>) -> Self {
-        Self::generate(Box::new(v))
-    }
-}
-
 impl<'a> Node<'a> {
     pub fn from_pair<R>(pair: &pest::iterators::Pair<'a, R>, value: Ast<'a>) -> Self
     where
         R: pest::RuleType,
     {
         Self {
-            span: Some(pair.clone().as_span()),
+            span: pair.clone().as_span(),
             value: Box::new(value),
         }
     }
 
     pub fn as_span(&self) -> Span<'a> {
-        self.span.unwrap()
+        self.span
     }
 
     pub fn to_sexp(&self) -> serde_lexpr::Result<serde_lexpr::Value> {
@@ -57,13 +50,9 @@ impl<'a> Node<'a> {
 
     pub fn from_span(span: Span<'a>, value: Ast<'a>) -> Self {
         Self {
-            span: Some(span),
+            span,
             value: Box::new(value),
         }
-    }
-
-    pub fn generate(value: Box<Ast<'a>>) -> Self {
-        Self { span: None, value }
     }
 
     /// Transform the value of the node with a function that takes a reference to the value
@@ -83,14 +72,14 @@ impl<'a> Node<'a> {
         }
     }
 
-    pub fn new(span: Option<Span<'a>>, value: Ast<'a>) -> Self {
+    pub fn new(span: Span<'a>, value: Ast<'a>) -> Self {
         Self {
             span,
             value: Box::new(value),
         }
     }
 
-    pub fn set_span(&mut self, span: Option<Span<'a>>) {
+    pub fn set_span(&mut self, span: Span<'a>) {
         self.span = span;
     }
 
@@ -641,15 +630,6 @@ impl<'a> Node<'a> {
 pub type Nodes<'a> = Vec<Node<'a>>;
 
 pub type Bindings<'a> = HashMap<Ident<'a>, Node<'a>>;
-
-impl<'a> Default for Node<'a> {
-    fn default() -> Self {
-        Node {
-            span: None,
-            value: Box::new(Ast::NoOp),
-        }
-    }
-}
 
 impl<'a> typescript::Pretty for Node<'a> {
     fn to_ts(&self) -> pretty::RcDoc<()> {

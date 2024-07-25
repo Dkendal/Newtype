@@ -33,7 +33,7 @@ impl<'a> MatchExpr<'a> {
                 let span = *span;
 
                 Node {
-                    span: Some(span),
+                    span,
                     value: Box::new(Ast::from(ExtendsExpr {
                         span,
                         lhs: value.clone(),

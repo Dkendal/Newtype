@@ -51,18 +51,21 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                     op.as_span().get_input(),
                     lhs.as_span().start(),
                     op.as_span().end(),
-                ).unwrap();
+                )
+                .unwrap();
 
                 let inner = op.into_inner().next().unwrap();
                 let index = parse(inner);
 
-                Ast::Access(Access {
-                    lhs,
-                    rhs: index,
-                    is_dot: false,
-                    span
-                })
-                .into()
+                Node::new(
+                    span,
+                    Ast::Access(Access {
+                        lhs,
+                        rhs: index,
+                        is_dot: false,
+                        span,
+                    }),
+                )
             }
             array_modifier => Node::from_pair(&op, Ast::Array(lhs)),
             application => {
@@ -93,7 +96,8 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 op.as_span().get_input(),
                 lhs.as_span().start(),
                 rhs.as_span().end(),
-            ).unwrap();
+            )
+            .unwrap();
 
             if op.as_rule() == pipe {
                 return replace_pipe_with_type_application(rhs, lhs, op);
@@ -102,12 +106,12 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
             let ast = match op.as_rule() {
                 union => Ast::UnionType(UnionType {
                     types: vec![lhs, rhs],
-                    span
+                    span,
                 }),
 
                 intersection => Ast::IntersectionType(IntersectionType {
                     types: vec![lhs, rhs],
-                    span
+                    span,
                 }),
 
                 colon2 => {
@@ -147,13 +151,13 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                     lhs,
                     rhs,
                     is_dot: true,
-                    span
+                    span,
                 }),
 
                 rule => unreachable!("Expected infix operator, found {:?}", rule),
             };
 
-            Node::new(Some(span), ast)
+            Node::new(span, ast)
         })
         .parse(pairs)
 }
@@ -234,7 +238,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
             let span = Span::new(
                 op.as_span().get_input(),
                 op.as_span().start(),
-                primary_node.span.unwrap().end(),
+                primary_node.span.end(),
             ).unwrap();
 
             if op.as_rule() == Rule::not && !primary_node.value.is_extends_infix_op() {
@@ -245,7 +249,6 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
                     op.as_span(),
                 );
 
-                let error_expr = if let Some(span) = primary_node.span {
                     // FIXME need rule for the primary node for better reporting
                     let error = Error::<Rule>::new_from_span(
                         ErrorVariant::ParsingError {
@@ -255,10 +258,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
                         span,
                     );
 
-                    format!("{error}")
-                } else {
-                    String::new()
-                };
+                let error_expr = format!("{error}");
 
                 panic!("{error_not}\n{error_expr}\nHint: You might have forgotten to wrap the expression in parentheses, `not` has higher precedence than other operators.");
             }
@@ -269,7 +269,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
             };
 
            Node::new(
-                Some(span),
+                span,
                 Ast::ExtendsPrefixOp(ExtendsPrefixOp {
                     op,
                     value: primary_node,
@@ -279,9 +279,9 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
         })
         .map_infix(|lhs: Node, op: Pair, rhs: Node| {
             let span = Span::new(
-                lhs.span.unwrap().get_input(),
-                lhs.span.unwrap().start(),
-                rhs.span.unwrap().end(),
+                lhs.span.get_input(),
+                lhs.span.start(),
+                rhs.span.end(),
             ).unwrap();
 
             let op = match op.as_rule() {
@@ -309,7 +309,9 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
                 ),
             };
 
-            Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span }).into()
+            let ast = Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span });
+
+            Node::new(span, ast)
         })
         .parse(pairs)
 }
@@ -356,7 +358,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
         Rule::boolean => {
             let value = pair.into_inner().next().unwrap();
 
-             match value.as_rule() {
+            match value.as_rule() {
                 Rule::literal_true => new(Ast::TrueKeyword(span)),
                 Rule::literal_false => new(Ast::FalseKeyword(span)),
                 _ => unreachable!(),
@@ -401,7 +403,7 @@ fn parse_builtin(pair: Pair) -> Ast {
     Ast::Builtin(Builtin {
         name,
         argument,
-        span
+        span,
     })
 }
 
@@ -435,7 +437,7 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
         .find(match_tag("else"))
         .and_then(|p| p.into_inner().find(match_tag("body")))
         .map(parse)
-        .unwrap_or_else(|| Ast::NeverKeyword(span).into());
+        .unwrap_or_else(|| Node::new(span, Ast::NeverKeyword(span)));
 
     MatchExpr {
         span,
@@ -454,7 +456,7 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
         .find(match_tag("else"))
         .and_then(|p| p.into_inner().find(match_tag("body")))
         .map(parse)
-        .unwrap_or_else(|| Ast::NeverKeyword(span).into());
+        .unwrap_or_else(|| Node::new(span, Ast::NeverKeyword(span)));
 
     let arms: Vec<cond_expr::Arm> = inner
         .clone()
@@ -536,7 +538,7 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
             assert_eq!(value.as_rule(), Rule::expr);
             let value = parse(value);
 
-            (Ident(name, span), value)
+            (Ident { name, span }, value)
         })
         .collect();
 
@@ -665,13 +667,12 @@ fn parse_type_alias(pair: Pair) -> Ast {
         .map(|p| p.as_rule() == Rule::export)
         .unwrap_or(false);
 
-    let name = inner
-        .clone()
-        .find(match_tag("name"))
-        .unwrap()
-        .as_str();
+    let name = inner.clone().find(match_tag("name")).unwrap().as_str();
 
-    let name = Ident(name.to_string(), span);
+    let name = Ident {
+        name: name.to_string(),
+        span,
+    };
 
     let body = inner.clone().find(match_tag("body")).map(parse).unwrap();
 
@@ -682,7 +683,7 @@ fn parse_type_alias(pair: Pair) -> Ast {
         name,
         params,
         body,
-        span
+        span,
     })
 }
 
@@ -858,7 +859,10 @@ fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypePara
 
 fn parse_ident(pair: Pair) -> Ident {
     assert_ast!(pair, Rule::ident);
-    Ident(pair.as_str().to_string(), pair.as_span())
+    Ident {
+        name: pair.as_str().to_string(),
+        span: pair.as_span(),
+    }
 }
 
 fn pair_as_string_literal(pair: Pair) -> String {
@@ -917,7 +921,7 @@ fn parse_import_statement(pair: Pair) -> Node {
         Ast::ImportStatement(ImportStatement {
             import_clause,
             module,
-            span
+            span,
         }),
     )
 }
@@ -936,7 +940,7 @@ fn parse_if_expr(pair: Pair) -> Node {
     let else_branch = inner
         .find(match_tag("else"))
         .map(parse)
-        .unwrap_or_else(|| Ast::NeverKeyword(span).into());
+        .unwrap_or_else(|| Node::new(span, Ast::NeverKeyword(span)));
 
     let else_branch = else_branch;
 
