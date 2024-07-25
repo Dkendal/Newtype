@@ -274,11 +274,11 @@ pub struct FunctionType<'a> {
 
 impl<'a> typescript::Pretty for FunctionType<'a> {
     fn to_ts(&self) -> D<()> {
-        let sep = D::text(",").append(D::line());
+        let sep = D::text(",").append(D::space());
 
         let params = D::intersperse(self.params.iter().map(|param| param.to_ts()), sep);
 
-        let params = D::text("(").append(params).append(D::text(")"));
+        let params = D::text("(").append(params).append(D::text(")")).group();
 
         let return_type = self.return_type.to_ts();
 
@@ -293,6 +293,9 @@ impl<'a> typescript::Pretty for FunctionType<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Parameter<'a> {
+    #[serde(skip)]
+    pub span: Span<'a>,
+    pub ellipsis: bool,
     pub name: String,
     pub kind: Node<'a>,
 }
@@ -301,11 +304,15 @@ impl<'a> typescript::Pretty for Parameter<'a> {
     fn to_ts(&self) -> D<()> {
         let kind = self.kind.to_ts();
 
-        D::nil()
-            .append(self.name.clone())
-            .append(":")
-            .append(D::space())
-            .append(kind)
+        if self.ellipsis {
+            D::text("...")
+        } else {
+            D::nil()
+        }
+        .append(self.name.clone())
+        .append(":")
+        .append(D::space())
+        .append(kind)
     }
 }
 
@@ -872,6 +879,11 @@ impl<'a> Ast<'a> {
     #[must_use]
     pub fn is_intersection(&self) -> bool {
         matches!(self, Self::IntersectionType { .. })
+    }
+
+    #[must_use]
+    pub fn is_ident(&self) -> bool {
+        matches!(self, Self::Ident(_))
     }
 
     pub fn as_ident(&self) -> Option<&Identifier> {

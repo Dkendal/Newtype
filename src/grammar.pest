@@ -156,7 +156,7 @@ function_type = {
 }
 
 parameters = {
-    "(" ~ (unnamed_parameters | named_parameters)? ~ ")"
+    "(" ~ (named_parameters | unnamed_parameters)? ~ ")"
 }
 
 unnamed_parameters = {
@@ -168,11 +168,13 @@ named_parameters = {
 }
 
 named_parameter = {
-    #name = ident ~ ":" ~ #type = expr
+    ellipsis_token? ~ #name = ident ~ ":" ~ #type = expr
 }
 
+ellipsis_token = { "..." }
+
 unnamed_parameter = {
-    expr
+    ellipsis_token? ~ expr
 }
 
 boolean = {

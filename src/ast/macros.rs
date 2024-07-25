@@ -39,10 +39,11 @@ macro_rules! next_pair {
 pub(crate) use next_pair;
 
 macro_rules! take_pairs {
-    ($pairs:expr, $($rule:expr),+) => {
+    ($pairs:expr, $($rule:expr),+) => {{
+        let mut pairs = $pairs;
         (
             $(
-                if let Some(pair) = $pairs.next() {
+                if let Some(pair) = pairs.next() {
                     if pair.as_rule() == $rule {
                         pair
                     } else {
@@ -53,7 +54,7 @@ macro_rules! take_pairs {
                 }
             ),+
         )
-    };
+    }};
 }
 
 pub(crate) use take_pairs;

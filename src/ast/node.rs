@@ -44,6 +44,10 @@ impl<'a> Node<'a> {
         }
     }
 
+    pub fn as_span(&self) -> Span<'a> {
+        self.span.unwrap()
+    }
+
     pub fn to_sexp(&self) -> serde_lexpr::Result<serde_lexpr::Value> {
         serde_lexpr::to_value(self)
     }

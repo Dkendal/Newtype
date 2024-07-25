@@ -90,9 +90,35 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 intersection => Ast::IntersectionType {
                     types: vec![lhs, rhs],
                 },
-                colon2 => Ast::Path(Path {
-                    segments: vec![lhs, rhs],
-                }),
+                colon2 => {
+                    let mut acc = vec![];
+
+                    match lhs.value.as_ref() {
+                        Ast::Path(Path { segments }) => acc.extend(segments.to_owned()),
+                        Ast::Ident(_) => acc.push(lhs),
+                        _ => parse_error!(
+                            lhs,
+                            format!(
+                                "Expected path or identifier, found {:?}",
+                                lhs.value.as_ref()
+                            )
+                        ),
+                    };
+
+                    match rhs.value.as_ref() {
+                        Ast::Path(Path { segments }) => acc.extend(segments.to_owned()),
+                        Ast::Ident(_) => acc.push(rhs),
+                        _ => parse_error!(
+                            rhs,
+                            format!(
+                                "Expected path or identifier, found {:?}",
+                                rhs.value.as_ref()
+                            )
+                        ),
+                    };
+
+                    Ast::Path(Path { segments: acc })
+                }
                 dot_op => Ast::Access {
                     lhs,
                     rhs,
@@ -460,11 +486,24 @@ fn parse_function_type(pair: Pair) -> FunctionType {
             .enumerate()
             .map(|(idx, pair)| {
                 assert_eq!(pair.as_rule(), Rule::unnamed_parameter);
-                let kind = next_pair!(pair.into_inner(), Rule::expr);
+
+                let binding = pair
+                    .clone()
+                    .into_inner()
+                    .map(|p| (p.as_rule(), p))
+                    .collect_vec();
+
+                let (ellipsis, name, kind) = match binding.as_slice() {
+                    [(Rule::ellipsis_token, _), (_, kind)] => (true, "rest".to_string(), kind),
+                    [(_, kind)] => (false, format!("arg{}", idx), kind),
+                    _ => unreachable!(),
+                };
 
                 Parameter {
-                    name: format!("arg{}", idx),
-                    kind: parse(kind),
+                    span: pair.as_span(),
+                    ellipsis,
+                    name,
+                    kind: parse(kind.to_owned()),
                 }
             })
             .collect_vec(),
@@ -472,14 +511,26 @@ fn parse_function_type(pair: Pair) -> FunctionType {
         Some(Rule::named_parameters) => next
             .unwrap()
             .into_inner()
-            .map(|p| {
-                assert_eq!(p.as_rule(), Rule::named_parameter);
+            .map(|pair| {
+                assert_eq!(pair.as_rule(), Rule::named_parameter);
 
-                let (name, ty) = take_pairs!(p.clone().into_inner(), Rule::ident, Rule::expr);
+                let binding = pair
+                    .clone()
+                    .into_inner()
+                    .map(|p| (p.as_rule(), p))
+                    .collect_vec();
+
+                let (ellipsis, name, kind) = match binding.as_slice() {
+                    [(Rule::ellipsis_token, _), (_, name), (_, kind)] => (true, name, kind),
+                    [(_, name), (_, kind)] => (false, name, kind),
+                    _ => unreachable!(),
+                };
 
                 Parameter {
+                    span: pair.as_span(),
+                    ellipsis,
                     name: name.as_str().to_string(),
-                    kind: parse(ty),
+                    kind: parse(kind.to_owned()),
                 }
             })
             .collect_vec(),
@@ -958,13 +1009,18 @@ mod parser_tests {
     }
 
     #[rstest]
+    // literals
     #[case("1", "1")]
     #[case("true", "true")]
     #[case("false", "false")]
-    // #[case("{}", "{}")]
+    #[case("{}", "{}")]
+    // function type
     #[case("() => void", "() => void")]
     #[case("(any) => void", "(arg0: any) => void")]
-    // #[case("(x: any) => void", "(x: any) => void")]
+    #[case("(x: any) => void", "(x: any) => void")]
+    #[case("(x: any, y: any, z: any) => void", "(x: any, y: any, z: any) => void")]
+    #[case("(...args: any[]) => void", "(...args: any[]) => void")]
+    #[case("(...any[]) => void", "(...rest: any[]) => void")]
     fn test_parse_expr_typescript_repr(#[case] input: &str, #[case] expected: &str) {
         use crate::parser;
 
@@ -972,7 +1028,7 @@ mod parser_tests {
 
         match result {
             Ok(pairs) => {
-                let actual = parser::parse_expr(pairs).simplify().render_pretty_ts(0);
+                let actual = parser::parse_expr(pairs).simplify().render_pretty_ts(80);
 
                 pretty_assertions::assert_eq!(actual, expected);
             }
