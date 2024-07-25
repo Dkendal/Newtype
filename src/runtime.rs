@@ -3,6 +3,8 @@ use node::Node;
 use crate::ast::*;
 
 pub mod builtin {
+    use UnionType;
+
     use crate::extends_result::ExtendsResult;
 
     use super::*;
@@ -37,9 +39,9 @@ pub mod builtin {
                 ExtendsResult::Both => {
                     let mut tree = tree.clone();
 
-                    let value = Ast::UnionType {
+                    let value = Ast::UnionType(UnionType {
                         types: vec![then_branch.clone(), else_branch.clone()],
-                    };
+                    });
 
                     tree.set_value(Box::new(value));
                     (tree, acc)

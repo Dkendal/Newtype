@@ -371,6 +371,12 @@ pub struct Builtin<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub struct UnionType<'a>{
+    pub types: Vec<Node<'a>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
     Access(Access<'a>),
@@ -382,9 +388,7 @@ pub enum Ast<'a> {
     ApplyGeneric(ApplyGeneric<'a>),
     Array(Node<'a>),
     #[serde(rename(serialize = "|"))]
-    UnionType {
-        types: Vec<Node<'a>>,
-    },
+    UnionType(UnionType<'a>),
     #[serde(rename(serialize = "&"))]
     IntersectionType(IntersectionType<'a>),
     Builtin(Builtin<'a>),
@@ -690,7 +694,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }
             Ast::UnitTest(_) => D::nil(),
             Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
-            Ast::UnionType { types } => {
+            Ast::UnionType(UnionType { types }) => {
                 let sep = D::line().append(D::text("|")).append(D::space());
                 D::intersperse(
                     types.iter().map(|t| match t.value.as_ref() {
