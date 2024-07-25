@@ -155,7 +155,12 @@ impl<'a> Node<'a> {
         let (node, ctx) = pre(node, ctx);
 
         let (node, ctx) = match &*node.value {
-            Ast::Access(Access { lhs, rhs, is_dot }) => {
+            Ast::Access(Access {
+                lhs,
+                rhs,
+                is_dot,
+                span,
+            }) => {
                 let (lhs, _) = red(lhs, ctx.clone());
                 let (rhs, _) = red(rhs, ctx.clone());
 
@@ -163,6 +168,7 @@ impl<'a> Node<'a> {
                     lhs,
                     rhs,
                     is_dot: *is_dot,
+                    span: *span,
                 });
 
                 (self.clone().replace(ast), ctx)
@@ -187,12 +193,17 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::Builtin(Builtin { name, argument }) => {
+            Ast::Builtin(Builtin {
+                name,
+                argument,
+                span,
+            }) => {
                 let (argument, _) = red(argument, ctx.clone());
 
                 let ast = Ast::Builtin(Builtin {
                     name: name.clone(),
                     argument,
+                    span: *span,
                 });
 
                 result(ast, ctx)
@@ -224,7 +235,7 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs }) => {
+            Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span }) => {
                 let (lhs, _) = red(lhs, ctx.clone());
                 let (rhs, _) = red(rhs, ctx.clone());
 
@@ -232,6 +243,7 @@ impl<'a> Node<'a> {
                     lhs,
                     op: op.clone(),
                     rhs,
+                    span: *span,
                 });
 
                 (self.clone().replace(ast), ctx)
@@ -259,12 +271,13 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value }) => {
+            Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value, span }) => {
                 let value = red_pick_node(value, ctx.clone());
 
                 let ast = Ast::ExtendsPrefixOp(ExtendsPrefixOp {
                     op: op.clone(),
                     value,
+                    span: *span,
                 });
 
                 result(ast, ctx)
@@ -293,10 +306,12 @@ impl<'a> Node<'a> {
             Ast::ImportStatement(ImportStatement {
                 import_clause,
                 module,
+                span,
             }) => {
                 let ast = Ast::ImportStatement(ImportStatement {
                     import_clause: import_clause.clone(),
                     module: module.clone(),
+                    span: *span,
                 });
 
                 result(ast, ctx)
@@ -431,6 +446,7 @@ impl<'a> Node<'a> {
                 name,
                 params,
                 body,
+                span,
             }) => {
                 let (body, _) = body.traverse(ctx.clone(), pre, post);
 
@@ -463,29 +479,30 @@ impl<'a> Node<'a> {
                     name: name.clone(),
                     params,
                     body,
+                    span: *span,
                 });
 
                 result(ast, ctx)
             }
 
-            Ast::UnionType(UnionType { types }) => {
+            Ast::UnionType(UnionType { types, span }) => {
                 let types = types
                     .iter()
                     .map(|ty| red_pick_node(ty, ctx.clone()))
                     .collect_vec();
 
-                let ast = Ast::UnionType(UnionType { types });
+                let ast = Ast::UnionType(UnionType { types, span: *span });
 
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::IntersectionType(IntersectionType { types }) => {
+            Ast::IntersectionType(IntersectionType { types, span }) => {
                 let types = types
                     .iter()
                     .map(|ty| red_pick_node(ty, ctx.clone()))
                     .collect_vec();
 
-                let ast = Ast::IntersectionType(IntersectionType { types });
+                let ast = Ast::IntersectionType(IntersectionType { types, span: *span });
 
                 (self.clone().replace(ast), ctx)
             }
@@ -503,42 +520,57 @@ impl<'a> Node<'a> {
 
         let identity = |node, ctx| (node, ctx);
 
-        let (tree, _) = self.traverse(
-            bindings,
-            &identity,
-            &|node, ctx| match node.value.as_ref() {
+        let (tree, _) = self.traverse(bindings, &identity, &|node, ctx| {
+            let span = node.as_span();
+            let value = node.value.as_ref();
+
+            match value {
                 Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
                 Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
                 Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
                 Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
-                Ast::Path(path) => (path.simplify(node.span.unwrap()), ctx),
-                Ast::UnionType(UnionType { types }) => match types.as_slice() {
+                Ast::Path(path) => (path.simplify(span), ctx),
+                Ast::UnionType(UnionType { types, .. }) => match types.as_slice() {
                     // Flatten nested union types (both)
                     [Node {
                         span: _,
-                        value: box Ast::UnionType(UnionType { types: lhs_types }),
+                        value:
+                            box Ast::UnionType(UnionType {
+                                types: lhs_types, ..
+                            }),
                     }, Node {
                         span: _,
-                        value: box Ast::UnionType(UnionType { types: rhs_types }),
+                        value:
+                            box Ast::UnionType(UnionType {
+                                types: rhs_types, ..
+                            }),
                     }] => {
                         let types = lhs_types
                             .clone()
                             .into_iter()
                             .chain(rhs_types.clone())
                             .collect();
-                        let ast = Ast::UnionType(UnionType { types });
+
+                        let ast = Ast::UnionType(UnionType { types, span });
+
                         let node = Node::new(node.span, ast);
 
                         (node, ctx)
                     }
                     // Flatten nested union types (rhs)
                     [lhs, Node {
-                        span: _,
-                        value: box Ast::UnionType(UnionType { types: rhs_types }),
+                        value:
+                            box Ast::UnionType(UnionType {
+                                types: rhs_types, ..
+                            }),
+                        ..
                     }] => {
                         let mut types = rhs_types.clone();
+
                         types.push(lhs.clone());
-                        let ast = Ast::UnionType(UnionType { types });
+
+                        let ast = Ast::UnionType(UnionType { types, span });
+
                         let node = Node::new(node.span, ast);
 
                         (node, ctx)
@@ -546,11 +578,17 @@ impl<'a> Node<'a> {
                     // Flatten nested union types (lhs)
                     [Node {
                         span: _,
-                        value: box Ast::UnionType(UnionType { types: lhs_types }),
+                        value:
+                            box Ast::UnionType(UnionType {
+                                types: lhs_types, ..
+                            }),
                     }, rhs] => {
                         let mut types = lhs_types.clone();
+
                         types.push(rhs.clone());
-                        let ast = Ast::UnionType(UnionType { types });
+
+                        let ast = Ast::UnionType(UnionType { types, span });
+
                         let node = Node::new(node.span, ast);
 
                         (node, ctx)
@@ -565,14 +603,16 @@ impl<'a> Node<'a> {
                             .cloned()
                             .collect_vec();
 
-                        let node = Node::new(node.span, Ast::UnionType(UnionType { types }));
+                        let ast = Ast::UnionType(UnionType { types, span });
+
+                        let node = Node::new(node.span, ast);
 
                         (node, ctx)
                     }
                 },
                 _ => (node, ctx),
-            },
-        );
+            }
+        });
         tree
     }
 
@@ -600,7 +640,7 @@ impl<'a> Node<'a> {
 
 pub type Nodes<'a> = Vec<Node<'a>>;
 
-pub type Bindings<'a> = HashMap<Ident, Node<'a>>;
+pub type Bindings<'a> = HashMap<Ident<'a>, Node<'a>>;
 
 impl<'a> Default for Node<'a> {
     fn default() -> Self {

@@ -47,13 +47,20 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
         })
         .map_postfix(|lhs, op| match op.as_rule() {
             indexed_access => {
+                let span = Span::new(
+                    op.as_span().get_input(),
+                    lhs.as_span().start(),
+                    op.as_span().end(),
+                ).unwrap();
+
                 let inner = op.into_inner().next().unwrap();
                 let index = parse(inner);
-                // FIXME missing span
+
                 Ast::Access(Access {
                     lhs,
                     rhs: index,
                     is_dot: false,
+                    span
                 })
                 .into()
             }
@@ -82,31 +89,28 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
             }
         })
         .map_infix(|lhs, op, rhs| {
+            let span = Span::new(
+                op.as_span().get_input(),
+                lhs.as_span().start(),
+                rhs.as_span().end(),
+            ).unwrap();
+
             if op.as_rule() == pipe {
                 return replace_pipe_with_type_application(rhs, lhs, op);
             }
 
-            let span = if let [Some(a), Some(b)] = [lhs.span, rhs.span] {
-                pest::Span::new(a.get_input(), a.start(), b.end())
-            } else {
-                None
-            };
-
             let ast = match op.as_rule() {
                 union => Ast::UnionType(UnionType {
                     types: vec![lhs, rhs],
+                    span
                 }),
+
                 intersection => Ast::IntersectionType(IntersectionType {
                     types: vec![lhs, rhs],
+                    span
                 }),
-                colon2 => {
-                    let span = Span::new(
-                        op.as_span().get_input(),
-                        lhs.as_span().start(),
-                        rhs.as_span().end(),
-                    )
-                    .unwrap();
 
+                colon2 => {
                     let mut acc = vec![];
 
                     match lhs.value.as_ref() {
@@ -138,15 +142,18 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                         segments: acc,
                     })
                 }
+
                 dot_op => Ast::Access(Access {
                     lhs,
                     rhs,
                     is_dot: true,
+                    span
                 }),
+
                 rule => unreachable!("Expected infix operator, found {:?}", rule),
             };
 
-            Node::new(span, ast)
+            Node::new(Some(span), ast)
         })
         .parse(pairs)
 }
@@ -224,6 +231,12 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
             unreachable!("Expected postfix operation, found {:?}", op.as_rule())
         })
         .map_prefix(|op, primary_node| {
+            let span = Span::new(
+                op.as_span().get_input(),
+                op.as_span().start(),
+                primary_node.span.unwrap().end(),
+            ).unwrap();
+
             if op.as_rule() == Rule::not && !primary_node.value.is_extends_infix_op() {
                 let error_not = Error::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -255,15 +268,22 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
                 rule => parse_error!(op, vec![Rule::not], vec![rule]),
             };
 
-            Node::new(
-                primary_node.span,
+           Node::new(
+                Some(span),
                 Ast::ExtendsPrefixOp(ExtendsPrefixOp {
                     op,
                     value: primary_node,
+                    span
                 }),
             )
         })
         .map_infix(|lhs: Node, op: Pair, rhs: Node| {
+            let span = Span::new(
+                lhs.span.unwrap().get_input(),
+                lhs.span.unwrap().start(),
+                rhs.span.unwrap().end(),
+            ).unwrap();
+
             let op = match op.as_rule() {
                 Rule::extends => InfixOp::Extends,
                 Rule::not_extends => InfixOp::NotExtends,
@@ -288,8 +308,8 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
                     vec![rule]
                 ),
             };
-            // FIXME missing span
-            Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs }).into()
+
+            Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span }).into()
         })
         .parse(pairs)
 }
@@ -329,18 +349,18 @@ pub(crate) fn parse(pair: Pair) -> Node {
         Rule::number => new(Ast::Number(node_as_string(pair))),
         Rule::string => parse_string(pair),
         Rule::template_string => new(Ast::TemplateString(node_as_string(pair))),
-        Rule::ident => new(Ast::Ident(pair.as_str().into())),
+        Rule::ident => new(Ast::Ident(parse_ident(pair))),
         Rule::never => new(Ast::NeverKeyword(span)),
         Rule::any => new(Ast::AnyKeyword(span)),
         Rule::unknown => new(Ast::UnknownKeyword(span)),
         Rule::boolean => {
             let value = pair.into_inner().next().unwrap();
-            let value = match value.as_rule() {
-                Rule::literal_true => true,
-                Rule::literal_false => false,
+
+             match value.as_rule() {
+                Rule::literal_true => new(Ast::TrueKeyword(span)),
+                Rule::literal_false => new(Ast::FalseKeyword(span)),
                 _ => unreachable!(),
-            };
-            new(Ast::BooleanLiteral(value))
+            }
         }
         Rule::tuple => parse_tuple(pair),
         Rule::macro_call => new(Ast::MacroCall(parse_macro_call(pair))),
@@ -363,6 +383,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
 }
 
 fn parse_builtin(pair: Pair) -> Ast {
+    let span = pair.as_span();
     let mut inner = pair.into_inner();
 
     let name = inner.find(match_tag("name")).unwrap();
@@ -379,7 +400,8 @@ fn parse_builtin(pair: Pair) -> Ast {
 
     Ast::Builtin(Builtin {
         name,
-        argument: (argument),
+        argument,
+        span
     })
 }
 
@@ -504,6 +526,7 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
         .into_inner()
         .filter(match_tag("binding"))
         .map(|pair| {
+            let span = pair.as_span();
             let mut inner = pair.into_inner();
             let name = inner.next().unwrap();
             assert_eq!(name.as_rule(), Rule::ident);
@@ -513,7 +536,7 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
             assert_eq!(value.as_rule(), Rule::expr);
             let value = parse(value);
 
-            (Ident(name), value)
+            (Ident(name, span), value)
         })
         .collect();
 
@@ -634,6 +657,7 @@ fn parse_unittest(pair: Pair) -> UnitTest {
 }
 
 fn parse_type_alias(pair: Pair) -> Ast {
+    let span = pair.as_span();
     let inner = pair.clone().into_inner();
 
     let export = inner
@@ -645,8 +669,9 @@ fn parse_type_alias(pair: Pair) -> Ast {
         .clone()
         .find(match_tag("name"))
         .unwrap()
-        .as_str()
-        .into();
+        .as_str();
+
+    let name = Ident(name.to_string(), span);
 
     let body = inner.clone().find(match_tag("body")).map(parse).unwrap();
 
@@ -657,6 +682,7 @@ fn parse_type_alias(pair: Pair) -> Ast {
         name,
         params,
         body,
+        span
     })
 }
 
@@ -830,9 +856,9 @@ fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypePara
     params
 }
 
-fn pair_as_identifier(pair: Pair) -> Ident {
+fn parse_ident(pair: Pair) -> Ident {
     assert_ast!(pair, Rule::ident);
-    Ident(pair.as_str().to_string())
+    Ident(pair.as_str().to_string(), pair.as_span())
 }
 
 fn pair_as_string_literal(pair: Pair) -> String {
@@ -851,6 +877,7 @@ fn parse_string(pair: Pair) -> Node {
 }
 
 fn parse_import_statement(pair: Pair) -> Node {
+    let span = pair.as_span();
     let mut inner = pair.clone().into_inner();
 
     let import_clause = inner.next().unwrap();
@@ -864,8 +891,8 @@ fn parse_import_statement(pair: Pair) -> Node {
                     let span = pair.as_span();
                     let mut inner = pair.into_inner();
                     let name = inner.next().unwrap();
-                    let name = pair_as_identifier(name);
-                    let alias = inner.next().map(pair_as_identifier);
+                    let name = parse_ident(name);
+                    let alias = inner.next().map(parse_ident);
 
                     ImportSpecifier {
                         span,
@@ -890,6 +917,7 @@ fn parse_import_statement(pair: Pair) -> Node {
         Ast::ImportStatement(ImportStatement {
             import_clause,
             module,
+            span
         }),
     )
 }
@@ -992,7 +1020,7 @@ fn parse_property_key_inner(key: Pair) -> ObjectPropertyKey {
         Rule::index_property_key => parse_index_property_key(key),
         Rule::computed_property_key => {
             let inner = key.into_inner().next().unwrap();
-            let id = pair_as_identifier(inner);
+            let id = parse_ident(inner);
             ObjectPropertyKey::Computed(id)
         }
         _ => unreachable!(),

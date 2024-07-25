@@ -20,36 +20,45 @@ pub mod builtin {
     }
 
     pub fn unquote(tree: Node) -> Node {
-        let (out, _) = tree.prewalk((), &|tree, acc| match &*tree.value {
-            Ast::MacroCall(_) => todo!(),
-            Ast::ExtendsExpr(ExtendsExpr {
-                lhs,
-                rhs,
-                then_branch,
-                else_branch,
-                span,
-            }) => match lhs.is_subtype(rhs) {
-                ExtendsResult::True => (then_branch.clone(), acc),
-                ExtendsResult::False => (else_branch.clone(), acc),
-                ExtendsResult::Never => {
-                    let mut tree = tree.clone();
-                    tree.set_value(Box::new(Ast::NeverKeyword(*span)));
-                    (tree, acc)
-                }
-                ExtendsResult::Both => {
-                    let mut tree = tree.clone();
+        let (out, _) = tree.prewalk((), &|tree, acc| {
+            let span = tree.as_span();
 
-                    let value = Ast::UnionType(UnionType {
-                        types: vec![then_branch.clone(), else_branch.clone()],
-                    });
+            match &*tree.value {
+                Ast::MacroCall(_) => todo!(),
 
-                    tree.set_value(Box::new(value));
-                    (tree, acc)
-                }
-            },
-            Ast::MappedType(_) => todo!(),
-            x if x.is_typescript_feature() => (tree, acc),
-            x => unimplemented!("Expected AST to have been desugared {:?}", x),
+                Ast::ExtendsExpr(ExtendsExpr {
+                    lhs,
+                    rhs,
+                    then_branch,
+                    else_branch,
+                    ..
+                }) => match lhs.is_subtype(rhs) {
+                    ExtendsResult::True => (then_branch.clone(), acc),
+                    ExtendsResult::False => (else_branch.clone(), acc),
+                    ExtendsResult::Never => {
+                        let mut tree = tree.clone();
+                        tree.set_value(Box::new(Ast::NeverKeyword(span)));
+                        (tree, acc)
+                    }
+                    ExtendsResult::Both => {
+                        let mut tree = tree.clone();
+
+                        let value = Ast::UnionType(UnionType {
+                            types: vec![then_branch.clone(), else_branch.clone()],
+                            span,
+                        });
+
+                        tree.set_value(Box::new(value));
+                        (tree, acc)
+                    }
+                },
+
+                Ast::MappedType(_) => todo!(),
+
+                x if x.is_typescript_feature() => (tree, acc),
+
+                x => unimplemented!("Expected AST to have been desugared {:?}", x),
+            }
         });
         out
     }

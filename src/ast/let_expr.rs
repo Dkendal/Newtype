@@ -10,7 +10,7 @@ use std::collections::HashMap;
 pub struct LetExpr<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub bindings: HashMap<Ident, Node<'a>>,
+    pub bindings: HashMap<Ident<'a>, Node<'a>>,
     pub body: Node<'a>,
 }
 

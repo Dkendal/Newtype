@@ -54,12 +54,12 @@ impl<'a> Path<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ExtendsExpr<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub lhs: Node<'a>,
     pub rhs: Node<'a>,
     pub then_branch: Node<'a>,
     pub else_branch: Node<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 impl<'a> ExtendsExpr<'a> {
@@ -100,18 +100,18 @@ impl<'a> ExtendsExpr<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tuple<'a> {
+    pub items: Nodes<'a>,
     #[serde(skip)]
     pub span: Span<'a>,
-    pub items: Nodes<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ApplyGeneric<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub receiver: Node<'a>,
     pub args: Nodes<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 impl<'a> typescript::Pretty for ApplyGeneric<'a> {
@@ -129,22 +129,22 @@ impl<'a> typescript::Pretty for ApplyGeneric<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MappedType<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub index: String,
     pub iterable: Node<'a>,
     pub remapped_as: Option<Node<'a>>,
     pub readonly_mod: Option<MappingModifier>,
     pub optional_mod: Option<MappingModifier>,
     pub body: Node<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ObjectLiteral<'a> {
+    pub properties: Vec<ObjectProperty<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
-    pub properties: Vec<ObjectProperty<'a>>,
 }
 
 impl<'a> ObjectLiteral<'a> {
@@ -182,13 +182,13 @@ impl<'a> typescript::Pretty for ObjectLiteral<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Interface<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub export: bool,
     pub name: String,
     pub extends: Option<String>,
     pub params: Vec<TypeParameter<'a>>,
     pub definition: Vec<ObjectProperty<'a>>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 impl<'a> typescript::Pretty for Interface<'a> {
@@ -262,19 +262,19 @@ impl<'a> typescript::Pretty for Interface<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct UnitTest<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub name: String,
     pub body: Vec<Node<'a>>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MacroCall<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub name: String,
     pub args: Vec<Node<'a>>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 impl<'a> MacroCall<'a> {
@@ -302,10 +302,10 @@ impl<'a> MacroCall<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FunctionType<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub params: Vec<Parameter<'a>>,
     pub return_type: Node<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 impl<'a> typescript::Pretty for FunctionType<'a> {
@@ -329,11 +329,11 @@ impl<'a> typescript::Pretty for FunctionType<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Parameter<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub ellipsis: bool,
     pub name: String,
     pub kind: Node<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 impl<'a> typescript::Pretty for Parameter<'a> {
@@ -358,12 +358,16 @@ pub struct Access<'a> {
     pub lhs: Node<'a>,
     pub rhs: Node<'a>,
     pub is_dot: bool,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct IntersectionType<'a> {
     pub types: Vec<Node<'a>>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -371,12 +375,16 @@ pub struct IntersectionType<'a> {
 pub struct Builtin<'a> {
     pub name: BuiltinKeyword,
     pub argument: Node<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct UnionType<'a> {
     pub types: Vec<Node<'a>>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -385,6 +393,8 @@ pub struct ExtendsInfixOp<'a> {
     pub lhs: Node<'a>,
     pub op: InfixOp,
     pub rhs: Node<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -392,6 +402,8 @@ pub struct ExtendsInfixOp<'a> {
 pub struct ExtendsPrefixOp<'a> {
     pub op: PrefixOp,
     pub value: Node<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -399,15 +411,19 @@ pub struct ExtendsPrefixOp<'a> {
 pub struct ImportStatement<'a> {
     pub import_clause: ImportClause<'a>,
     pub module: String,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypeAlias<'a> {
     pub export: bool,
-    pub name: Ident,
+    pub name: Ident<'a>,
     pub params: Vec<TypeParameter<'a>>,
     pub body: Node<'a>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -415,7 +431,6 @@ pub struct TypeAlias<'a> {
 pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
     Access(Access<'a>),
-    BooleanLiteral(bool),
     #[serde(rename(serialize = "macro"))]
     MacroCall(MacroCall<'a>),
     #[serde(rename(serialize = "apply"))]
@@ -431,7 +446,7 @@ pub enum Ast<'a> {
     ExtendsExpr(ExtendsExpr<'a>),
     Infer(Node<'a>),
     ExtendsPrefixOp(ExtendsPrefixOp<'a>),
-    Ident(Ident),
+    Ident(Ident<'a>),
     #[serde(rename(serialize = "if"))]
     IfExpr(IfExpr<'a>),
     #[serde(rename(serialize = "import"))]
@@ -457,6 +472,8 @@ pub enum Ast<'a> {
     #[serde(rename(serialize = "never"))]
     NeverKeyword(#[serde(skip)] Span<'a>),
     #[serde(rename(serialize = "unknown"))]
+    TrueKeyword(#[serde(skip)] Span<'a>),
+    FalseKeyword(#[serde(skip)] Span<'a>),
     Interface(Interface<'a>),
     FunctionType(FunctionType<'a>),
     UnknownKeyword(#[serde(skip)] Span<'a>),
@@ -501,6 +518,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 name,
                 params,
                 body,
+                ..
             }) => {
                 let body = (*body).to_ts();
 
@@ -548,6 +566,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 lhs,
                 rhs,
                 is_dot: true,
+                ..
             }) => {
                 let rhs = rhs
                     .value
@@ -587,10 +606,11 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::NeverKeyword(_) => D::text("never"),
             Ast::AnyKeyword(_) => D::text("any"),
             Ast::UnknownKeyword(_) => D::text("unknown"),
-            Ast::BooleanLiteral(value) => D::text(value.to_string()),
+            Ast::TrueKeyword(_) => D::text("true"),
+            Ast::FalseKeyword(_) => D::text("false"),
             Ast::Infer(value) => D::text("infer").append(D::space()).append(value.to_ts()),
 
-            Ast::Builtin(Builtin { name, argument }) => {
+            Ast::Builtin(Builtin { name, argument, .. }) => {
                 name.to_ts().append(" ").append(argument.to_ts())
             }
 
@@ -626,6 +646,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 lhs,
                 op: InfixOp::Extends,
                 rhs,
+                ..
             }) => lhs
                 .to_ts()
                 .append(D::space())
@@ -696,6 +717,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::ImportStatement(ImportStatement {
                 import_clause,
                 module,
+                ..
             }) => {
                 let import_clause = import_clause.to_ts();
 
@@ -719,7 +741,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             }
             Ast::UnitTest(_) => D::nil(),
             Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
-            Ast::UnionType(UnionType { types }) => {
+            Ast::UnionType(UnionType { types, .. }) => {
                 let sep = D::line().append(D::text("|")).append(D::space());
                 D::intersperse(
                     types.iter().map(|t| match t.value.as_ref() {
@@ -732,7 +754,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 )
                 .group()
             }
-            Ast::IntersectionType(IntersectionType { types }) => {
+            Ast::IntersectionType(IntersectionType { types , ..}) => {
                 let sep = D::line().append(D::text("&")).append(D::space());
                 D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
             }
@@ -799,7 +821,7 @@ impl<'a> Ast<'a> {
     }
 
     fn has_identifier(&self, name: &str) -> bool {
-        matches!(self, Ast::Ident(Ident(value)) if value == name)
+        matches!(self, Ast::Ident(Ident(value, _)) if value == name)
     }
 
     fn is_primitive(&self) -> bool {
@@ -818,11 +840,13 @@ impl<'a> Ast<'a> {
 
             Ast::Number(_) => P::Number,
 
-            Ast::BooleanLiteral(_) => P::Boolean,
+            Ast::TrueKeyword(_) => P::Boolean,
+
+            Ast::FalseKeyword(_) => P::Boolean,
 
             Ast::TypeLiteral(_) => P::Object,
 
-            Ast::Ident(Ident(name)) => match name.as_str() {
+            Ast::Ident(Ident(name, _)) => match name.as_str() {
                 "String" => P::String,
                 "Number" => P::Number,
                 "Boolean" => P::Boolean,
@@ -838,13 +862,13 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_object_wrapper(&self) -> bool {
-        matches!(self, Ast::Ident(Ident(name)) if matches!(name.as_str(),
+        matches!(self, Ast::Ident(Ident(name, _)) if matches!(name.as_str(),
                 "Boolean" | "Number" | "String" | "Object" | "Symbol" | "BigInt"
         ))
     }
 
     pub fn is_object_wrapper_for(&self, object_wrapper_name: &str) -> bool {
-        matches!(self, Ast::Ident(Ident(name)) if name.as_str() == object_wrapper_name)
+        matches!(self, Ast::Ident(Ident(name, _)) if name.as_str() == object_wrapper_name)
     }
 
     pub fn is_string_object_wrapper(&self) -> bool {
@@ -889,7 +913,7 @@ impl<'a> Ast<'a> {
             ast if ast.is_object_interface() => return None,
             _ => "Object",
         };
-        Some(Ast::Ident(Ident(name.to_string())))
+        Some(Ast::Ident(Ident(name.to_string(), self.as_span())))
     }
 
     /// Anything that returns true is a feature that has a direct equivalent in TypeScript.
@@ -915,7 +939,8 @@ impl<'a> Ast<'a> {
                 | Ast::Tuple(_)
                 | Ast::UnknownKeyword(_)
                 | Ast::Interface(_)
-                | Ast::BooleanLiteral(_)
+                | Ast::TrueKeyword(_)
+                | Ast::FalseKeyword(_)
                 | Ast::UnionType { .. }
                 | Ast::Access { .. }
                 | Ast::AnyKeyword(_)
@@ -1051,6 +1076,56 @@ impl<'a> Ast<'a> {
                 dbg!(a, b);
                 T::False
             }
+        }
+    }
+
+    fn merge_spans(&'a self, other: &Ast<'a>) -> Span<'a> {
+        let a = self.as_span();
+        let b = other.as_span();
+        let start = a.start().min(b.start());
+        let end = a.end().min(b.end());
+        Span::new(a.get_input(), start, end).unwrap()
+    }
+
+    fn as_span(&self) -> Span {
+        match self {
+            Ast::Access(x) => x.span,
+            Ast::TrueKeyword(span) => *span,
+            Ast::FalseKeyword(span) => *span,
+            Ast::MacroCall(x) => x.span,
+            Ast::ApplyGeneric(x) => x.span,
+            Ast::Array(x) => todo!(),
+            Ast::UnionType(x) => x.span,
+            Ast::IntersectionType(x) => x.span,
+            Ast::Builtin(x) => x.span,
+            Ast::CondExpr(x) => x.span,
+            Ast::ExtendsInfixOp(x) => x.span,
+            Ast::ExtendsExpr(x) => x.span,
+            Ast::Infer(x) => x.span.unwrap(),
+            Ast::ExtendsPrefixOp(x) => x.span,
+            Ast::Ident(Ident(_, span)) => *span,
+            Ast::IfExpr(x) => x.span,
+            Ast::ImportStatement(x) => x.span,
+            Ast::LetExpr(x) => x.span,
+            Ast::MappedType(x) => x.span,
+            Ast::MatchExpr(x) => x.span,
+            Ast::Path(x) => x.span,
+            Ast::Number(x) => todo!(),
+            Ast::TypeLiteral(x) => x.span,
+            Ast::Primitive(_) => todo!(),
+            Ast::Program(x) => todo!(),
+            Ast::Statement(x) => x.span.unwrap(),
+            Ast::UnitTest(x) => x.span,
+            Ast::String(x) => todo!(),
+            Ast::TemplateString(x) => todo!(),
+            Ast::Tuple(x) => x.span,
+            Ast::TypeAlias(x) => todo!(),
+            Ast::NeverKeyword(span) => *span,
+            Ast::Interface(x) => x.span,
+            Ast::FunctionType(x) => x.span,
+            Ast::UnknownKeyword(span) => *span,
+            Ast::AnyKeyword(span) => *span,
+            Ast::NoOp => todo!(),
         }
     }
 }
@@ -1382,7 +1457,7 @@ mod simplify_tests {
 #[serde(rename_all = "kebab-case")]
 pub enum ImportClause<'a> {
     Named(Vec<ImportSpecifier<'a>>),
-    Namespace { alias: Ident },
+    Namespace { alias: Ident<'a> },
 }
 
 impl<'a> typescript::Pretty for ImportClause<'a> {
@@ -1419,8 +1494,8 @@ impl<'a> typescript::Pretty for ImportClause<'a> {
 pub struct ImportSpecifier<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub module_export_name: Ident,
-    pub alias: Option<Ident>,
+    pub module_export_name: Ident<'a>,
+    pub alias: Option<Ident<'a>>,
 }
 
 impl<'a> typescript::Pretty for ImportSpecifier<'a> {
@@ -1524,7 +1599,7 @@ pub enum MappingModifier {
 pub enum ObjectPropertyKey<'a> {
     Index(PropertyKeyIndex<'a>),
     Key(String),
-    Computed(Ident),
+    Computed(Ident<'a>),
 }
 
 impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
@@ -1612,29 +1687,19 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct Ident(pub String);
-// #[serde(skip)]
-// pub span: Span<'a>,
+pub struct Ident<'a>(
+    pub String,
+    #[serde(skip)]
+    pub Span<'a>,
+);
 
-impl From<String> for Ident {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for Ident {
-    fn from(value: &str) -> Self {
-        Self(value.to_string())
-    }
-}
-
-impl Ident {
+impl<'a> Ident<'a> {
     fn pretty(&self) -> D<()> {
         D::text(&self.0)
     }
 }
 
-impl typescript::Pretty for Ident {
+impl<'a> typescript::Pretty for Ident<'a> {
     fn to_ts(&self) -> D<()> {
         D::text(self.0.clone())
     }
