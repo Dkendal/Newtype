@@ -155,15 +155,15 @@ impl<'a> Node<'a> {
         let (node, ctx) = pre(node, ctx);
 
         let (node, ctx) = match &*node.value {
-            Ast::Access { lhs, rhs, is_dot } => {
+            Ast::Access(Access { lhs, rhs, is_dot }) => {
                 let (lhs, _) = red(lhs, ctx.clone());
                 let (rhs, _) = red(rhs, ctx.clone());
 
-                let ast = Ast::Access {
+                let ast = Ast::Access(Access {
                     lhs,
                     rhs,
                     is_dot: *is_dot,
-                };
+                });
 
                 (self.clone().replace(ast), ctx)
             }

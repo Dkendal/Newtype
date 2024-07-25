@@ -50,11 +50,11 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 let inner = op.into_inner().next().unwrap();
                 let index = parse(inner);
                 // FIXME missing span
-                Ast::Access {
+                Ast::Access(Access {
                     lhs,
                     rhs: index,
                     is_dot: false,
-                }
+                })
                 .into()
             }
             array_modifier => Node::from_pair(&op, Ast::Array(lhs)),
@@ -138,11 +138,11 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                         segments: acc,
                     })
                 }
-                dot_op => Ast::Access {
+                dot_op => Ast::Access(Access {
                     lhs,
                     rhs,
                     is_dot: true,
-                },
+                }),
                 rule => unreachable!("Expected infix operator, found {:?}", rule),
             };
 

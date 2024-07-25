@@ -350,13 +350,17 @@ impl<'a> typescript::Pretty for Parameter<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub struct Access<'a> {
+    pub lhs: Node<'a>,
+    pub rhs: Node<'a>,
+    pub is_dot: bool,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
-    Access {
-        lhs: Node<'a>,
-        rhs: Node<'a>,
-        is_dot: bool,
-    },
+    Access(Access<'a>),
     Boolean(bool),
     Any,
     #[serde(rename(serialize = "macro"))]
@@ -503,11 +507,11 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::IfExpr(..) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
-            Ast::Access {
+            Ast::Access(Access {
                 lhs,
                 rhs,
                 is_dot: true,
-            } => {
+            }) => {
                 let rhs = rhs
                     .value
                     .as_ident()
@@ -519,7 +523,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .append(D::text("]"))
                     .group()
             }
-            Ast::Access { lhs, rhs, .. } => lhs
+            Ast::Access(Access { lhs, rhs, .. }) => lhs
                 .to_ts()
                 .append(D::text("["))
                 .append(rhs.to_ts())
@@ -957,7 +961,7 @@ impl<'a> Ast<'a> {
 
             (_, A::Never) => T::False,
 
-            (A::Access { .. }, _) => todo!(),
+            (A::Access(Access { .. }), _) => todo!(),
 
             (A::ApplyGeneric(_), _) => todo!(),
 
@@ -1612,7 +1616,7 @@ impl<'a> TypeParameter<'a> {
         constraint: Option<Node<'a>>,
         default: Option<Node<'a>>,
         rest: bool,
-        span: Span<'a>
+        span: Span<'a>,
     ) -> Self {
         Self {
             name,
