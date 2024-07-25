@@ -377,10 +377,10 @@ fn parse_builtin(pair: Pair) -> Ast {
 
     let argument = inner.find(match_tag("argument")).map(parse).unwrap();
 
-     Ast::Builtin {
+    Ast::Builtin(Builtin {
         name,
         argument: (argument),
-    }
+    })
 }
 
 fn parse_match_expr(pair: Pair) -> MatchExpr {

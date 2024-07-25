@@ -358,8 +358,15 @@ pub struct Access<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct IntersectionType<'a>{
+pub struct IntersectionType<'a> {
     pub types: Vec<Node<'a>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Builtin<'a> {
+    pub name: BuiltinKeyword,
+    pub argument: Node<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -380,10 +387,7 @@ pub enum Ast<'a> {
     },
     #[serde(rename(serialize = "&"))]
     IntersectionType(IntersectionType<'a>),
-    Builtin {
-        name: BuiltinKeyword,
-        argument: Node<'a>,
-    },
+    Builtin(Builtin<'a>),
     CondExpr(cond_expr::CondExpr<'a>),
     ExtendsInfixOp {
         lhs: Node<'a>,
@@ -557,7 +561,9 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::Boolean(value) => D::text(value.to_string()),
             Ast::Infer(value) => D::text("infer").append(D::space()).append(value.to_ts()),
 
-            Ast::Builtin { name, argument } => name.to_ts().append(" ").append(argument.to_ts()),
+            Ast::Builtin(Builtin { name, argument }) => {
+                name.to_ts().append(" ").append(argument.to_ts())
+            }
 
             Ast::ExtendsExpr(ExtendsExpr {
                 lhs,
@@ -688,7 +694,9 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 let sep = D::line().append(D::text("|")).append(D::space());
                 D::intersperse(
                     types.iter().map(|t| match t.value.as_ref() {
-                        Ast::IntersectionType(IntersectionType { .. }) => surround(t.to_ts(), "(", ")"),
+                        Ast::IntersectionType(IntersectionType { .. }) => {
+                            surround(t.to_ts(), "(", ")")
+                        }
                         _ => t.to_ts(),
                     }),
                     sep,
@@ -971,7 +979,7 @@ impl<'a> Ast<'a> {
 
             (A::Array(_), _) => todo!(),
 
-            (A::Builtin { .. }, _) => todo!(),
+            (A::Builtin(Builtin { .. }), _) => todo!(),
 
             (A::Path(_), _) => todo!(),
 

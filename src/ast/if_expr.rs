@@ -68,7 +68,8 @@ pub(crate) fn expand_to_extends<'a>(
                 lhs.as_span().get_input(),
                 lhs.as_span().start(),
                 rhs.as_span().start(),
-            ).unwrap();
+            )
+            .unwrap();
 
             // TODO report a syntax error here
             // need to include spans in ASTNode<'a>

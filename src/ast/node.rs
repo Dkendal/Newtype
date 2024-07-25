@@ -187,13 +187,13 @@ impl<'a> Node<'a> {
                 result(ast, ctx)
             }
 
-            Ast::Builtin { name, argument } => {
+            Ast::Builtin(Builtin { name, argument }) => {
                 let (argument, _) = red(argument, ctx.clone());
 
-                let ast = Ast::Builtin {
+                let ast = Ast::Builtin(Builtin {
                     name: name.clone(),
                     argument,
-                };
+                });
 
                 result(ast, ctx)
             }
