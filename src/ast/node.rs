@@ -629,7 +629,7 @@ impl<'a> Node<'a> {
 
 pub type Nodes<'a> = Vec<Node<'a>>;
 
-pub type Bindings<'a> = HashMap<Ident<'a>, Node<'a>>;
+pub type Bindings<'a> = HashMap<String, Node<'a>>;
 
 impl<'a> typescript::Pretty for Node<'a> {
     fn to_ts(&self) -> pretty::RcDoc<()> {

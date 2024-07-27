@@ -1,3 +1,4 @@
+use node::Bindings;
 use pretty::RcDoc as D;
 use serde::Serialize;
 
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 pub struct LetExpr<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub bindings: HashMap<Ident<'a>, Node<'a>>,
+    pub bindings: Bindings<'a>,
     pub body: Node<'a>,
 }
 
@@ -25,11 +26,13 @@ impl<'a> LetExpr<'a> {
             bindings.insert(ident.clone(), new_value);
         }
 
+        dbg!(self);
+
         let (tree, _) = self
             .body
             .prewalk(bindings, &|node, bindings| match &*node.value {
                 Ast::Ident(id) => {
-                    let new_value = bindings.get(id).unwrap_or(&node).clone();
+                    let new_value = bindings.get(&id.name).unwrap_or(&node).clone();
                     (new_value, bindings)
                 }
                 _ => (node, bindings),

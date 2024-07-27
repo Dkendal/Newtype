@@ -528,7 +528,6 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
         .into_inner()
         .filter(match_tag("binding"))
         .map(|pair| {
-            let span = pair.as_span();
             let mut inner = pair.into_inner();
             let name = inner.next().unwrap();
             assert_eq!(name.as_rule(), Rule::ident);
@@ -538,7 +537,7 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
             assert_eq!(value.as_rule(), Rule::expr);
             let value = parse(value);
 
-            (Ident { name, span }, value)
+            (name, value)
         })
         .collect();
 
