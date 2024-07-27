@@ -121,8 +121,6 @@ impl<'a> Node<'a> {
 
         // Produce a new node and context
         // Reducer
-        let red = move |node: &Node<'a>, ctx| node.traverse(ctx, pre, post);
-
         // Reducer only returns the node, drops the context
         let red_pick_node = move |node: &Node<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
 
@@ -148,8 +146,8 @@ impl<'a> Node<'a> {
                 is_dot,
                 span,
             }) => {
-                let (lhs, _) = red(lhs, ctx.clone());
-                let (rhs, _) = red(rhs, ctx.clone());
+                let (lhs, _) = lhs.traverse(ctx.clone(), pre, post);
+                let (rhs, _) = rhs.traverse(ctx.clone(), pre, post);
 
                 let ast = Ast::Access(Access {
                     lhs,
@@ -175,7 +173,7 @@ impl<'a> Node<'a> {
             }
 
             Ast::Array(inner) => {
-                let (inner, _) = red(inner, ctx.clone());
+                let (inner, _) = inner.traverse(ctx.clone(), pre, post);
                 let ast = Ast::Array(inner);
                 (self.clone().replace(ast), ctx)
             }
@@ -185,7 +183,7 @@ impl<'a> Node<'a> {
                 argument,
                 span,
             }) => {
-                let (argument, _) = red(argument, ctx.clone());
+                let (argument, _) = argument.traverse(ctx.clone(), pre, post);
 
                 let ast = Ast::Builtin(Builtin {
                     name: name.clone(),
@@ -223,8 +221,8 @@ impl<'a> Node<'a> {
             }
 
             Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span }) => {
-                let (lhs, _) = red(lhs, ctx.clone());
-                let (rhs, _) = red(rhs, ctx.clone());
+                let (lhs, _) = lhs.traverse(ctx.clone(), pre, post);
+                let (rhs, _) = rhs.traverse(ctx.clone(), pre, post);
 
                 let ast = Ast::ExtendsInfixOp(ExtendsInfixOp {
                     lhs,
@@ -276,8 +274,8 @@ impl<'a> Node<'a> {
                 else_branch,
                 span,
             }) => {
-                let (condition, _) = red(condition, ctx.clone());
-                let (then_branch, _) = red(then_branch, ctx.clone());
+                let (condition, _) = condition.traverse(ctx.clone(), pre, post);
+                let (then_branch, _) = then_branch.traverse(ctx.clone(), pre, post);
                 let else_branch = else_branch.as_ref().map(fn_red_pick_node(ctx.clone()));
 
                 let ast = Ast::IfExpr(IfExpr {
@@ -304,11 +302,11 @@ impl<'a> Node<'a> {
                 (self.clone().replace(ast), ctx)
             }
             Ast::LetExpr(let_expr) => {
-                let (body, _) = red(&let_expr.body, ctx.clone());
+                let (body, _) = &let_expr.body.traverse(ctx.clone(), pre, post);
 
                 let ast = Ast::LetExpr(LetExpr {
                     bindings: let_expr.bindings.clone(),
-                    body,
+                    body: body.clone(),
                     span: let_expr.span,
                 });
 
@@ -323,7 +321,7 @@ impl<'a> Node<'a> {
                 body,
                 span,
             }) => {
-                let (iterable, _) = red(iterable, ctx.clone());
+                let (iterable, _) = iterable.traverse(ctx.clone(), pre, post);
                 let remapped_as = remapped_as.as_ref().map(fn_red_pick_node(ctx.clone()));
                 let body = red_pick_node(body, ctx.clone());
 
@@ -345,7 +343,7 @@ impl<'a> Node<'a> {
                 else_arm,
                 span,
             }) => {
-                let (value, _) = red(value, ctx.clone());
+                let (value, _) = value.traverse(ctx.clone(), pre, post);
 
                 let arms = arms
                     .iter()
@@ -404,7 +402,7 @@ impl<'a> Node<'a> {
                 let mut statements = statements.clone();
 
                 for statement in &mut statements {
-                    (*statement, ctx) = red(statement, ctx.clone());
+                    (*statement, ctx) = statement.traverse(ctx.clone(), pre, post);
                 }
 
                 let ast = Ast::Program(statements);
@@ -413,7 +411,7 @@ impl<'a> Node<'a> {
             }
             Ast::Statement(inner) => {
                 // Statement MAY propagate context to siblings
-                let (inner, ctx) = red(inner, ctx.clone());
+                let (inner, ctx) = inner.traverse(ctx.clone(), pre, post);
                 let ast = Ast::Statement(inner);
                 (self.clone().replace(ast), ctx)
             }
