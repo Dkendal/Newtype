@@ -117,12 +117,12 @@ impl<'a> Node<'a> {
         // Produce a new node and context
         // Reducer
         // Reducer only returns the node, drops the context
-        let red_pick_node = move |node: &Node<'a>, ctx| (node.traverse(ctx, pre, post).0);
+        let red_pick_node = move |node: &Node<'a>, ctx: Context| (node.traverse(ctx, pre, post).0);
 
         // Reducer that maps over a list of nodes
         let red_items = move |node: &Nodes<'a>, ctx: Context| {
             node.iter()
-                .map(|item| red_pick_node(item, ctx.clone()))
+                .map(|item| item.traverse(ctx.clone(), pre, post).0)
                 .collect_vec()
         };
 
@@ -197,13 +197,13 @@ impl<'a> Node<'a> {
                     .iter()
                     .map(|arm| {
                         let mut arm = arm.clone();
-                        arm.condition = red_pick_node(&arm.condition, ctx.clone());
-                        arm.body = red_pick_node(&arm.body, ctx.clone());
+                        arm.condition = arm.condition.traverse(ctx.clone(), pre, post).0;
+                        arm.body = arm.body.traverse(ctx.clone(), pre, post).0;
                         arm
                     })
                     .collect_vec();
 
-                let else_arm = red_pick_node(else_arm, ctx.clone());
+                let else_arm = else_arm.traverse(ctx.clone(), pre, post).0;
 
                 let ast = Ast::CondExpr(CondExpr {
                     arms,
@@ -235,10 +235,10 @@ impl<'a> Node<'a> {
                 else_branch,
                 span,
             }) => {
-                let lhs = red_pick_node(lhs, ctx.clone());
-                let rhs = red_pick_node(rhs, ctx.clone());
-                let then_branch = red_pick_node(then_branch, ctx.clone());
-                let else_branch = red_pick_node(else_branch, ctx.clone());
+                let lhs = lhs.traverse(ctx.clone(), pre, post).0;
+                let rhs = rhs.traverse(ctx.clone(), pre, post).0;
+                let then_branch = then_branch.traverse(ctx.clone(), pre, post).0;
+                let else_branch = else_branch.traverse(ctx.clone(), pre, post).0;
 
                 let ast = Ast::ExtendsExpr(ExtendsExpr {
                     lhs,
@@ -251,7 +251,7 @@ impl<'a> Node<'a> {
             }
 
             Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value, span }) => {
-                let value = red_pick_node(value, ctx.clone());
+                let value = value.traverse(ctx.clone(), pre, post).0;
 
                 let ast = Ast::ExtendsPrefixOp(ExtendsPrefixOp {
                     op: op.clone(),
@@ -317,7 +317,7 @@ impl<'a> Node<'a> {
             }) => {
                 let (iterable, _) = iterable.traverse(ctx.clone(), pre, post);
                 let remapped_as = remapped_as.as_ref().map(fn_red_pick_node(ctx.clone()));
-                let body = red_pick_node(body, ctx.clone());
+                let body = body.traverse(ctx.clone(), pre, post).0;
 
                 let ast = Ast::MappedType(MappedType {
                     index: index.clone(),
@@ -343,13 +343,13 @@ impl<'a> Node<'a> {
                     .iter()
                     .map(|arm| {
                         let mut arm = arm.clone();
-                        arm.pattern = red_pick_node(&arm.pattern, ctx.clone());
-                        arm.body = red_pick_node(&arm.body, ctx.clone());
+                        arm.pattern = arm.pattern.traverse(ctx.clone(), pre, post).0;
+                        arm.body = arm.body.traverse(ctx.clone(), pre, post).0;
                         arm
                     })
                     .collect_vec();
 
-                let else_arm = red_pick_node(else_arm, ctx.clone());
+                let else_arm = else_arm.traverse(ctx.clone(), pre, post).0;
 
                 let ast = Ast::MatchExpr(MatchExpr {
                     value,
@@ -363,7 +363,7 @@ impl<'a> Node<'a> {
             Ast::Path(Path { segments, span }) => {
                 let segments = segments
                     .iter()
-                    .map(|node| red_pick_node(node, ctx.clone()))
+                    .map(|node| node.traverse(ctx.clone(), pre, post).0)
                     .collect_vec();
 
                 let ast = Ast::Path(Path {
@@ -379,7 +379,7 @@ impl<'a> Node<'a> {
                     .iter()
                     .map(|prop| {
                         let mut prop = prop.clone();
-                        prop.value = red_pick_node(&prop.value, ctx.clone());
+                        prop.value = prop.value.traverse(ctx.clone(), pre, post).0;
                         prop
                     })
                     .collect_vec();
@@ -409,11 +409,11 @@ impl<'a> Node<'a> {
                 let ast = Ast::Statement(inner);
                 (self.clone().replace(ast), ctx)
             }
-            ast @ Ast::TemplateString(_) => (node, ctx),
+            Ast::TemplateString(_) => (node, ctx),
             Ast::Tuple(Tuple { items, span }) => {
                 let items = items
                     .iter()
-                    .map(|item| red_pick_node(item, ctx.clone()))
+                    .map(|item| item.traverse(ctx.clone(), pre, post).0)
                     .collect_vec();
 
                 let ast = Ast::Tuple(Tuple { items, span: *span });
@@ -467,7 +467,7 @@ impl<'a> Node<'a> {
             Ast::UnionType(UnionType { types, span }) => {
                 let types = types
                     .iter()
-                    .map(|ty| red_pick_node(ty, ctx.clone()))
+                    .map(|ty| ty.traverse(ctx.clone(), pre, post).0)
                     .collect_vec();
 
                 let ast = Ast::UnionType(UnionType { types, span: *span });
@@ -478,7 +478,7 @@ impl<'a> Node<'a> {
             Ast::IntersectionType(IntersectionType { types, span }) => {
                 let types = types
                     .iter()
-                    .map(|ty| red_pick_node(ty, ctx.clone()))
+                    .map(|ty| ty.traverse(ctx.clone(), pre, post).0)
                     .collect_vec();
 
                 let ast = Ast::IntersectionType(IntersectionType { types, span: *span });
