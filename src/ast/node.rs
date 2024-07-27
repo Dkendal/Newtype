@@ -129,97 +129,38 @@ impl<'a> Node<'a> {
         let (node, ctx) = pre(node, ctx);
 
         let (node, ctx) = match &*node.value {
-            Ast::Access(Access {
-                lhs,
-                rhs,
-                is_dot,
-                span,
-            }) => {
-                let (lhs, _) = lhs.traverse(ctx.clone(), pre, post);
-                let (rhs, _) = rhs.traverse(ctx.clone(), pre, post);
-
-                let ast = Ast::Access(Access {
-                    lhs,
-                    rhs,
-                    is_dot: *is_dot,
-                    span: *span,
-                });
-
+            Ast::Access(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::Access(expr);
                 (self.clone().replace(ast), ctx)
             }
-            Ast::ApplyGeneric(ApplyGeneric {
-                receiver: name,
-                args,
-                span,
-            }) => {
-                let ast = Ast::ApplyGeneric(ApplyGeneric {
-                    receiver: name.clone(),
-                    args: red_items(args, ctx.clone()),
-                    span: *span,
-                });
-
+            Ast::ApplyGeneric(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::ApplyGeneric(expr);
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::Array(inner) => {
-                let (inner, _) = inner.traverse(ctx.clone(), pre, post);
-                let ast = Ast::Array(inner);
+            Ast::Array(expr) => {
+                let (expr, _) = expr.traverse(ctx.clone(), pre, post);
+                let ast = Ast::Array(expr);
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::Builtin(Builtin {
-                name,
-                argument,
-                span,
-            }) => {
-                let (argument, _) = argument.traverse(ctx.clone(), pre, post);
-
-                let ast = Ast::Builtin(Builtin {
-                    name: name.clone(),
-                    argument,
-                    span: *span,
-                });
-
+            Ast::Builtin(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::Builtin(expr);
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::CondExpr(CondExpr {
-                arms,
-                else_arm,
-                span,
-            }) => {
-                let arms = arms
-                    .iter()
-                    .map(|arm| {
-                        let mut arm = arm.clone();
-                        arm.condition = arm.condition.traverse(ctx.clone(), pre, post).0;
-                        arm.body = arm.body.traverse(ctx.clone(), pre, post).0;
-                        arm
-                    })
-                    .collect_vec();
-
-                let else_arm = else_arm.traverse(ctx.clone(), pre, post).0;
-
-                let ast = Ast::CondExpr(CondExpr {
-                    arms,
-                    else_arm,
-                    span: *span,
-                });
-
+            Ast::CondExpr(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::CondExpr(expr);
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span }) => {
-                let (lhs, _) = lhs.traverse(ctx.clone(), pre, post);
-                let (rhs, _) = rhs.traverse(ctx.clone(), pre, post);
-
-                let ast = Ast::ExtendsInfixOp(ExtendsInfixOp {
-                    lhs,
-                    op: op.clone(),
-                    rhs,
-                    span: *span,
-                });
-
+            Ast::ExtendsInfixOp(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::ExtendsInfixOp(expr);
                 (self.clone().replace(ast), ctx)
             }
 

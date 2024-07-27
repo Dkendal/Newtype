@@ -114,6 +114,18 @@ pub struct ApplyGeneric<'a> {
     pub span: Span<'a>,
 }
 
+impl<'a> ApplyGeneric<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        let mut expr = self.clone();
+        expr.receiver = f(&self.receiver);
+        expr.args = self.args.iter().map(f).collect();
+        expr
+    }
+}
+
 impl<'a> typescript::Pretty for ApplyGeneric<'a> {
     fn to_ts(&self) -> D<()> {
         let sep = D::text(",").append(D::space());
@@ -375,6 +387,20 @@ pub struct Access<'a> {
     pub span: Span<'a>,
 }
 
+impl<'a> Access<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            lhs: f(&self.lhs),
+            rhs: f(&self.rhs),
+            is_dot: self.is_dot,
+            span: self.span,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct IntersectionType<'a> {
@@ -390,6 +416,18 @@ pub struct Builtin<'a> {
     pub argument: Node<'a>,
     #[serde(skip)]
     pub span: Span<'a>,
+}
+
+impl<'a> Builtin<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            argument: f(&self.argument),
+            ..self.clone()
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -408,6 +446,19 @@ pub struct ExtendsInfixOp<'a> {
     pub rhs: Node<'a>,
     #[serde(skip)]
     pub span: Span<'a>,
+}
+
+impl<'a> ExtendsInfixOp<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            lhs: f(&self.lhs),
+            rhs: f(&self.rhs),
+            ..self.clone()
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -1539,7 +1590,7 @@ impl<'a> typescript::Pretty for ImportSpecifier<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BuiltinKeyword {
     Keyof,

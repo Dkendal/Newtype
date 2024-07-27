@@ -11,6 +11,24 @@ pub struct CondExpr<'a> {
 }
 
 impl<'a> CondExpr<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        let mut expr = self.clone();
+        expr.arms = self
+            .arms
+            .iter()
+            .map(|arm| Arm {
+                span: arm.span,
+                condition: f(&arm.condition),
+                body: f(&arm.body),
+            })
+            .collect();
+        expr.else_arm = f(&self.else_arm);
+        expr
+    }
+
     pub(crate) fn simplify(&self) -> Node<'a> {
         // Convert a CondExpr to a series of nested ternary expressions
         let CondExpr { arms, else_arm, .. } = self;
