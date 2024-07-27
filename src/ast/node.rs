@@ -120,8 +120,6 @@ impl<'a> Node<'a> {
         }
 
         // Produce a new node and context
-        let result = |node: Ast<'a>, ctx: Context| (self.clone().replace(node), ctx);
-
         // Reducer
         let red = move |node: &Node<'a>, ctx| node.traverse(ctx, pre, post);
 
@@ -173,13 +171,13 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
 
             Ast::Array(inner) => {
                 let (inner, _) = red(inner, ctx.clone());
                 let ast = Ast::Array(inner);
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
 
             Ast::Builtin(Builtin {
@@ -195,7 +193,7 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
 
             Ast::CondExpr(CondExpr {
@@ -221,7 +219,7 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
 
             Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span }) => {
@@ -257,7 +255,7 @@ impl<'a> Node<'a> {
                     else_branch,
                     span: *span,
                 });
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
 
             Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value, span }) => {
@@ -269,7 +267,7 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
 
             Ast::IfExpr(IfExpr {
@@ -303,7 +301,7 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
             Ast::LetExpr(let_expr) => {
                 let (body, _) = red(&let_expr.body, ctx.clone());
@@ -314,7 +312,7 @@ impl<'a> Node<'a> {
                     span: let_expr.span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
             Ast::MappedType(MappedType {
                 index,
@@ -339,7 +337,7 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
             Ast::MatchExpr(MatchExpr {
                 value,
@@ -368,7 +366,7 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
             Ast::Path(Path { segments, span }) => {
                 let segments = segments
@@ -381,7 +379,7 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
             Ast::TypeLiteral(ty) => {
                 let properties = ty
@@ -399,7 +397,7 @@ impl<'a> Node<'a> {
                     span: ty.span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
             Ast::Program(statements) => {
                 let mut ctx = ctx.clone();
@@ -411,15 +409,15 @@ impl<'a> Node<'a> {
 
                 let ast = Ast::Program(statements);
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
             Ast::Statement(inner) => {
                 // Statement MAY propagate context to siblings
                 let (inner, ctx) = red(inner, ctx.clone());
                 let ast = Ast::Statement(inner);
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
-            node @ Ast::TemplateString(_) => result(node.clone(), ctx.clone()),
+            ast @ Ast::TemplateString(_) => (node, ctx),
             Ast::Tuple(Tuple { items, span }) => {
                 let items = items
                     .iter()
@@ -428,7 +426,7 @@ impl<'a> Node<'a> {
 
                 let ast = Ast::Tuple(Tuple { items, span: *span });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
             Ast::TypeAlias(TypeAlias {
                 export,
@@ -471,7 +469,7 @@ impl<'a> Node<'a> {
                     span: *span,
                 });
 
-                result(ast, ctx)
+                (self.clone().replace(ast), ctx)
             }
 
             Ast::UnionType(UnionType { types, span }) => {
