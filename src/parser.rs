@@ -693,14 +693,14 @@ fn parse_statement(pair: Pair) -> Ast {
 }
 
 fn parse_program(pair: Pair) -> Ast {
-    let children: Vec<_> = pair
+    let statements: Vec<_> = pair
         .clone()
         .into_inner()
         .filter(|pair| pair.as_rule() != Rule::EOI) // Remove the end of input token
         .map(parse)
         .collect();
 
-    Ast::Program(children)
+    Ast::Program(Program { statements })
 }
 
 fn parse_interface(pair: Pair) -> Node {

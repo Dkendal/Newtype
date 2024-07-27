@@ -114,11 +114,6 @@ impl<'a> Node<'a> {
         Pre: Fn(Self, Context) -> (Self, Context),
         Post: Fn(Self, Context) -> (Self, Context),
     {
-        // Produce a new node and context
-        // Reducer
-        // Reducer only returns the node, drops the context
-        let red_pick_node = move |node: &Node<'a>, ctx: Context| (node.traverse(ctx, pre, post).0);
-
         // Reducer that maps over a list of nodes
         let red_items = move |node: &Nodes<'a>, ctx: Context| {
             node.iter()
@@ -295,69 +290,19 @@ impl<'a> Node<'a> {
 
                 (self.clone().replace(ast), ctx)
             }
-            Ast::LetExpr(let_expr) => {
-                let (body, _) = &let_expr.body.traverse(ctx.clone(), pre, post);
-
-                let ast = Ast::LetExpr(LetExpr {
-                    bindings: let_expr.bindings.clone(),
-                    body: body.clone(),
-                    span: let_expr.span,
-                });
-
+            Ast::LetExpr(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::LetExpr(expr);
                 (self.clone().replace(ast), ctx)
             }
-            Ast::MappedType(MappedType {
-                index,
-                iterable,
-                remapped_as,
-                readonly_mod,
-                optional_mod,
-                body,
-                span,
-            }) => {
-                let (iterable, _) = iterable.traverse(ctx.clone(), pre, post);
-                let remapped_as = remapped_as.as_ref().map(fn_red_pick_node(ctx.clone()));
-                let body = body.traverse(ctx.clone(), pre, post).0;
-
-                let ast = Ast::MappedType(MappedType {
-                    index: index.clone(),
-                    iterable,
-                    remapped_as,
-                    readonly_mod: readonly_mod.clone(),
-                    optional_mod: optional_mod.clone(),
-                    body,
-                    span: *span,
-                });
-
+            Ast::MappedType(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::MappedType(expr);
                 (self.clone().replace(ast), ctx)
             }
-            Ast::MatchExpr(MatchExpr {
-                value,
-                arms,
-                else_arm,
-                span,
-            }) => {
-                let (value, _) = value.traverse(ctx.clone(), pre, post);
-
-                let arms = arms
-                    .iter()
-                    .map(|arm| {
-                        let mut arm = arm.clone();
-                        arm.pattern = arm.pattern.traverse(ctx.clone(), pre, post).0;
-                        arm.body = arm.body.traverse(ctx.clone(), pre, post).0;
-                        arm
-                    })
-                    .collect_vec();
-
-                let else_arm = else_arm.traverse(ctx.clone(), pre, post).0;
-
-                let ast = Ast::MatchExpr(MatchExpr {
-                    value,
-                    arms,
-                    else_arm,
-                    span: *span,
-                });
-
+            Ast::MatchExpr(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::MatchExpr(expr);
                 (self.clone().replace(ast), ctx)
             }
             Ast::Path(Path { segments, span }) => {
@@ -391,15 +336,15 @@ impl<'a> Node<'a> {
 
                 (self.clone().replace(ast), ctx)
             }
-            Ast::Program(statements) => {
+            Ast::Program(program) => {
                 let mut ctx = ctx.clone();
-                let mut statements = statements.clone();
+                let mut statements = program.statements.clone();
 
                 for statement in &mut statements {
                     (*statement, ctx) = statement.traverse(ctx.clone(), pre, post);
                 }
 
-                let ast = Ast::Program(statements);
+                let ast = Ast::Program(Program { statements });
 
                 (self.clone().replace(ast), ctx)
             }

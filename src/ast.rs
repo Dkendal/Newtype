@@ -139,6 +139,19 @@ pub struct MappedType<'a> {
     pub span: Span<'a>,
 }
 
+impl<'a> MappedType<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        let mut expr = self.clone();
+        expr.iterable = f(&self.iterable);
+        expr.remapped_as = self.remapped_as.as_ref().map(&f);
+        expr.body = f(&self.body);
+        expr
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ObjectLiteral<'a> {
@@ -428,6 +441,12 @@ pub struct TypeAlias<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub struct Program<'a> {
+    pub statements: Vec<Node<'a>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
     Access(Access<'a>),
@@ -461,7 +480,7 @@ pub enum Ast<'a> {
     Number(String),
     TypeLiteral(ObjectLiteral<'a>),
     Primitive(PrimitiveType),
-    Program(Nodes<'a>),
+    Program(Program<'a>),
     Statement(Node<'a>),
     UnitTest(UnitTest<'a>),
     String(String),
@@ -503,9 +522,9 @@ impl<'a> From<cond_expr::CondExpr<'a>> for Ast<'a> {
 impl<'a> typescript::Pretty for Ast<'a> {
     fn to_ts(&self) -> D<()> {
         match self {
-            Ast::Program(stmnts) => {
+            Ast::Program(Program { statements }) => {
                 let mut doc = D::nil();
-                for stmnt in stmnts {
+                for stmnt in statements {
                     doc = doc
                         .append(stmnt.to_ts())
                         .append(D::hardline())
@@ -1609,6 +1628,19 @@ pub enum ObjectPropertyKey<'a> {
     Computed(Ident<'a>),
 }
 
+impl<'a> ObjectPropertyKey<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(Node<'a>) -> Node<'a>,
+    {
+        match self {
+            ObjectPropertyKey::Index(index) => ObjectPropertyKey::Index(index.map(f)),
+            ObjectPropertyKey::Computed(id) => ObjectPropertyKey::Computed(id.clone()),
+            _ => self.clone(),
+        }
+    }
+}
+
 impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
     fn to_ts(&self) -> D<()> {
         match self {
@@ -1627,6 +1659,19 @@ pub struct PropertyKeyIndex<'a> {
     pub key: String,
     pub iterable: Node<'a>,
     pub remapped_as: Option<Node<'a>>,
+}
+
+impl<'a> PropertyKeyIndex<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(Node<'a>) -> Node<'a>,
+    {
+        Self {
+            iterable: f(self.iterable.clone()),
+            remapped_as: self.remapped_as.as_ref().map(|node| f(node.clone())),
+            ..self.clone()
+        }
+    }
 }
 
 impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
@@ -1665,6 +1710,19 @@ pub struct ObjectProperty<'a> {
     pub optional: bool,
     pub key: ObjectPropertyKey<'a>,
     pub value: Node<'a>,
+}
+
+impl<'a> ObjectProperty<'a> {
+    fn map<F>(self, f: F) -> Self
+    where
+        F: Fn(Node<'a>) -> Node<'a>,
+    {
+        Self {
+            value: f(self.value),
+            key: self.key.map(f),
+            ..self
+        }
+    }
 }
 
 impl<'a> typescript::Pretty for ObjectProperty<'a> {

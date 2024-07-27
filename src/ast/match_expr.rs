@@ -11,7 +11,26 @@ pub struct MatchExpr<'a> {
 }
 
 impl<'a> MatchExpr<'a> {
-    pub(crate) fn simplify(&self) -> Node<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        let mut expr = self.clone();
+        expr.value = f(&self.value);
+        expr.arms = self
+            .arms
+            .iter()
+            .map(|arm| Arm {
+                span: arm.span,
+                pattern: f(&arm.pattern),
+                body: f(&arm.body),
+            })
+            .collect();
+        expr.else_arm = f(&self.else_arm);
+        expr
+    }
+
+    pub fn simplify(&self) -> Node<'a> {
         // Convert match arms to a series of extends expressions.
         // Allows for a single wildcard pattern ("_") to be used as the default case.
         let MatchExpr {

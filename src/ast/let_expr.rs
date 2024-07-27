@@ -16,17 +16,23 @@ pub struct LetExpr<'a> {
 }
 
 impl<'a> LetExpr<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        let mut expr = self.clone();
+        expr.body = f(&self.body);
+        expr
+    }
     /// Replace all identifiers in the body of the let expression with their corresponding
     /// values
-    pub(crate) fn simplify(&self) -> super::node::Node<'a> {
+    pub fn simplify(&self) -> super::node::Node<'a> {
         let mut bindings = self.bindings.clone();
         // simplifiy all bindings first
         for (ident, value) in &self.bindings {
             let new_value = value.simplify();
             bindings.insert(ident.clone(), new_value);
         }
-
-        dbg!(self);
 
         let (tree, _) = self
             .body
