@@ -114,15 +114,10 @@ impl<'a> Node<'a> {
         Pre: Fn(Self, Context) -> (Self, Context),
         Post: Fn(Self, Context) -> (Self, Context),
     {
-        /// Extract the node from the tuple
-        pub fn pick_node<T>((node, _ctx): (Node, T)) -> Node {
-            node
-        }
-
         // Produce a new node and context
         // Reducer
         // Reducer only returns the node, drops the context
-        let red_pick_node = move |node: &Node<'a>, ctx| pick_node(node.traverse(ctx, pre, post));
+        let red_pick_node = move |node: &Node<'a>, ctx| (node.traverse(ctx, pre, post).0);
 
         // Reducer that maps over a list of nodes
         let red_items = move |node: &Nodes<'a>, ctx: Context| {
@@ -132,8 +127,7 @@ impl<'a> Node<'a> {
         };
 
         // Returns a closure that takes a node
-        let fn_red_pick_node =
-            move |ctx| move |node: &Node<'a>| pick_node(node.traverse(ctx, pre, post));
+        let fn_red_pick_node = move |ctx| move |node: &Node<'a>| (node.traverse(ctx, pre, post).0);
 
         let node = self.clone();
 
