@@ -126,6 +126,18 @@ pub struct Tuple<'a> {
     pub span: Span<'a>,
 }
 
+impl<'a> Tuple<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            items: self.items.iter().map(f).collect(),
+            span: self.span,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ApplyGeneric<'a> {
@@ -194,6 +206,21 @@ pub struct TypeLiteral<'a> {
 }
 
 impl<'a> TypeLiteral<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            properties: self
+                .properties
+                .clone()
+                .into_iter()
+                .map(|prop| prop.map(|ty| f(ty)))
+                .collect(),
+            span: self.span,
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.properties.is_empty()
     }
@@ -430,6 +457,18 @@ pub struct IntersectionType<'a> {
     pub span: Span<'a>,
 }
 
+impl<'a> IntersectionType<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            types: self.types.iter().map(f).collect(),
+            span: self.span,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Builtin<'a> {
@@ -457,6 +496,18 @@ pub struct UnionType<'a> {
     pub types: Vec<Node<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
+}
+
+impl<'a> UnionType<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            types: self.types.iter().map(f).collect(),
+            span: self.span,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -540,6 +591,17 @@ impl<'a> TypeAlias<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct Program<'a> {
     pub statements: Vec<Node<'a>>,
+}
+
+impl<'a> Program<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            statements: self.statements.iter().map(f).collect(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -896,6 +958,114 @@ impl<'a> From<ExtendsExpr<'a>> for Ast<'a> {
 }
 
 impl<'a> Ast<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        match &self {
+            Ast::Access(expr) => {
+                let expr = expr.map(f);
+                Ast::Access(expr)
+            }
+            Ast::ApplyGeneric(expr) => {
+                let expr = expr.map(f);
+                Ast::ApplyGeneric(expr)
+            }
+
+            Ast::Array(node) => {
+                let node = f(node);
+                Ast::Array(node)
+            }
+
+            Ast::Builtin(expr) => {
+                let expr = expr.map(f);
+                Ast::Builtin(expr)
+            }
+
+            Ast::CondExpr(expr) => {
+                let expr = expr.map(f);
+                Ast::CondExpr(expr)
+            }
+
+            Ast::ExtendsInfixOp(expr) => {
+                let expr = expr.map(f);
+                Ast::ExtendsInfixOp(expr)
+            }
+
+            Ast::ExtendsExpr(expr) => {
+                let expr = expr.map(f);
+                Ast::ExtendsExpr(expr)
+            }
+
+            Ast::ExtendsPrefixOp(expr) => {
+                let expr = expr.map(f);
+                Ast::ExtendsPrefixOp(expr)
+            }
+
+            Ast::IfExpr(expr) => {
+                let expr = expr.map(f);
+                Ast::IfExpr(expr)
+            }
+
+            Ast::LetExpr(expr) => {
+                let expr = expr.map(f);
+                Ast::LetExpr(expr)
+            }
+
+            Ast::MappedType(expr) => {
+                let expr = expr.map(f);
+                Ast::MappedType(expr)
+            }
+
+            Ast::MatchExpr(expr) => {
+                let expr = expr.map(f);
+                Ast::MatchExpr(expr)
+            }
+
+            Ast::Path(expr) => {
+                let expr = expr.map(f);
+                Ast::Path(expr)
+            }
+
+            Ast::TypeLiteral(expr) => {
+                let expr = expr.map(f);
+                Ast::TypeLiteral(expr)
+            }
+
+            Ast::Program(expr) => {
+                let expr = expr.map(f);
+                Ast::Program(expr)
+            }
+
+            Ast::Statement(node) => {
+                let node = f(node);
+                Ast::Statement(node)
+            }
+
+            Ast::Tuple(expr) => {
+                let expr = expr.map(f);
+                Ast::Tuple(expr)
+            }
+
+            Ast::TypeAlias(expr) => {
+                let expr = expr.map(f);
+                Ast::TypeAlias(expr)
+            }
+
+            Ast::UnionType(expr) => {
+                let expr = expr.map(f);
+                Ast::UnionType(expr)
+            }
+
+            Ast::IntersectionType(expr) => {
+                let expr = expr.map(f);
+                Ast::IntersectionType(expr)
+            }
+
+            _ => self.clone(),
+        }
+    }
+
     pub fn to_node(&self, pair: Pair<'a>) -> Node<'a> {
         Node::from_pair(&pair, self.clone())
     }
@@ -1728,7 +1898,7 @@ pub enum ObjectPropertyKey<'a> {
 impl<'a> ObjectPropertyKey<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(Node<'a>) -> Node<'a>,
+        F: Fn(&Node<'a>) -> Node<'a>,
     {
         match self {
             ObjectPropertyKey::Index(index) => ObjectPropertyKey::Index(index.map(f)),
@@ -1761,11 +1931,11 @@ pub struct PropertyKeyIndex<'a> {
 impl<'a> PropertyKeyIndex<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(Node<'a>) -> Node<'a>,
+        F: Fn(&Node<'a>) -> Node<'a>,
     {
         Self {
-            iterable: f(self.iterable.clone()),
-            remapped_as: self.remapped_as.as_ref().map(|node| f(node.clone())),
+            iterable: f(&self.iterable),
+            remapped_as: self.remapped_as.as_ref().map(f),
             ..self.clone()
         }
     }
@@ -1812,10 +1982,10 @@ pub struct ObjectProperty<'a> {
 impl<'a> ObjectProperty<'a> {
     fn map<F>(self, f: F) -> Self
     where
-        F: Fn(Node<'a>) -> Node<'a>,
+        F: Fn(&Node<'a>) -> Node<'a>,
     {
         Self {
-            value: f(self.value),
+            value: f(&self.value),
             key: self.key.map(f),
             ..self
         }
