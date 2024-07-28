@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use cond_expr::CondExpr;
 use if_expr::IfExpr;
@@ -63,10 +63,10 @@ impl<'a> Path<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ExtendsExpr<'a> {
-    pub lhs: Node<'a>,
-    pub rhs: Node<'a>,
-    pub then_branch: Node<'a>,
-    pub else_branch: Node<'a>,
+    pub lhs: Rc<Ast<'a>>,
+    pub rhs: Rc<Ast<'a>>,
+    pub then_branch: Rc<Ast<'a>>,
+    pub else_branch: Rc<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -74,46 +74,47 @@ pub struct ExtendsExpr<'a> {
 impl<'a> ExtendsExpr<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         let mut expr = self.clone();
-        expr.lhs = f(&self.lhs);
-        expr.rhs = f(&self.rhs);
-        expr.then_branch = f(&self.then_branch);
-        expr.else_branch = f(&self.else_branch);
+
+        expr.lhs = Rc::new(f(&self.lhs));
+        expr.rhs = Rc::new(f(&self.rhs));
+        expr.then_branch = Rc::new(f(&self.then_branch));
+        expr.else_branch = Rc::new(f(&self.else_branch));
         expr
     }
 
     pub fn new(
         span: pest::Span<'a>,
-        lhs: Node<'a>,
-        rhs: Node<'a>,
-        then_branch: Node<'a>,
-        else_branch: Node<'a>,
+        lhs: Ast<'a>,
+        rhs: Ast<'a>,
+        then_branch: Ast<'a>,
+        else_branch: Ast<'a>,
     ) -> Self {
-        if !lhs.value.is_typescript_feature() {
+        if !lhs.is_typescript_feature() {
             dbg!(&lhs);
             unreachable!("value must be desugared before this point");
         }
-        if !rhs.value.is_typescript_feature() {
+        if !rhs.is_typescript_feature() {
             dbg!(&rhs);
             unreachable!("value must be desugared before this point");
         }
-        if !then_branch.value.is_typescript_feature() {
+        if !then_branch.is_typescript_feature() {
             dbg!(&then_branch);
             unreachable!("value must be desugared before this point");
         }
-        if !else_branch.value.is_typescript_feature() {
+        if !else_branch.is_typescript_feature() {
             dbg!(&else_branch);
             unreachable!("value must be desugared before this point");
         }
 
         Self {
             span,
-            lhs,
-            rhs,
-            then_branch,
-            else_branch,
+            lhs: Rc::new(lhs),
+            rhs: Rc::new(rhs),
+            then_branch: Rc::new(then_branch),
+            else_branch: Rc::new(else_branch),
         }
     }
 }
@@ -660,6 +661,42 @@ pub enum Ast<'a> {
     NoOp(#[serde(skip)] Span<'a>),
 }
 
+impl<'a> From<Node<'a>> for Ast<'a> {
+    fn from(value: Node<'a>) -> Self {
+        *value.value
+    }
+}
+
+impl<'a> From<&Node<'a>> for Ast<'a> {
+    fn from(value: &Node<'a>) -> Self {
+        (*value.value).clone()
+    }
+}
+
+impl<'a> From<&Node<'a>> for Rc<Ast<'a>> {
+    fn from(value: &Node<'a>) -> Self {
+        Rc::new((*value.value).clone())
+    }
+}
+
+impl<'a> From<Node<'a>> for Rc<Ast<'a>> {
+    fn from(value: Node<'a>) -> Self {
+        Rc::new((*value.value).clone())
+    }
+}
+
+impl<'a> From<Rc<Ast<'a>>> for Box<Ast<'a>> {
+    fn from(value: Rc<Ast<'a>>) -> Self {
+        Box::new((*value).clone())
+    }
+}
+
+impl<'a> From<&Rc<Ast<'a>>> for Box<Ast<'a>> {
+    fn from(value: &Rc<Ast<'a>>) -> Self {
+        Box::new((**value).clone())
+    }
+}
+
 impl<'a> From<if_expr::IfExpr<'a>> for Ast<'a> {
     fn from(v: if_expr::IfExpr<'a>) -> Self {
         Self::IfExpr(v)
@@ -962,6 +999,8 @@ impl<'a> Ast<'a> {
     where
         F: Fn(&Node<'a>) -> Node<'a>,
     {
+        let f_ = |ast: &Ast<'a>| -> Ast<'a> { f(&ast.into()).into() };
+
         match &self {
             Ast::Access(expr) => {
                 let expr = expr.map(f);
@@ -993,7 +1032,7 @@ impl<'a> Ast<'a> {
             }
 
             Ast::ExtendsExpr(expr) => {
-                let expr = expr.map(f);
+                let expr = expr.map(f_);
                 Ast::ExtendsExpr(expr)
             }
 
@@ -1287,7 +1326,7 @@ impl<'a> Ast<'a> {
         }
     }
 
-    fn is_subtype(&self, other: &Ast<'a>) -> ExtendsResult {
+    pub fn is_subtype(&self, other: &Ast<'a>) -> ExtendsResult {
         type A<'a> = Ast<'a>;
         type T = ExtendsResult;
 
@@ -1374,7 +1413,7 @@ impl<'a> Ast<'a> {
         merge_spans(a, b)
     }
 
-    fn as_span(&self) -> Span {
+    fn as_span(&self) -> Span<'a> {
         match self {
             Ast::Access(x) => x.span,
             Ast::TrueKeyword(span) => *span,

@@ -36,8 +36,8 @@ pub mod builtin {
                     else_branch,
                     ..
                 }) => match lhs.is_subtype(rhs) {
-                    ExtendsResult::True => (then_branch.clone(), acc),
-                    ExtendsResult::False => (else_branch.clone(), acc),
+                    ExtendsResult::True => (then_branch.into(), acc),
+                    ExtendsResult::False => (else_branch.into(), acc),
                     ExtendsResult::Never => {
                         let mut tree = tree.clone();
                         tree.set_value(Box::new(Ast::NeverKeyword(span)));
@@ -47,7 +47,7 @@ pub mod builtin {
                         let mut tree = tree.clone();
 
                         let value = Ast::UnionType(UnionType {
-                            types: vec![then_branch.clone(), else_branch.clone()],
+                            types: vec![then_branch.into(), else_branch.into()],
                             span,
                         });
 

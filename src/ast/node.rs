@@ -14,6 +14,33 @@ pub struct Node<'a> {
     pub value: Box<Ast<'a>>,
 }
 
+impl<'a> From<Ast<'a>> for Node<'a> {
+    fn from(value: Ast<'a>) -> Self {
+        Node {
+            span: value.as_span(),
+            value: Box::new(value.clone()),
+        }
+    }
+}
+
+impl<'a> From<&Ast<'a>> for Node<'a> {
+    fn from(value: &Ast<'a>) -> Self {
+        Node {
+            span: value.as_span(),
+            value: Box::new(value.clone()),
+        }
+    }
+}
+
+impl<'a> From<&Rc<Ast<'a>>> for Node<'a> {
+    fn from(value: &Rc<Ast<'a>>) -> Self {
+        Node {
+            span: value.as_span(),
+            value: value.into(),
+        }
+    }
+}
+
 impl<'a> PartialEq for Node<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value

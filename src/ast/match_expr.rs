@@ -55,10 +55,10 @@ impl<'a> MatchExpr<'a> {
                     span,
                     value: Box::new(Ast::from(ExtendsExpr {
                         span,
-                        lhs: value.clone(),
-                        rhs: pattern.clone(),
-                        then_branch: body.clone(),
-                        else_branch: acc,
+                        lhs: value.into(),
+                        rhs: pattern.into(),
+                        then_branch: body.into(),
+                        else_branch: acc.into(),
                     })),
                 }
             })
