@@ -31,6 +31,15 @@ pub struct Path<'a> {
 }
 
 impl<'a> Path<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            span: self.span,
+            segments: self.segments.iter().map(f).collect(),
+        }
+    }
     fn simplify(&self, span: Span<'a>) -> Node<'a> {
         let mut acc = vec![];
 
@@ -63,6 +72,18 @@ pub struct ExtendsExpr<'a> {
 }
 
 impl<'a> ExtendsExpr<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        let mut expr = self.clone();
+        expr.lhs = f(&self.lhs);
+        expr.rhs = f(&self.rhs);
+        expr.then_branch = f(&self.then_branch);
+        expr.else_branch = f(&self.else_branch);
+        expr
+    }
+
     pub fn new(
         span: pest::Span<'a>,
         lhs: Node<'a>,
@@ -166,13 +187,13 @@ impl<'a> MappedType<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct ObjectLiteral<'a> {
+pub struct TypeLiteral<'a> {
     pub properties: Vec<ObjectProperty<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
 
-impl<'a> ObjectLiteral<'a> {
+impl<'a> TypeLiteral<'a> {
     pub fn is_empty(&self) -> bool {
         self.properties.is_empty()
     }
@@ -186,7 +207,7 @@ impl<'a> ObjectLiteral<'a> {
     }
 }
 
-impl<'a> typescript::Pretty for ObjectLiteral<'a> {
+impl<'a> typescript::Pretty for TypeLiteral<'a> {
     fn to_ts(&self) -> D<()> {
         let props = &self.properties;
 
@@ -470,6 +491,18 @@ pub struct ExtendsPrefixOp<'a> {
     pub span: Span<'a>,
 }
 
+impl<'a> ExtendsPrefixOp<'a> {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            value: f(&self.value),
+            ..self.clone()
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ImportStatement<'a> {
@@ -488,6 +521,19 @@ pub struct TypeAlias<'a> {
     pub body: Node<'a>,
     #[serde(skip)]
     pub span: Span<'a>,
+}
+
+impl<'a> TypeAlias<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            body: f(&self.body),
+            params: self.params.iter().map(|ty| ty.map(&f)).collect(),
+            ..self.clone()
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -529,7 +575,7 @@ pub enum Ast<'a> {
     #[serde(rename(serialize = "::"))]
     Path(Path<'a>),
     Number(String),
-    TypeLiteral(ObjectLiteral<'a>),
+    TypeLiteral(TypeLiteral<'a>),
     Primitive(PrimitiveType),
     Program(Program<'a>),
     Statement(Node<'a>),
@@ -868,7 +914,7 @@ impl<'a> Ast<'a> {
     }
 
     pub fn is_empty_object(&self) -> bool {
-        matches!(self, Ast::TypeLiteral(ObjectLiteral { properties, .. }) if properties.is_empty())
+        matches!(self, Ast::TypeLiteral(TypeLiteral { properties, .. }) if properties.is_empty())
     }
 
     pub fn is_nullish(&self) -> bool {
@@ -1834,6 +1880,17 @@ pub struct TypeParameter<'a> {
 }
 
 impl<'a> TypeParameter<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            constraint: self.constraint.as_ref().map(&f),
+            default: self.default.as_ref().map(&f),
+            ..self.clone()
+        }
+    }
+
     pub fn new(
         name: String,
         constraint: Option<Node<'a>>,

@@ -114,13 +114,6 @@ impl<'a> Node<'a> {
         Pre: Fn(Self, Context) -> (Self, Context),
         Post: Fn(Self, Context) -> (Self, Context),
     {
-        // Reducer that maps over a list of nodes
-        let red_items = move |node: &Nodes<'a>, ctx: Context| {
-            node.iter()
-                .map(|item| item.traverse(ctx.clone(), pre, post).0)
-                .collect_vec()
-        };
-
         // Returns a closure that takes a node
         let fn_red_pick_node = move |ctx| move |node: &Node<'a>| (node.traverse(ctx, pre, post).0);
 
@@ -164,99 +157,49 @@ impl<'a> Node<'a> {
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::ExtendsExpr(ExtendsExpr {
-                lhs,
-                rhs,
-                then_branch,
-                else_branch,
-                span,
-            }) => {
-                let lhs = lhs.traverse(ctx.clone(), pre, post).0;
-                let rhs = rhs.traverse(ctx.clone(), pre, post).0;
-                let then_branch = then_branch.traverse(ctx.clone(), pre, post).0;
-                let else_branch = else_branch.traverse(ctx.clone(), pre, post).0;
-
-                let ast = Ast::ExtendsExpr(ExtendsExpr {
-                    lhs,
-                    rhs,
-                    then_branch,
-                    else_branch,
-                    span: *span,
-                });
+            Ast::ExtendsExpr(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::ExtendsExpr(expr);
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value, span }) => {
-                let value = value.traverse(ctx.clone(), pre, post).0;
-
-                let ast = Ast::ExtendsPrefixOp(ExtendsPrefixOp {
-                    op: op.clone(),
-                    value,
-                    span: *span,
-                });
-
+            Ast::ExtendsPrefixOp(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::ExtendsPrefixOp(expr);
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::IfExpr(IfExpr {
-                condition,
-                then_branch,
-                else_branch,
-                span,
-            }) => {
-                let (condition, _) = condition.traverse(ctx.clone(), pre, post);
-                let (then_branch, _) = then_branch.traverse(ctx.clone(), pre, post);
-                let else_branch = else_branch.as_ref().map(fn_red_pick_node(ctx.clone()));
-
-                let ast = Ast::IfExpr(IfExpr {
-                    condition,
-                    then_branch,
-                    else_branch,
-                    span: *span,
-                });
-
+            Ast::IfExpr(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::IfExpr(expr);
                 (self.clone().replace(ast), ctx)
             }
 
-            Ast::ImportStatement(ImportStatement {
-                import_clause,
-                module,
-                span,
-            }) => {
-                let ast = Ast::ImportStatement(ImportStatement {
-                    import_clause: import_clause.clone(),
-                    module: module.clone(),
-                    span: *span,
-                });
-
-                (self.clone().replace(ast), ctx)
+            Ast::ImportStatement(_) => {
+                (node, ctx)
             }
+
             Ast::LetExpr(expr) => {
                 let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
                 let ast = Ast::LetExpr(expr);
                 (self.clone().replace(ast), ctx)
             }
+
             Ast::MappedType(expr) => {
                 let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
                 let ast = Ast::MappedType(expr);
                 (self.clone().replace(ast), ctx)
             }
+
             Ast::MatchExpr(expr) => {
                 let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
                 let ast = Ast::MatchExpr(expr);
                 (self.clone().replace(ast), ctx)
             }
-            Ast::Path(Path { segments, span }) => {
-                let segments = segments
-                    .iter()
-                    .map(|node| node.traverse(ctx.clone(), pre, post).0)
-                    .collect_vec();
 
-                let ast = Ast::Path(Path {
-                    segments,
-                    span: *span,
-                });
-
+            Ast::Path(expr) => {
+                let expr = expr.map(|node| node.traverse(ctx.clone(), pre, post).0);
+                let ast = Ast::Path(expr);
                 (self.clone().replace(ast), ctx)
             }
             Ast::TypeLiteral(ty) => {
@@ -270,7 +213,7 @@ impl<'a> Node<'a> {
                     })
                     .collect_vec();
 
-                let ast = Ast::TypeLiteral(ObjectLiteral {
+                let ast = Ast::TypeLiteral(TypeLiteral {
                     properties,
                     span: ty.span,
                 });

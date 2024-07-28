@@ -971,7 +971,7 @@ fn parse_tuple(pair: Pair) -> Node {
     )
 }
 
-fn parse_object_literal(pair: Pair) -> ObjectLiteral {
+fn parse_object_literal(pair: Pair) -> TypeLiteral {
     let span = pair.as_span();
     let object_property_rules = pair.clone().into_inner();
     let mut properties = Vec::new();
@@ -1014,7 +1014,7 @@ fn parse_object_literal(pair: Pair) -> ObjectLiteral {
         }
     }
 
-    ObjectLiteral { properties, span }
+    TypeLiteral { properties, span }
 }
 
 fn parse_property_key_inner(key: Pair) -> ObjectPropertyKey {

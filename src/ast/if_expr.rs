@@ -11,7 +11,19 @@ pub struct IfExpr<'a> {
 }
 
 impl<'a> IfExpr<'a> {
-    pub(crate) fn simplify(&self) -> Node<'a> {
+    pub fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Node<'a>) -> Node<'a>,
+    {
+        Self {
+            span: self.span,
+            condition: f(&self.condition),
+            then_branch: f(&self.then_branch),
+            else_branch: self.else_branch.as_ref().map(f),
+        }
+    }
+
+    pub fn simplify(&self) -> Node<'a> {
         let else_branch = self.else_branch.as_ref().map_or_else(
             || node::Node::new(self.span, Ast::NeverKeyword(self.span)),
             |v| v.clone(),
