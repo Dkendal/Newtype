@@ -27,13 +27,13 @@ pub(crate) mod node;
 pub struct Path<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub segments: Vec<Node<'a>>,
+    pub segments: Vec<Ast<'a>>,
 }
 
 impl<'a> Path<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             span: self.span,
@@ -44,7 +44,7 @@ impl<'a> Path<'a> {
         let mut acc = vec![];
 
         for seg in self.segments.iter() {
-            if let Ast::Path(path) = seg.value.as_ref() {
+            if let Ast::Path(path) = seg {
                 acc.extend(path.segments.clone());
             } else {
                 acc.push(seg.clone());
@@ -1062,7 +1062,7 @@ impl<'a> Ast<'a> {
             }
 
             Ast::Path(expr) => {
-                let expr = expr.map(f);
+                let expr = expr.map(f_);
                 Ast::Path(expr)
             }
 

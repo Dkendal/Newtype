@@ -119,7 +119,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
 
                     match lhs.value.as_ref() {
                         Ast::Path(Path { segments, .. }) => acc.extend(segments.to_owned()),
-                        Ast::Ident(_) => acc.push(lhs),
+                        Ast::Ident(_) => acc.push(lhs.into()),
                         _ => parse_error!(
                             lhs,
                             format!(
@@ -131,7 +131,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
 
                     match rhs.value.as_ref() {
                         Ast::Path(Path { segments, .. }) => acc.extend(segments.to_owned()),
-                        Ast::Ident(_) => acc.push(rhs),
+                        Ast::Ident(_) => acc.push(rhs.into()),
                         _ => parse_error!(
                             rhs,
                             format!(
