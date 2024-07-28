@@ -5,7 +5,7 @@ use if_expr::IfExpr;
 use itertools::Itertools;
 use let_expr::LetExpr;
 use match_expr::MatchExpr;
-use node::{Node, Nodes};
+use node::Node;
 use pest::Span;
 use pretty::RcDoc as D;
 use serde_derive::Serialize;
@@ -27,7 +27,7 @@ pub(crate) mod node;
 pub struct Path<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub segments: Nodes<'a>,
+    pub segments: Vec<Node<'a>>,
 }
 
 impl<'a> Path<'a> {
@@ -121,7 +121,7 @@ impl<'a> ExtendsExpr<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tuple<'a> {
-    pub items: Nodes<'a>,
+    pub items: Vec<Node<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -142,7 +142,7 @@ impl<'a> Tuple<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct ApplyGeneric<'a> {
     pub receiver: Node<'a>,
-    pub args: Nodes<'a>,
+    pub args: Vec<Node<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
