@@ -409,7 +409,11 @@ fn parse_builtin(pair: Pair) -> Ast {
         ),
     };
 
-    let argument = inner.find(match_tag("argument")).map(parse).unwrap();
+    let argument = inner
+        .find(match_tag("argument"))
+        .map(parse_)
+        .unwrap()
+        .into();
 
     Ast::Builtin(Builtin {
         name,

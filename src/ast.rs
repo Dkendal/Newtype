@@ -474,7 +474,7 @@ impl<'a> IntersectionType<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct Builtin<'a> {
     pub name: BuiltinKeyword,
-    pub argument: Node<'a>,
+    pub argument: Rc<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -482,10 +482,10 @@ pub struct Builtin<'a> {
 impl<'a> Builtin<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
-            argument: f(&self.argument),
+            argument: f(&self.argument).into(),
             ..self.clone()
         }
     }
@@ -1033,8 +1033,7 @@ impl<'a> Ast<'a> {
             Ast::Array(node) => Ast::Array(Rc::new(f_(node))),
 
             Ast::Builtin(expr) => {
-                let expr = expr.map(f);
-                Ast::Builtin(expr)
+                Ast::Builtin(expr.map(f_))
             }
 
             Ast::CondExpr(expr) => {
