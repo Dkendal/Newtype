@@ -86,7 +86,6 @@ pub(crate) fn expand_to_extends<'a>(
             .unwrap();
 
             // TODO report a syntax error here
-            // need to include spans in ASTNode<'a>
             if !lhs.is_typescript_feature() {
                 dbg!(lhs);
                 unreachable!("value must be desugared before this point");

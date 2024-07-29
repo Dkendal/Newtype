@@ -1350,7 +1350,7 @@ impl<'a> Ast<'a> {
 
     /// Returns `true` if the node is [`ExtendsPrefixOp`].
     ///
-    /// [`ExtendsPrefixOp`]: ASTNode<'a>::ExtendsPrefixOp
+    /// [`ExtendsPrefixOp`]: Ast<'a>::ExtendsPrefixOp
     #[must_use]
     pub fn is_extends_prefix_op(&self) -> bool {
         matches!(self, Self::ExtendsPrefixOp { .. })
