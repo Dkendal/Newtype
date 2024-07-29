@@ -1053,10 +1053,7 @@ impl<'a> Ast<'a> {
 
             Ast::Builtin(expr) => Ast::Builtin(expr.map(f)),
 
-            Ast::CondExpr(expr) => {
-                let expr = expr.map(g);
-                Ast::CondExpr(expr)
-            }
+            Ast::CondExpr(expr) => Ast::CondExpr(expr.map(f)),
 
             Ast::ExtendsInfixOp(expr) => Ast::ExtendsInfixOp(expr.map(f)),
 

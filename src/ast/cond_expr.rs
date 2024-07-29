@@ -7,13 +7,13 @@ pub struct CondExpr<'a> {
     pub span: Span<'a>,
     pub arms: Vec<Arm<'a>>,
     /// Unlike match and if expressions, the else arm is *not* optional
-    pub else_arm: Node<'a>,
+    pub else_arm: Rc<Ast<'a>>,
 }
 
 impl<'a> CondExpr<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         let mut expr = self.clone();
         expr.arms = self
@@ -25,24 +25,24 @@ impl<'a> CondExpr<'a> {
                 body: f(&arm.body),
             })
             .collect();
-        expr.else_arm = f(&self.else_arm);
+        expr.else_arm = f(&self.else_arm).into();
         expr
     }
 
-    pub(crate) fn simplify(&self) -> Node<'a> {
+    pub(crate) fn simplify(&self) -> Ast<'a> {
         // Convert a CondExpr to a series of nested ternary expressions
         let CondExpr { arms, else_arm, .. } = self;
 
-        let init_else: Node<'a> = (else_arm).clone();
+        let init_else: Ast<'a> = else_arm.into();
 
-        let acc: Node<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
+        let acc: Ast<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
             let Arm {
                 condition,
                 body: then,
                 ..
             } = arm;
 
-            if_expr::expand_to_extends(&condition.value, &then.value, &else_arm.value).into()
+            if_expr::expand_to_extends(&condition, &then, &else_arm)
         });
 
         acc
@@ -53,6 +53,6 @@ impl<'a> CondExpr<'a> {
 pub struct Arm<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub condition: Node<'a>,
-    pub body: Node<'a>,
+    pub condition: Ast<'a>,
+    pub body: Ast<'a>,
 }

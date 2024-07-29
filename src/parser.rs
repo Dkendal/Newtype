@@ -464,8 +464,9 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
         .clone()
         .find(match_tag("else"))
         .and_then(|p| p.into_inner().find(match_tag("body")))
-        .map(parse)
-        .unwrap_or_else(|| Node::new(span, Ast::NeverKeyword(span)));
+        .map(parse_)
+        .unwrap_or(Ast::NeverKeyword(span))
+        .into();
 
     let arms: Vec<cond_expr::Arm> = inner
         .clone()
@@ -479,9 +480,10 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
                 .find(match_tag("condition"))
                 .map(|p| p.into_inner())
                 .map(parse_extends_expr)
-                .unwrap();
+                .unwrap()
+                .into();
 
-            let body = inner.find(match_tag("body")).map(parse).unwrap();
+            let body = inner.find(match_tag("body")).map(parse).unwrap().into();
 
             Arm {
                 span,
