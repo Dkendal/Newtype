@@ -613,12 +613,12 @@ pub struct Inner<'a, T> {
     pub span: Span<'a>,
 }
 
-impl<'a, T> Inner<'a, T>
+impl<'a, T> Display for Inner<'a, T>
 where
     T: Display,
 {
-    fn to_string(&self) -> String {
-        self.ty.to_string()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.ty)
     }
 }
 
@@ -667,7 +667,7 @@ pub enum Ast<'a> {
     TypeLiteral(TypeLiteral<'a>),
     Primitive(PrimitiveType, #[serde(skip)] Span<'a>),
     Program(Program<'a>),
-    Statement(Node<'a>),
+    Statement(Rc<Ast<'a>>),
     UnitTest(UnitTest<'a>),
     String(Inner<'a, String>),
     TemplateString(Inner<'a, String>),
@@ -740,7 +740,6 @@ impl<'a> From<&Rc<Ast<'a>>> for Box<Ast<'a>> {
         Box::new((**value).clone())
     }
 }
-
 
 impl<'a> typescript::Pretty for Ast<'a> {
     fn to_ts(&self) -> D<()> {
@@ -1100,10 +1099,7 @@ impl<'a> Ast<'a> {
                 Ast::Program(expr)
             }
 
-            Ast::Statement(node) => {
-                let node = f(node);
-                Ast::Statement(node)
-            }
+            Ast::Statement(node) => Ast::Statement(f_(node).into()),
 
             Ast::Tuple(expr) => {
                 let expr = expr.map(f_);
@@ -1472,12 +1468,12 @@ impl<'a> Ast<'a> {
             Ast::Path(x) => x.span,
             Ast::Primitive(_, span) => *span,
             Ast::Program(_x) => todo!(),
-            Ast::Statement(x) => x.span,
+            Ast::Statement(ast) => ast.as_span(),
             Ast::String(x) => x.span,
             Ast::TemplateString(x) => x.span,
             Ast::TrueKeyword(span) => *span,
             Ast::Tuple(x) => x.span,
-            Ast::TypeAlias(_x) => todo!(),
+            Ast::TypeAlias(x) => x.span,
             Ast::TypeLiteral(x) => x.span,
             Ast::UnionType(x) => x.span,
             Ast::UnitTest(x) => x.span,

@@ -693,7 +693,7 @@ fn parse_type_alias(pair: Pair) -> Ast {
 fn parse_statement(pair: Pair) -> Ast {
     let inner = pair.into_inner().next().unwrap();
     let inner = parse(inner);
-    Ast::Statement(inner)
+    Ast::Statement(inner.into())
 }
 
 fn parse_program(pair: Pair) -> Ast {
