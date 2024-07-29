@@ -67,7 +67,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                     }),
                 )
             }
-            array_modifier => Node::from_pair(&op, Ast::Array(lhs)),
+            array_modifier => Node::from_pair(&op, Ast::Array(lhs.into())),
             application => {
                 let span = Span::new(
                     op.as_span().get_input(),
@@ -350,7 +350,7 @@ pub(crate) fn parse(pair: Pair) -> Node {
                 Rule::primitive_undefined => PrimitiveType::Undefined,
                 _ => unimplemented!("{:?}", rule),
             };
-            new(Ast::Primitive(primitive))
+            new(Ast::Primitive(primitive, span))
         }
         Rule::number => new(Ast::Number(node_as_string(pair))),
         Rule::string => parse_string(pair),
@@ -880,7 +880,10 @@ fn pair_as_string_literal(pair: Pair) -> String {
 }
 
 fn parse_string(pair: Pair) -> Node {
-    let inner = Inner { span: pair.as_span(), value: pair_as_string_literal(pair.clone()) };
+    let inner = Inner {
+        span: pair.as_span(),
+        ty: pair_as_string_literal(pair.clone()),
+    };
     Node::from_pair(&pair.clone(), Ast::String(inner))
 }
 
@@ -1055,7 +1058,7 @@ fn parse_index_property_key(key: Pair) -> ObjectPropertyKey {
 
 fn node_as_string(pair: Pair<'_>) -> Inner<'_, String> {
     Inner {
-        value: pair.as_str().to_string(),
+        ty: pair.as_str().to_string(),
         span: pair.as_span(),
     }
 }

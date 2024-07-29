@@ -609,8 +609,17 @@ impl<'a> Program<'a> {
 /// contain a single value.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Inner<'a, T> {
-    pub value: T,
+    pub ty: T,
     pub span: Span<'a>,
+}
+
+impl<'a, T> Inner<'a, T>
+where
+    T: Display,
+{
+    fn to_string(&self) -> String {
+        self.ty.to_string()
+    }
 }
 
 impl<'a, T: serde::Serialize> serde::Serialize for Inner<'a, T> {
@@ -618,7 +627,7 @@ impl<'a, T: serde::Serialize> serde::Serialize for Inner<'a, T> {
     where
         S: serde::Serializer,
     {
-        self.value.serialize(serializer)
+        self.ty.serialize(serializer)
     }
 }
 
@@ -631,7 +640,7 @@ pub enum Ast<'a> {
     MacroCall(MacroCall<'a>),
     #[serde(rename(serialize = "apply"))]
     ApplyGeneric(ApplyGeneric<'a>),
-    Array(Node<'a>),
+    Array(Rc<Ast<'a>>),
     #[serde(rename(serialize = "|"))]
     UnionType(UnionType<'a>),
     #[serde(rename(serialize = "&"))]
@@ -656,7 +665,7 @@ pub enum Ast<'a> {
     Path(Path<'a>),
     Number(Inner<'a, String>),
     TypeLiteral(TypeLiteral<'a>),
-    Primitive(PrimitiveType),
+    Primitive(PrimitiveType, #[serde(skip)] Span<'a>),
     Program(Program<'a>),
     Statement(Node<'a>),
     UnitTest(UnitTest<'a>),
@@ -787,10 +796,10 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .group()
             }
             Ast::Ident(identifier) => identifier.pretty(),
-            Ast::Number(inner) => D::text(inner.value.clone()),
-            Ast::Primitive(primitive) => D::text(primitive.to_string()),
-            Ast::String(inner) => string_literal(inner.value.as_str()),
-            Ast::TemplateString(inner) => D::text(inner.value.clone()),
+            Ast::Number(inner) => D::text(inner.ty.clone()),
+            Ast::Primitive(primitive, _) => D::text(primitive.to_string()),
+            Ast::String(inner) => string_literal(inner.ty.as_str()),
+            Ast::TemplateString(inner) => D::text(inner.ty.clone()),
             Ast::IfExpr(..) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
@@ -827,7 +836,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 D::text("[").append(items).append(D::text("]"))
             }
             Ast::Array(node) => {
-                let doc = if node.value.is_set_op() {
+                let doc = if node.is_set_op() {
                     parens(node.to_ts())
                 } else {
                     node.to_ts()
@@ -1028,10 +1037,7 @@ impl<'a> Ast<'a> {
                 Ast::ApplyGeneric(expr)
             }
 
-            Ast::Array(node) => {
-                let node = f(node);
-                Ast::Array(node)
-            }
+            Ast::Array(node) => Ast::Array(Rc::new(f_(node))),
 
             Ast::Builtin(expr) => {
                 let expr = expr.map(f);
@@ -1146,7 +1152,10 @@ impl<'a> Ast<'a> {
     pub fn is_nullish(&self) -> bool {
         matches!(
             self,
-            Ast::Primitive(PrimitiveType::Undefined | PrimitiveType::Null | PrimitiveType::Void)
+            Ast::Primitive(
+                PrimitiveType::Undefined | PrimitiveType::Null | PrimitiveType::Void,
+                _
+            )
         )
     }
 
@@ -1167,7 +1176,7 @@ impl<'a> Ast<'a> {
     }
 
     fn is_primitive(&self) -> bool {
-        matches!(self, Ast::Primitive(_))
+        matches!(self, Ast::Primitive(_, _))
     }
 
     pub fn is_bottom_type(&self) -> bool {
@@ -1239,7 +1248,7 @@ impl<'a> Ast<'a> {
 
     pub fn get_object_wrapper(&self) -> Option<Ast> {
         let name = match self {
-            Ast::Primitive(p) => {
+            Ast::Primitive(p, _) => {
                 type P = PrimitiveType;
 
                 match p {
@@ -1276,7 +1285,7 @@ impl<'a> Ast<'a> {
                 | Ast::NeverKeyword(_)
                 | Ast::Number(_)
                 | Ast::TypeLiteral(_)
-                | Ast::Primitive(_)
+                | Ast::Primitive(..)
                 | Ast::Program(_)
                 | Ast::Statement(_)
                 | Ast::String(_)
@@ -1347,7 +1356,7 @@ impl<'a> Ast<'a> {
         type A<'a> = Ast<'a>;
         type T = ExtendsResult;
 
-        if let Ast::Primitive(other) = other {
+        if let Ast::Primitive(other, _) = other {
             if let Some(value) = self.get_primitive_type() {
                 if value == *other {
                     return T::True;
@@ -1385,30 +1394,33 @@ impl<'a> Ast<'a> {
             (lhs, rhs) if lhs.is_non_nullish() && rhs.is_object_object_wrapper() => T::True,
 
             (A::TypeLiteral(lhs), _) if lhs.is_empty() => match other {
-                Ast::Primitive(PrimitiveType::Object) => T::True,
+                Ast::Primitive(PrimitiveType::Object, _) => T::True,
                 ast if ast.is_object_interface() => T::True,
                 _ => T::False,
             },
 
             (A::TypeLiteral(_), _) => todo!(),
 
-            (A::Primitive(lhs), A::Primitive(rhs)) => Into::into(lhs == rhs),
+            (A::Primitive(lhs, _), A::Primitive(rhs, _)) => Into::into(lhs == rhs),
 
-            (A::TemplateString(_) | A::String(_), A::Primitive(PrimitiveType::String)) => T::True,
+            (A::TemplateString(_) | A::String(_), A::Primitive(PrimitiveType::String, _)) => {
+                T::True
+            }
 
-            (A::Primitive(PrimitiveType::String) | A::TemplateString(_) | A::String(_), rhs)
+            (A::Primitive(PrimitiveType::String, _) | A::TemplateString(_) | A::String(_), rhs)
                 if rhs.is_string_object_wrapper() =>
             {
                 T::True
             }
 
-            (A::Number(_), A::Primitive(PrimitiveType::Number)) => T::True,
+            (A::Number(_), A::Primitive(PrimitiveType::Number, _)) => T::True,
 
             // Object wrappers are equivalent to their primitive types in
             // this context.
             (lhs, rhs) if lhs.is_object_wrapper() => {
                 let primitive_type = lhs.get_primitive_type().unwrap();
-                Ast::Primitive(primitive_type).is_subtype(rhs)
+                let ast = Ast::Primitive(primitive_type, lhs.as_span());
+                ast.is_subtype(rhs)
             }
 
             (A::Ident(_), _) => {
@@ -1433,42 +1445,42 @@ impl<'a> Ast<'a> {
     fn as_span(&self) -> Span<'a> {
         match self {
             Ast::Access(x) => x.span,
-            Ast::TrueKeyword(span) => *span,
-            Ast::FalseKeyword(span) => *span,
-            Ast::MacroCall(x) => x.span,
+            Ast::AnyKeyword(span) => *span,
             Ast::ApplyGeneric(x) => x.span,
             Ast::Array(x) => x.as_span(),
-            Ast::UnionType(x) => x.span,
-            Ast::IntersectionType(x) => x.span,
             Ast::Builtin(x) => x.span,
             Ast::CondExpr(x) => x.span,
-            Ast::ExtendsInfixOp(x) => x.span,
             Ast::ExtendsExpr(x) => x.span,
-            Ast::Infer(x) => x.span,
+            Ast::ExtendsInfixOp(x) => x.span,
             Ast::ExtendsPrefixOp(x) => x.span,
+            Ast::FalseKeyword(span) => *span,
+            Ast::FunctionType(x) => x.span,
             Ast::Ident(x) => x.span,
             Ast::IfExpr(x) => x.span,
             Ast::ImportStatement(x) => x.span,
+            Ast::Infer(x) => x.span,
+            Ast::Interface(x) => x.span,
+            Ast::IntersectionType(x) => x.span,
             Ast::LetExpr(x) => x.span,
+            Ast::MacroCall(x) => x.span,
             Ast::MappedType(x) => x.span,
             Ast::MatchExpr(x) => x.span,
+            Ast::NeverKeyword(span) => *span,
+            Ast::NoOp(span) => *span,
+            Ast::Number(x) => x.span,
             Ast::Path(x) => x.span,
-            Ast::Number(inner) => inner.span,
-            Ast::TypeLiteral(x) => x.span,
-            Ast::Primitive(_) => todo!(),
+            Ast::Primitive(_, span) => *span,
             Ast::Program(_x) => todo!(),
             Ast::Statement(x) => x.span,
-            Ast::UnitTest(x) => x.span,
-            Ast::String(inner) => inner.span,
-            Ast::TemplateString(inner) => inner.span,
+            Ast::String(x) => x.span,
+            Ast::TemplateString(x) => x.span,
+            Ast::TrueKeyword(span) => *span,
             Ast::Tuple(x) => x.span,
             Ast::TypeAlias(_x) => todo!(),
-            Ast::NeverKeyword(span) => *span,
-            Ast::Interface(x) => x.span,
-            Ast::FunctionType(x) => x.span,
+            Ast::TypeLiteral(x) => x.span,
+            Ast::UnionType(x) => x.span,
+            Ast::UnitTest(x) => x.span,
             Ast::UnknownKeyword(span) => *span,
-            Ast::AnyKeyword(span) => *span,
-            Ast::NoOp(span) => *span,
         }
     }
 }
