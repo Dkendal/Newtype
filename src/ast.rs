@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt::Display, rc::Rc};
 
 use cond_expr::CondExpr;
+use derivative::Derivative;
 use if_expr::IfExpr;
 use itertools::Itertools;
 use let_expr::LetExpr;
@@ -22,7 +23,9 @@ pub(crate) mod macros;
 
 pub type Bindings<'a> = HashMap<String, Ast<'a>>;
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Path<'a> {
     #[serde(skip)]
@@ -59,7 +62,9 @@ impl<'a> Path<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct ExtendsExpr<'a> {
     pub lhs: Rc<Ast<'a>>,
@@ -118,7 +123,9 @@ impl<'a> ExtendsExpr<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tuple<'a> {
     pub items: Vec<Ast<'a>>,
@@ -138,7 +145,9 @@ impl<'a> Tuple<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct ApplyGeneric<'a> {
     pub receiver: Rc<Ast<'a>>,
@@ -171,7 +180,9 @@ impl<'a> typescript::Pretty for ApplyGeneric<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct MappedType<'a> {
     pub index: String,
@@ -197,7 +208,9 @@ impl<'a> MappedType<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypeLiteral<'a> {
     pub properties: Vec<ObjectProperty<'a>>,
@@ -252,7 +265,9 @@ impl<'a> typescript::Pretty for TypeLiteral<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Interface<'a> {
     pub export: bool,
@@ -332,7 +347,9 @@ impl<'a> typescript::Pretty for Interface<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct UnitTest<'a> {
     pub name: String,
@@ -341,7 +358,9 @@ pub struct UnitTest<'a> {
     pub span: Span<'a>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct MacroCall<'a> {
     pub name: String,
@@ -372,7 +391,9 @@ impl<'a> MacroCall<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct FunctionType<'a> {
     pub params: Vec<Parameter<'a>>,
@@ -399,7 +420,9 @@ impl<'a> typescript::Pretty for FunctionType<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Parameter<'a> {
     pub ellipsis: bool,
@@ -425,7 +448,9 @@ impl<'a> typescript::Pretty for Parameter<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Access<'a> {
     pub lhs: Rc<Ast<'a>>,
@@ -449,7 +474,9 @@ impl<'a> Access<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct IntersectionType<'a> {
     pub types: Vec<Ast<'a>>,
@@ -469,7 +496,9 @@ impl<'a> IntersectionType<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Builtin<'a> {
     pub name: BuiltinKeyword,
@@ -490,7 +519,9 @@ impl<'a> Builtin<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct UnionType<'a> {
     pub types: Vec<Ast<'a>>,
@@ -510,7 +541,9 @@ impl<'a> UnionType<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct ExtendsInfixOp<'a> {
     pub lhs: Rc<Ast<'a>>,
@@ -533,7 +566,9 @@ impl<'a> ExtendsInfixOp<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct ExtendsPrefixOp<'a> {
     pub op: PrefixOp,
@@ -554,7 +589,9 @@ impl<'a> ExtendsPrefixOp<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct ImportStatement<'a> {
     pub import_clause: ImportClause<'a>,
@@ -563,7 +600,9 @@ pub struct ImportStatement<'a> {
     pub span: Span<'a>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypeAlias<'a> {
     pub export: bool,
@@ -587,7 +626,9 @@ impl<'a> TypeAlias<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Program<'a> {
     pub statements: Vec<Ast<'a>>,
@@ -609,19 +650,14 @@ impl<'a> Program<'a> {
 
 /// A wrapper around a value and its span. Used for Ast variants that only
 /// contain a single value.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Derivative, Eq, Clone)]
+#[derivative(Debug = "transparent")]
+#[derivative(PartialEq)]
 pub struct Inner<'a, T> {
     pub ty: T,
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Debug = "ignore")]
     pub span: Span<'a>,
-}
-
-impl<'a, T> Display for Inner<'a, T>
-where
-    T: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.ty)
-    }
 }
 
 impl<'a, T: serde::Serialize> serde::Serialize for Inner<'a, T> {
@@ -633,7 +669,9 @@ impl<'a, T: serde::Serialize> serde::Serialize for Inner<'a, T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum Ast<'a> {
     #[serde(rename(serialize = "."))]
@@ -993,10 +1031,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             | Ast::MatchExpr(match_expr::MatchExpr { .. })
             | Ast::CondExpr(cond_expr::CondExpr { .. })
             | Ast::ExtendsInfixOp(ExtendsInfixOp { .. })) => {
-                unreachable!(
-                    "Ast should be desugared before this point {:#?}",
-                    node
-                )
+                unreachable!("Ast should be desugared before this point {:#?}", node)
             }
             Ast::FunctionType(ty) => ty.to_ts(),
         }
@@ -1857,7 +1892,9 @@ mod simplify_tests {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum ImportClause<'a> {
     Named(Vec<ImportSpecifier<'a>>),
@@ -1893,7 +1930,9 @@ impl<'a> typescript::Pretty for ImportClause<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct ImportSpecifier<'a> {
     #[serde(skip)]
@@ -1917,7 +1956,7 @@ impl<'a> typescript::Pretty for ImportSpecifier<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BuiltinKeyword {
     Keyof,
@@ -1931,7 +1970,9 @@ impl typescript::Pretty for BuiltinKeyword {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum PrimitiveType {
     Boolean,
@@ -1961,7 +2002,9 @@ impl Display for PrimitiveType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum PrefixOp {
     Infer,
@@ -1978,7 +2021,9 @@ impl PrefixOp {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum InfixOp {
     Extends,
@@ -1991,14 +2036,18 @@ pub enum InfixOp {
     Or,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum MappingModifier {
     Add,
     Remove,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum ObjectPropertyKey<'a> {
     Index(PropertyKeyIndex<'a>),
@@ -2029,7 +2078,9 @@ impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct PropertyKeyIndex<'a> {
     #[serde(skip)]
@@ -2079,7 +2130,9 @@ impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct ObjectProperty<'a> {
     #[serde(skip)]
@@ -2149,7 +2202,9 @@ impl<'a> typescript::Pretty for Ident<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)]
+#[derivative(PartialEq)]
+#[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypeParameter<'a> {
     #[serde(skip)]

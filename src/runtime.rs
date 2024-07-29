@@ -12,15 +12,17 @@ pub mod builtin {
         tree
     }
 
-    pub fn assert_equal<'a>(_left: Ast<'a>, _right: Ast<'a>) -> Ast<'a> {
-        todo!("remove spans");
+    pub fn assert_equal<'a>(left: Ast<'a>, right: Ast<'a>) -> Ast<'a> {
+        pretty_assertions::assert_eq!(left, right);
 
-        // pretty_assertions::assert_eq!(left, right);
-        //
-        // Ast::new(
-        //     merge_spans(left.as_span(), right.as_span()),
-        //     Ast::NoOp(left.as_span()),
-        // )
+        let span = pest::Span::new(
+            left.as_span().get_input(),
+            left.as_span().start(),
+            right.as_span().end(),
+        )
+        .unwrap();
+
+        Ast::NoOp(span)
     }
 
     pub fn unquote(tree: Ast) -> Ast {
@@ -93,8 +95,7 @@ mod tests {
             fn if_expr() {
                 assert_eq!(
                     to_value(runtime::builtin::unquote(
-                        ast!("if 1 <: number then true else false end")
-                            .simplify()
+                        ast!("if 1 <: number then true else false end").simplify()
                     ))
                     .unwrap(),
                     sexpr!("true").unwrap()
@@ -108,33 +109,24 @@ mod tests {
             use serde_lexpr::to_value;
 
             #[test]
-            #[ignore]
+
             fn equal_values() {
                 assert_eq!(
-                    to_value(runtime::builtin::assert_equal(
-                        ast!("1"),
-                        ast!("1")
-                    ))
-                    .unwrap(),
+                    to_value(runtime::builtin::assert_equal(ast!("1"), ast!("1"))).unwrap(),
                     lexpr::sexp!(#"no-op")
                 );
             }
 
             #[test]
-            #[ignore]
+
             fn equal_values_with_whitespace() {
                 assert_eq!(
-                    to_value(runtime::builtin::assert_equal(
-                        ast!(" 1 "),
-                        ast!("1")
-                    ))
-                    .unwrap(),
+                    to_value(runtime::builtin::assert_equal(ast!(" 1 "), ast!("1"))).unwrap(),
                     lexpr::sexp!(#"no-op")
                 );
             }
 
             #[test]
-            #[ignore]
             #[should_panic(expected = "assertion failed")]
             fn diff_values() {
                 runtime::builtin::assert_equal(ast!("1"), ast!("2"));

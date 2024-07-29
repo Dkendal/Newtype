@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct MatchExpr<'a> {
     #[serde(skip)]
@@ -62,7 +62,7 @@ impl<'a> MatchExpr<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
 pub struct Arm<'a> {
     #[serde(skip)]
     pub span: Span<'a>,

@@ -5,7 +5,7 @@ use super::*;
 
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct LetExpr<'a> {
     #[serde(skip)]
