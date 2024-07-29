@@ -1,11 +1,10 @@
-use std::{fmt::Display, rc::Rc};
+use std::{collections::HashMap, fmt::Display, rc::Rc};
 
 use cond_expr::CondExpr;
 use if_expr::IfExpr;
 use itertools::Itertools;
 use let_expr::LetExpr;
 use match_expr::MatchExpr;
-use node::Bindings;
 use pest::Span;
 use pretty::RcDoc as D;
 use serde_derive::Serialize;
@@ -20,7 +19,8 @@ use crate::{
 
 pub(crate) mod errors;
 pub(crate) mod macros;
-pub(crate) mod node;
+
+pub type Bindings<'a> = HashMap<String, Ast<'a>>;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
