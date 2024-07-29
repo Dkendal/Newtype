@@ -122,7 +122,7 @@ impl<'a> ExtendsExpr<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tuple<'a> {
-    pub items: Vec<Node<'a>>,
+    pub items: Vec<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -130,7 +130,7 @@ pub struct Tuple<'a> {
 impl<'a> Tuple<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             items: self.items.iter().map(f).collect(),
@@ -605,6 +605,23 @@ impl<'a> Program<'a> {
     }
 }
 
+/// A wrapper around a value and its span. Used for Ast variants that only
+/// contain a single value.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Inner<'a, T> {
+    pub value: T,
+    pub span: Span<'a>,
+}
+
+impl<'a, T: serde::Serialize> serde::Serialize for Inner<'a, T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.value.serialize(serializer)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Ast<'a> {
@@ -637,14 +654,14 @@ pub enum Ast<'a> {
     MatchExpr(MatchExpr<'a>),
     #[serde(rename(serialize = "::"))]
     Path(Path<'a>),
-    Number(String),
+    Number(Inner<'a, String>),
     TypeLiteral(TypeLiteral<'a>),
     Primitive(PrimitiveType),
     Program(Program<'a>),
     Statement(Node<'a>),
     UnitTest(UnitTest<'a>),
-    String(String),
-    TemplateString(String),
+    String(Inner<'a, String>),
+    TemplateString(Inner<'a, String>),
     Tuple(Tuple<'a>),
     #[serde(rename(serialize = "type"))]
     TypeAlias(TypeAlias<'a>),
@@ -770,10 +787,10 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .group()
             }
             Ast::Ident(identifier) => identifier.pretty(),
-            Ast::Number(number) => D::text(number),
+            Ast::Number(inner) => D::text(inner.value.clone()),
             Ast::Primitive(primitive) => D::text(primitive.to_string()),
-            Ast::String(string) => string_literal(string),
-            Ast::TemplateString(string) => D::text(string),
+            Ast::String(inner) => string_literal(inner.value.as_str()),
+            Ast::TemplateString(inner) => D::text(inner.value.clone()),
             Ast::IfExpr(..) => {
                 unreachable!("IfExpr should be desugared before this point");
             }
@@ -1082,7 +1099,7 @@ impl<'a> Ast<'a> {
             }
 
             Ast::Tuple(expr) => {
-                let expr = expr.map(f);
+                let expr = expr.map(f_);
                 Ast::Tuple(expr)
             }
 
@@ -1436,14 +1453,14 @@ impl<'a> Ast<'a> {
             Ast::MappedType(x) => x.span,
             Ast::MatchExpr(x) => x.span,
             Ast::Path(x) => x.span,
-            Ast::Number(_x) => todo!(),
+            Ast::Number(inner) => inner.span,
             Ast::TypeLiteral(x) => x.span,
             Ast::Primitive(_) => todo!(),
             Ast::Program(_x) => todo!(),
             Ast::Statement(x) => x.span,
             Ast::UnitTest(x) => x.span,
-            Ast::String(_x) => todo!(),
-            Ast::TemplateString(_x) => todo!(),
+            Ast::String(inner) => inner.span,
+            Ast::TemplateString(inner) => inner.span,
             Ast::Tuple(x) => x.span,
             Ast::TypeAlias(_x) => todo!(),
             Ast::NeverKeyword(span) => *span,

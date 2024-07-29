@@ -316,6 +316,10 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
         .parse(pairs)
 }
 
+pub fn parse_(pair: Pair) -> Ast {
+    *parse(pair).value
+}
+
 pub(crate) fn parse(pair: Pair) -> Node {
     let rule = pair.clone().as_rule();
     let span = pair.clone().as_span();
@@ -876,7 +880,8 @@ fn pair_as_string_literal(pair: Pair) -> String {
 }
 
 fn parse_string(pair: Pair) -> Node {
-    Node::from_pair(&pair.clone(), Ast::String(pair_as_string_literal(pair)))
+    let inner = Inner { span: pair.as_span(), value: pair_as_string_literal(pair.clone()) };
+    Node::from_pair(&pair.clone(), Ast::String(inner))
 }
 
 fn parse_import_statement(pair: Pair) -> Node {
@@ -960,7 +965,7 @@ fn parse_if_expr(pair: Pair) -> Node {
 }
 
 fn parse_tuple(pair: Pair) -> Node {
-    let items = pair.clone().into_inner().map(parse).collect();
+    let items = pair.clone().into_inner().map(parse_).collect();
 
     Node::from_pair(
         &pair,
@@ -1048,8 +1053,11 @@ fn parse_index_property_key(key: Pair) -> ObjectPropertyKey {
     })
 }
 
-fn node_as_string(pair: Pair) -> String {
-    pair.as_str().to_string()
+fn node_as_string(pair: Pair<'_>) -> Inner<'_, String> {
+    Inner {
+        value: pair.as_str().to_string(),
+        span: pair.as_span(),
+    }
 }
 
 fn match_tag<'a>(tag: &'a str) -> impl FnMut(&Pair<'a>) -> bool {
