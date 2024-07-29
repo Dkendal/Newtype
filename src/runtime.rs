@@ -84,7 +84,7 @@ mod tests {
             #[test]
             fn literal() {
                 assert_eq!(
-                    to_value(runtime::builtin::unquote(ast!("1").into())).unwrap(),
+                    to_value(runtime::builtin::unquote(ast!("1"))).unwrap(),
                     sexpr!("1").unwrap()
                 );
             }
@@ -95,7 +95,6 @@ mod tests {
                     to_value(runtime::builtin::unquote(
                         ast!("if 1 <: number then true else false end")
                             .simplify()
-                            .into()
                     ))
                     .unwrap(),
                     sexpr!("true").unwrap()
@@ -113,8 +112,8 @@ mod tests {
             fn equal_values() {
                 assert_eq!(
                     to_value(runtime::builtin::assert_equal(
-                        ast!("1").into(),
-                        ast!("1").into()
+                        ast!("1"),
+                        ast!("1")
                     ))
                     .unwrap(),
                     lexpr::sexp!(#"no-op")
@@ -126,8 +125,8 @@ mod tests {
             fn equal_values_with_whitespace() {
                 assert_eq!(
                     to_value(runtime::builtin::assert_equal(
-                        ast!(" 1 ").into(),
-                        ast!("1").into()
+                        ast!(" 1 "),
+                        ast!("1")
                     ))
                     .unwrap(),
                     lexpr::sexp!(#"no-op")
@@ -138,7 +137,7 @@ mod tests {
             #[ignore]
             #[should_panic(expected = "assertion failed")]
             fn diff_values() {
-                runtime::builtin::assert_equal(ast!("1").into(), ast!("2").into());
+                runtime::builtin::assert_equal(ast!("1"), ast!("2"));
             }
         }
     }

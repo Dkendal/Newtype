@@ -96,17 +96,17 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Ast {
             .unwrap();
 
             if op.as_rule() == pipe {
-                return replace_pipe_with_type_application(rhs.into(), lhs.into(), op).into();
+                return replace_pipe_with_type_application(rhs, lhs, op);
             }
 
             let ast = match op.as_rule() {
                 union => Ast::UnionType(UnionType {
-                    types: vec![lhs.into(), rhs.into()],
+                    types: vec![lhs, rhs],
                     span,
                 }),
 
                 intersection => Ast::IntersectionType(IntersectionType {
-                    types: vec![lhs.into(), rhs.into()],
+                    types: vec![lhs, rhs],
                     span,
                 }),
 
@@ -115,7 +115,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Ast {
 
                     match lhs {
                         Ast::Path(Path { segments, .. }) => acc.extend(segments.to_owned()),
-                        Ast::Ident(_) => acc.push(lhs.into()),
+                        Ast::Ident(_) => acc.push(lhs),
                         _ => parse_error!(
                             lhs,
                             format!("Expected path or identifier, found {:?}", lhs)
@@ -124,7 +124,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Ast {
 
                     match rhs {
                         Ast::Path(Path { segments, .. }) => acc.extend(segments.to_owned()),
-                        Ast::Ident(_) => acc.push(rhs.into()),
+                        Ast::Ident(_) => acc.push(rhs),
                         _ => parse_error!(
                             rhs,
                             format!("Expected path or identifier, found {:?}", rhs)
@@ -465,10 +465,9 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
                 .find(match_tag("condition"))
                 .map(|p| p.into_inner())
                 .map(parse_extends_expr)
-                .unwrap()
-                .into();
+                .unwrap();
 
-            let body = inner.find(match_tag("body")).map(parse).unwrap().into();
+            let body = inner.find(match_tag("body")).map(parse).unwrap();
 
             Arm {
                 span,
@@ -808,7 +807,7 @@ fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypePara
                     }
                 };
 
-                param.constraint = Some(body.into());
+                param.constraint = Some(body);
             });
     }
 
@@ -845,7 +844,7 @@ fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypePara
                     }
                 };
 
-                param.default = Some(body.into());
+                param.default = Some(body);
             });
     };
 
@@ -933,8 +932,7 @@ fn parse_if_expr(pair: Pair) -> Ast {
     let condition = inner
         .find(match_tag("condition"))
         .map(|p| (parse_extends_expr(p.into_inner())))
-        .unwrap()
-        .into();
+        .unwrap();
 
     let then_branch = inner.find(match_tag("then")).map(parse_).unwrap().into();
 
@@ -983,8 +981,7 @@ fn parse_object_literal(pair: Pair) -> TypeLiteral {
                 let value = inner
                     .find(match_tag("value"))
                     .map(parse)
-                    .expect("object property missing value")
-                    .into();
+                    .expect("object property missing value");
 
                 let inner = key.into_inner();
 
