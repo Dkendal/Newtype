@@ -56,13 +56,14 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 .unwrap();
 
                 let inner = op.into_inner().next().unwrap();
-                let index = parse(inner);
+                let lhs = lhs.into();
+                let rhs = parse_(inner).into();
 
                 Node::new(
                     span,
                     Ast::Access(Access {
                         lhs,
-                        rhs: index,
+                        rhs,
                         is_dot: false,
                         span,
                     }),
@@ -149,8 +150,8 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                 }
 
                 dot_op => Ast::Access(Access {
-                    lhs,
-                    rhs,
+                    lhs: lhs.into(),
+                    rhs: rhs.into(),
                     is_dot: true,
                     span,
                 }),

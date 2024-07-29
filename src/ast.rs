@@ -429,8 +429,8 @@ impl<'a> typescript::Pretty for Parameter<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Access<'a> {
-    pub lhs: Node<'a>,
-    pub rhs: Node<'a>,
+    pub lhs: Rc<Ast<'a>>,
+    pub rhs: Rc<Ast<'a>>,
     pub is_dot: bool,
     #[serde(skip)]
     pub span: Span<'a>,
@@ -439,11 +439,11 @@ pub struct Access<'a> {
 impl<'a> Access<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
-            lhs: f(&self.lhs),
-            rhs: f(&self.rhs),
+            lhs: f(&self.lhs).into(),
+            rhs: f(&self.rhs).into(),
             is_dot: self.is_dot,
             span: self.span,
         }
@@ -810,7 +810,6 @@ impl<'a> typescript::Pretty for Ast<'a> {
                 ..
             }) => {
                 let rhs = rhs
-                    .value
                     .as_ident()
                     .expect("rhs of dot access should be an ident");
 
@@ -1029,8 +1028,7 @@ impl<'a> Ast<'a> {
 
         match &self {
             Ast::Access(expr) => {
-                let expr = expr.map(f);
-                Ast::Access(expr)
+                Ast::Access(expr.map(f_))
             }
             Ast::ApplyGeneric(expr) => Ast::ApplyGeneric(expr.map(f_)),
 
