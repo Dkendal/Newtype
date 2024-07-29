@@ -1,5 +1,3 @@
-use node::Node;
-
 use crate::ast::*;
 
 pub mod builtin {
@@ -9,27 +7,27 @@ pub mod builtin {
 
     use super::*;
 
-    pub fn dbg(tree: Node) -> Node {
+    pub fn dbg(tree: Ast) -> Ast {
         println!("{:#?}", tree);
         tree
     }
 
-    pub fn assert_equal<'a>(_left: Node<'a>, _right: Node<'a>) -> Node<'a> {
+    pub fn assert_equal<'a>(_left: Ast<'a>, _right: Ast<'a>) -> Ast<'a> {
         todo!("remove spans");
 
         // pretty_assertions::assert_eq!(left, right);
         //
-        // Node::new(
+        // Ast::new(
         //     merge_spans(left.as_span(), right.as_span()),
         //     Ast::NoOp(left.as_span()),
         // )
     }
 
-    pub fn unquote(tree: Node) -> Node {
+    pub fn unquote(tree: Ast) -> Ast {
         let (out, _) = tree.prewalk((), &|tree, acc| {
             let span = tree.as_span();
 
-            match &*tree.value {
+            match tree {
                 Ast::MacroCall(_) => todo!(),
 
                 Ast::ExtendsExpr(ExtendsExpr {
@@ -38,30 +36,23 @@ pub mod builtin {
                     then_branch,
                     else_branch,
                     ..
-                }) => match lhs.is_subtype(rhs) {
+                }) => match lhs.is_subtype(&rhs) {
                     ExtendsResult::True => (then_branch.into(), acc),
                     ExtendsResult::False => (else_branch.into(), acc),
-                    ExtendsResult::Never => {
-                        let mut tree = tree.clone();
-                        tree.set_value(Box::new(Ast::NeverKeyword(span)));
-                        (tree, acc)
-                    }
+                    ExtendsResult::Never => (Ast::NeverKeyword(span), acc),
                     ExtendsResult::Both => {
-                        let mut tree = tree.clone();
-
                         let value = Ast::UnionType(UnionType {
                             types: vec![then_branch.into(), else_branch.into()],
                             span,
                         });
 
-                        tree.set_value(Box::new(value));
-                        (tree, acc)
+                        (value, acc)
                     }
                 },
 
                 Ast::MappedType(_) => todo!(),
 
-                x if x.is_typescript_feature() => (tree, acc),
+                ref x if x.is_typescript_feature() => (tree, acc),
 
                 x => unimplemented!("Expected AST to have been desugared {:?}", x),
             }
@@ -93,7 +84,7 @@ mod tests {
             #[test]
             fn literal() {
                 assert_eq!(
-                    to_value(runtime::builtin::unquote(ast!("1"))).unwrap(),
+                    to_value(runtime::builtin::unquote(ast!("1").into())).unwrap(),
                     sexpr!("1").unwrap()
                 );
             }
@@ -102,7 +93,9 @@ mod tests {
             fn if_expr() {
                 assert_eq!(
                     to_value(runtime::builtin::unquote(
-                        ast!("if 1 <: number then true else false end").simplify()
+                        ast!("if 1 <: number then true else false end")
+                            .simplify()
+                            .into()
                     ))
                     .unwrap(),
                     sexpr!("true").unwrap()
@@ -119,7 +112,11 @@ mod tests {
             #[ignore]
             fn equal_values() {
                 assert_eq!(
-                    to_value(runtime::builtin::assert_equal(ast!("1"), ast!("1"))).unwrap(),
+                    to_value(runtime::builtin::assert_equal(
+                        ast!("1").into(),
+                        ast!("1").into()
+                    ))
+                    .unwrap(),
                     lexpr::sexp!(#"no-op")
                 );
             }
@@ -128,7 +125,11 @@ mod tests {
             #[ignore]
             fn equal_values_with_whitespace() {
                 assert_eq!(
-                    to_value(runtime::builtin::assert_equal(ast!(" 1 "), ast!("1"))).unwrap(),
+                    to_value(runtime::builtin::assert_equal(
+                        ast!(" 1 ").into(),
+                        ast!("1").into()
+                    ))
+                    .unwrap(),
                     lexpr::sexp!(#"no-op")
                 );
             }
@@ -137,7 +138,7 @@ mod tests {
             #[ignore]
             #[should_panic(expected = "assertion failed")]
             fn diff_values() {
-                runtime::builtin::assert_equal(ast!("1"), ast!("2"));
+                runtime::builtin::assert_equal(ast!("1").into(), ast!("2").into());
             }
         }
     }

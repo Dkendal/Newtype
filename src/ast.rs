@@ -345,13 +345,13 @@ pub struct UnitTest<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct MacroCall<'a> {
     pub name: String,
-    pub args: Vec<Node<'a>>,
+    pub args: Vec<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
 
 impl<'a> MacroCall<'a> {
-    fn eval(&self) -> Node<'a> {
+    fn eval(&self) -> Ast<'a> {
         let name = self.name.strip_suffix("!").unwrap();
 
         match name {

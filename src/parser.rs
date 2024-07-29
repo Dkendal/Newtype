@@ -656,7 +656,7 @@ fn parse_macro_call(pair: Pair) -> MacroCall {
     let args = next_pair!(inner, Rule::argument_list);
     let name = name.as_str().to_string();
     let inner = args.into_inner();
-    let args = inner.map(parse).collect_vec();
+    let args = inner.map(parse_).collect_vec();
     MacroCall { span, name, args }
 }
 

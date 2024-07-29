@@ -241,7 +241,7 @@ impl<'a> Node<'a> {
 
     pub fn eval(&self) -> Self {
         let (tree, _) = self.prewalk((), &|node, ctx| match &*node.value {
-            Ast::MacroCall(value) => (value.eval(), ctx),
+            Ast::MacroCall(value) => (value.eval().into(), ctx),
             _ => (node, ctx),
         });
 
