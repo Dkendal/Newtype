@@ -107,12 +107,12 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
 
             let ast = match op.as_rule() {
                 union => Ast::UnionType(UnionType {
-                    types: vec![lhs, rhs],
+                    types: vec![lhs.into(), rhs.into()],
                     span,
                 }),
 
                 intersection => Ast::IntersectionType(IntersectionType {
-                    types: vec![lhs, rhs],
+                    types: vec![lhs.into(), rhs.into()],
                     span,
                 }),
 

@@ -173,19 +173,11 @@ impl<'a> Node<'a> {
                 Ast::Path(path) => (path.simplify().into(), ctx),
                 Ast::UnionType(UnionType { types, .. }) => match types.as_slice() {
                     // Flatten nested union types (both)
-                    [Node {
-                        span: _,
-                        value:
-                            box Ast::UnionType(UnionType {
-                                types: lhs_types, ..
-                            }),
-                    }, Node {
-                        span: _,
-                        value:
-                            box Ast::UnionType(UnionType {
-                                types: rhs_types, ..
-                            }),
-                    }] => {
+                    [Ast::UnionType(UnionType {
+                        types: lhs_types, ..
+                    }), Ast::UnionType(UnionType {
+                        types: rhs_types, ..
+                    })] => {
                         let types = lhs_types
                             .clone()
                             .into_iter()
@@ -199,13 +191,9 @@ impl<'a> Node<'a> {
                         (node, ctx)
                     }
                     // Flatten nested union types (rhs)
-                    [lhs, Node {
-                        value:
-                            box Ast::UnionType(UnionType {
-                                types: rhs_types, ..
-                            }),
-                        ..
-                    }] => {
+                    [lhs, Ast::UnionType(UnionType {
+                        types: rhs_types, ..
+                    })] => {
                         let mut types = rhs_types.clone();
 
                         types.push(lhs.clone());
@@ -217,13 +205,9 @@ impl<'a> Node<'a> {
                         (node, ctx)
                     }
                     // Flatten nested union types (lhs)
-                    [Node {
-                        span: _,
-                        value:
-                            box Ast::UnionType(UnionType {
-                                types: lhs_types, ..
-                            }),
-                    }, rhs] => {
+                    [Ast::UnionType(UnionType {
+                        types: lhs_types, ..
+                    }), rhs] => {
                         let mut types = lhs_types.clone();
 
                         types.push(rhs.clone());
@@ -238,9 +222,7 @@ impl<'a> Node<'a> {
                     types => {
                         let types = types
                             .iter()
-                            .sorted_by(|a, b| {
-                                a.value.is_intersection().cmp(&b.value.is_intersection())
-                            })
+                            .sorted_by(|a, b| a.is_intersection().cmp(&b.is_intersection()))
                             .cloned()
                             .collect_vec();
 

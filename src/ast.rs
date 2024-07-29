@@ -452,7 +452,7 @@ impl<'a> Access<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct IntersectionType<'a> {
-    pub types: Vec<Node<'a>>,
+    pub types: Vec<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -460,7 +460,7 @@ pub struct IntersectionType<'a> {
 impl<'a> IntersectionType<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             types: self.types.iter().map(f).collect(),
@@ -493,7 +493,7 @@ impl<'a> Builtin<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct UnionType<'a> {
-    pub types: Vec<Node<'a>>,
+    pub types: Vec<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -501,7 +501,7 @@ pub struct UnionType<'a> {
 impl<'a> UnionType<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             types: self.types.iter().map(f).collect(),
@@ -689,6 +689,18 @@ pub enum Ast<'a> {
 impl<'a> From<Node<'a>> for Ast<'a> {
     fn from(value: Node<'a>) -> Self {
         *value.value
+    }
+}
+
+impl<'a> From<Rc<Ast<'a>>> for Ast<'a> {
+    fn from(value: Rc<Ast<'a>>) -> Self {
+        (*value).clone()
+    }
+}
+
+impl<'a> From<&Rc<Ast<'a>>> for Ast<'a> {
+    fn from(value: &Rc<Ast<'a>>) -> Self {
+        (**value).clone()
     }
 }
 
@@ -983,7 +995,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             Ast::UnionType(UnionType { types, .. }) => {
                 let sep = D::line().append(D::text("|")).append(D::space());
                 D::intersperse(
-                    types.iter().map(|t| match t.value.as_ref() {
+                    types.iter().map(|t| match t {
                         Ast::IntersectionType(IntersectionType { .. }) => {
                             surround(t.to_ts(), "(", ")")
                         }
@@ -1063,25 +1075,13 @@ impl<'a> Ast<'a> {
 
             Ast::Statement(node) => Ast::Statement(f_(node).into()),
 
-            Ast::Tuple(expr) => {
-                let expr = expr.map(f_);
-                Ast::Tuple(expr)
-            }
+            Ast::Tuple(expr) => Ast::Tuple(expr.map(f_)),
 
-            Ast::TypeAlias(expr) => {
-                let expr = expr.map(f_);
-                Ast::TypeAlias(expr)
-            }
+            Ast::TypeAlias(expr) => Ast::TypeAlias(expr.map(f_)),
 
-            Ast::UnionType(expr) => {
-                let expr = expr.map(f);
-                Ast::UnionType(expr)
-            }
+            Ast::UnionType(expr) => Ast::UnionType(expr.map(f_)),
 
-            Ast::IntersectionType(expr) => {
-                let expr = expr.map(f);
-                Ast::IntersectionType(expr)
-            }
+            Ast::IntersectionType(expr) => Ast::IntersectionType(expr.map(f_)),
 
             _ => self.clone(),
         }
