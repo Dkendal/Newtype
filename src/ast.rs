@@ -377,7 +377,7 @@ impl<'a> MacroCall<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct FunctionType<'a> {
     pub params: Vec<Parameter<'a>>,
-    pub return_type: Node<'a>,
+    pub return_type: Rc<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -405,7 +405,7 @@ impl<'a> typescript::Pretty for FunctionType<'a> {
 pub struct Parameter<'a> {
     pub ellipsis: bool,
     pub name: String,
-    pub kind: Node<'a>,
+    pub kind: Ast<'a>,
     #[serde(skip)]
     pub span: Span<'a>,
 }

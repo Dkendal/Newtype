@@ -597,7 +597,7 @@ fn parse_function_type(pair: Pair) -> FunctionType {
                     span: pair.as_span(),
                     ellipsis,
                     name,
-                    kind: parse(kind.to_owned()),
+                    kind: parse_(kind.to_owned()),
                 }
             })
             .collect_vec(),
@@ -624,7 +624,7 @@ fn parse_function_type(pair: Pair) -> FunctionType {
                     span: pair.as_span(),
                     ellipsis,
                     name: name.as_str().to_string(),
-                    kind: parse(kind.to_owned()),
+                    kind: parse_(kind.to_owned()),
                 }
             })
             .collect_vec(),
@@ -636,7 +636,7 @@ fn parse_function_type(pair: Pair) -> FunctionType {
 
     let return_type = next_pair!(inner, Rule::expr);
 
-    let return_type = parse(return_type);
+    let return_type = parse_(return_type).into();
 
     FunctionType {
         span,
