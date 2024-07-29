@@ -83,8 +83,8 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
                     &op,
                     Ast::ApplyGeneric(ApplyGeneric {
                         span,
-                        receiver: lhs,
-                        args: args.into_inner().map(parse).collect(),
+                        receiver: lhs.into(),
+                        args: args.into_inner().map(parse_).collect(),
                     }),
                 )
             }
@@ -183,8 +183,8 @@ fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair
                 &op,
                 Ast::ApplyGeneric(ApplyGeneric {
                     span,
-                    receiver: rhs.clone(),
-                    args: vec![lhs],
+                    receiver: rhs.into(),
+                    args: vec![lhs.into()],
                 }),
             )
         }
@@ -194,7 +194,7 @@ fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair
             ..
         }) => {
             let mut params = params.clone();
-            params.insert(0, lhs);
+            params.insert(0, lhs.into());
             // FIXME missing span
             Node::from_pair(
                 &op,

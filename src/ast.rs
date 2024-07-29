@@ -142,8 +142,8 @@ impl<'a> Tuple<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ApplyGeneric<'a> {
-    pub receiver: Node<'a>,
-    pub args: Vec<Node<'a>>,
+    pub receiver: Rc<Ast<'a>>,
+    pub args: Vec<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -151,10 +151,10 @@ pub struct ApplyGeneric<'a> {
 impl<'a> ApplyGeneric<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         let mut expr = self.clone();
-        expr.receiver = f(&self.receiver);
+        expr.receiver = f(&self.receiver).into();
         expr.args = self.args.iter().map(f).collect();
         expr
     }
@@ -1033,8 +1033,7 @@ impl<'a> Ast<'a> {
                 Ast::Access(expr)
             }
             Ast::ApplyGeneric(expr) => {
-                let expr = expr.map(f);
-                Ast::ApplyGeneric(expr)
+                Ast::ApplyGeneric(expr.map(f_))
             }
 
             Ast::Array(node) => Ast::Array(Rc::new(f_(node))),
