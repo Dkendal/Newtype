@@ -1001,7 +1001,8 @@ fn parse_object_literal(pair: Pair) -> TypeLiteral {
                 let value = inner
                     .find(match_tag("value"))
                     .map(parse)
-                    .expect("object property missing value");
+                    .expect("object property missing value")
+                    .into();
 
                 let inner = key.into_inner();
 
@@ -1050,8 +1051,8 @@ fn parse_index_property_key(key: Pair) -> ObjectPropertyKey {
     let [index, iterable, remap_clause] = take_tags!(inner, ["index", "iterable", "remap_clause"]);
 
     let key = index.unwrap().as_str().to_string();
-    let iterable = parse(iterable.unwrap());
-    let remapped_as = remap_clause.map(parse);
+    let iterable = parse_(iterable.unwrap());
+    let remapped_as = remap_clause.map(parse_);
 
     ObjectPropertyKey::Index(PropertyKeyIndex {
         span,

@@ -209,14 +209,14 @@ pub struct TypeLiteral<'a> {
 impl<'a> TypeLiteral<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             properties: self
                 .properties
                 .clone()
                 .into_iter()
-                .map(|prop| prop.map(|ty| f(ty)))
+                .map(|prop| prop.map(|ty| f(ty).into()))
                 .collect(),
             span: self.span,
         }
@@ -1083,10 +1083,7 @@ impl<'a> Ast<'a> {
                 Ast::Path(expr)
             }
 
-            Ast::TypeLiteral(expr) => {
-                let expr = expr.map(f);
-                Ast::TypeLiteral(expr)
-            }
+            Ast::TypeLiteral(expr) => Ast::TypeLiteral(expr.map(f_)),
 
             Ast::Program(expr) => Ast::Program(expr.map(f_)),
 
@@ -1954,7 +1951,7 @@ pub enum ObjectPropertyKey<'a> {
 impl<'a> ObjectPropertyKey<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         match self {
             ObjectPropertyKey::Index(index) => ObjectPropertyKey::Index(index.map(f)),
@@ -1980,14 +1977,14 @@ pub struct PropertyKeyIndex<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
     pub key: String,
-    pub iterable: Node<'a>,
-    pub remapped_as: Option<Node<'a>>,
+    pub iterable: Ast<'a>,
+    pub remapped_as: Option<Ast<'a>>,
 }
 
 impl<'a> PropertyKeyIndex<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             iterable: f(&self.iterable),
@@ -2032,13 +2029,13 @@ pub struct ObjectProperty<'a> {
     pub readonly: bool,
     pub optional: bool,
     pub key: ObjectPropertyKey<'a>,
-    pub value: Node<'a>,
+    pub value: Ast<'a>,
 }
 
 impl<'a> ObjectProperty<'a> {
     fn map<F>(self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             value: f(&self.value),
