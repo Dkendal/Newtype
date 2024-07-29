@@ -702,7 +702,7 @@ fn parse_program(pair: Pair) -> Ast {
         .clone()
         .into_inner()
         .filter(|pair| pair.as_rule() != Rule::EOI) // Remove the end of input token
-        .map(parse)
+        .map(parse_)
         .collect();
 
     Ast::Program(Program { statements })

@@ -591,13 +591,13 @@ impl<'a> TypeAlias<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Program<'a> {
-    pub statements: Vec<Node<'a>>,
+    pub statements: Vec<Ast<'a>>,
 }
 
 impl<'a> Program<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             statements: self.statements.iter().map(f).collect(),
@@ -1094,10 +1094,7 @@ impl<'a> Ast<'a> {
                 Ast::TypeLiteral(expr)
             }
 
-            Ast::Program(expr) => {
-                let expr = expr.map(f);
-                Ast::Program(expr)
-            }
+            Ast::Program(expr) => Ast::Program(expr.map(f_)),
 
             Ast::Statement(node) => Ast::Statement(f_(node).into()),
 
