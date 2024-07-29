@@ -1413,13 +1413,13 @@ impl<'a> Ast<'a> {
         }
     }
 
-    fn merge_spans(&'a self, other: &'a Ast<'a>) -> Span<'a> {
+    pub fn merge_spans(&'a self, other: &'a Ast<'a>) -> Span<'a> {
         let a = self.as_span();
         let b = other.as_span();
         merge_spans(a, b)
     }
 
-    fn as_span(&self) -> Span<'a> {
+    pub fn as_span(&self) -> Span<'a> {
         match self {
             Ast::Access(x) => x.span,
             Ast::AnyKeyword(span) => *span,

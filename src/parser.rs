@@ -102,7 +102,8 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
             .unwrap();
 
             if op.as_rule() == pipe {
-                return replace_pipe_with_type_application(rhs, lhs, op);
+                return replace_pipe_with_type_application(rhs.into(), lhs.into(), op)
+                    .into();
             }
 
             let ast = match op.as_rule() {
@@ -169,7 +170,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
 /// A |> B
 /// # B(A)
 /// ```
-fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair<'a>) -> Node<'a> {
+fn replace_pipe_with_type_application<'a>(rhs: Ast<'a>, lhs: Ast<'a>, op: Pair<'a>) -> Ast<'a> {
     let span = Span::new(
         op.as_span().get_input(),
         lhs.as_span().start(),
@@ -177,17 +178,14 @@ fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair
     )
     .unwrap();
 
-    match &*rhs.value {
+    match rhs {
         Ast::Ident(_) => {
             // FIXME missing span
-            Node::from_pair(
-                &op,
-                Ast::ApplyGeneric(ApplyGeneric {
-                    span,
-                    receiver: rhs.into(),
-                    args: vec![lhs.into()],
-                }),
-            )
+            Ast::ApplyGeneric(ApplyGeneric {
+                span,
+                receiver: rhs.into(),
+                args: vec![lhs.into()],
+            })
         }
         Ast::ApplyGeneric(ApplyGeneric {
             receiver: name,
@@ -196,15 +194,11 @@ fn replace_pipe_with_type_application<'a>(rhs: Node<'a>, lhs: Node<'a>, op: Pair
         }) => {
             let mut params = params.clone();
             params.insert(0, lhs.into());
-            // FIXME missing span
-            Node::from_pair(
-                &op,
-                Ast::ApplyGeneric(ApplyGeneric {
-                    span,
-                    receiver: name.clone(),
-                    args: params,
-                }),
-            )
+            Ast::ApplyGeneric(ApplyGeneric {
+                span,
+                receiver: name.clone(),
+                args: params,
+            })
         }
         _ => {
             let error = Error::new_from_span(
