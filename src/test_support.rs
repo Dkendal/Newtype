@@ -20,7 +20,7 @@ macro_rules! ast {
             .next()
             .unwrap();
 
-        parser::parse(pair)
+        parser::parse_(pair)
     }};
 }
 
@@ -36,7 +36,7 @@ macro_rules! sexpr {
             .next()
             .unwrap();
 
-        let ast = parser::parse(pair);
+        let ast = parser::parse_(pair);
 
         serde_lexpr::to_value(ast)
     }};

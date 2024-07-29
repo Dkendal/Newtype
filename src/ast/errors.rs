@@ -1,13 +1,13 @@
 use core::fmt;
 
-use super::node::Node;
+use super::Ast;
 
 pub struct SyntaxSugarError<'a> {
-    pub node: Node<'a>,
+    pub node: Ast<'a>,
 }
 
 impl<'a> SyntaxSugarError<'a> {
-    pub fn new(node: Node<'a>) -> Self {
+    pub fn new(node: Ast<'a>) -> Self {
         Self { node }
     }
 }

@@ -5,7 +5,7 @@ use if_expr::IfExpr;
 use itertools::Itertools;
 use let_expr::LetExpr;
 use match_expr::MatchExpr;
-use node::{Bindings, Node};
+use node::Bindings;
 use pest::Span;
 use pretty::RcDoc as D;
 use serde_derive::Serialize;
@@ -591,6 +591,8 @@ impl<'a> TypeAlias<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct Program<'a> {
     pub statements: Vec<Ast<'a>>,
+    #[serde(skip)]
+    pub span: Span<'a>,
 }
 
 impl<'a> Program<'a> {
@@ -600,6 +602,7 @@ impl<'a> Program<'a> {
     {
         Self {
             statements: self.statements.iter().map(f).collect(),
+            span: self.span,
         }
     }
 }
@@ -686,12 +689,6 @@ pub enum Ast<'a> {
     NoOp(#[serde(skip)] Span<'a>),
 }
 
-impl<'a> From<Node<'a>> for Ast<'a> {
-    fn from(value: Node<'a>) -> Self {
-        *value.value
-    }
-}
-
 impl<'a> From<Rc<Ast<'a>>> for Ast<'a> {
     fn from(value: Rc<Ast<'a>>) -> Self {
         (*value).clone()
@@ -701,12 +698,6 @@ impl<'a> From<Rc<Ast<'a>>> for Ast<'a> {
 impl<'a> From<&Rc<Ast<'a>>> for Ast<'a> {
     fn from(value: &Rc<Ast<'a>>) -> Self {
         (**value).clone()
-    }
-}
-
-impl<'a> From<&Node<'a>> for Ast<'a> {
-    fn from(value: &Node<'a>) -> Self {
-        (*value.value).clone()
     }
 }
 
@@ -728,18 +719,6 @@ impl<'a> From<cond_expr::CondExpr<'a>> for Ast<'a> {
     }
 }
 
-impl<'a> From<&Node<'a>> for Rc<Ast<'a>> {
-    fn from(value: &Node<'a>) -> Self {
-        Rc::new((*value.value).clone())
-    }
-}
-
-impl<'a> From<Node<'a>> for Rc<Ast<'a>> {
-    fn from(value: Node<'a>) -> Self {
-        Rc::new((*value.value).clone())
-    }
-}
-
 impl<'a> From<Rc<Ast<'a>>> for Box<Ast<'a>> {
     fn from(value: Rc<Ast<'a>>) -> Self {
         Box::new((*value).clone())
@@ -755,7 +734,7 @@ impl<'a> From<&Rc<Ast<'a>>> for Box<Ast<'a>> {
 impl<'a> typescript::Pretty for Ast<'a> {
     fn to_ts(&self) -> D<()> {
         match self {
-            Ast::Program(Program { statements }) => {
+            Ast::Program(Program { statements, .. }) => {
                 let mut doc = D::nil();
                 for stmnt in statements {
                     doc = doc
@@ -1015,7 +994,7 @@ impl<'a> typescript::Pretty for Ast<'a> {
             | Ast::CondExpr(cond_expr::CondExpr { .. })
             | Ast::ExtendsInfixOp(ExtendsInfixOp { .. })) => {
                 unreachable!(
-                    "ASTNode<'a> should be desugared before this point {:#?}",
+                    "Ast should be desugared before this point {:#?}",
                     node
                 )
             }
@@ -1031,12 +1010,8 @@ impl<'a> From<ExtendsExpr<'a>> for Ast<'a> {
 }
 
 impl<'a> Ast<'a> {
-    pub fn map<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Node<'a>) -> Node<'a>,
-    {
-        let f_ = |ast: &Ast<'a>| -> Ast<'a> { f(&ast.into()).into() };
-        self.map_(f_)
+    pub fn to_sexp(&self) -> serde_lexpr::Result<serde_lexpr::Value> {
+        serde_lexpr::to_value(self)
     }
 
     pub fn map_<F>(&self, f: F) -> Self
@@ -1045,6 +1020,7 @@ impl<'a> Ast<'a> {
     {
         match &self {
             Ast::Access(expr) => Ast::Access(expr.map(f)),
+
             Ast::ApplyGeneric(expr) => Ast::ApplyGeneric(expr.map(f)),
 
             Ast::Array(node) => Ast::Array(Rc::new(f(node))),
@@ -1197,10 +1173,6 @@ impl<'a> Ast<'a> {
         let (ast, acc) = post(ast, ctx);
 
         (ast, acc)
-    }
-
-    pub fn to_node(&self, pair: Pair<'a>) -> Node<'a> {
-        Node::from_pair(&pair, self.clone())
     }
 
     /// Operators that the `not` prefix operator can be applied to.
@@ -1541,7 +1513,7 @@ impl<'a> Ast<'a> {
             Ast::Number(x) => x.span,
             Ast::Path(x) => x.span,
             Ast::Primitive(_, span) => *span,
-            Ast::Program(_x) => todo!(),
+            Ast::Program(x) => x.span,
             Ast::Statement(ast) => ast.as_span(),
             Ast::String(x) => x.span,
             Ast::TemplateString(x) => x.span,
