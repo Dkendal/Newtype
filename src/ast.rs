@@ -215,7 +215,7 @@ impl<'a> TypeLiteral<'a> {
                 .properties
                 .clone()
                 .into_iter()
-                .map(|prop| prop.map(|ty| f(ty).into()))
+                .map(|prop| prop.map(|ty| f(ty)))
                 .collect(),
             span: self.span,
         }

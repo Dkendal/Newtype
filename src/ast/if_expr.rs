@@ -31,7 +31,7 @@ impl<'a> IfExpr<'a> {
             .as_ref()
             .map_or_else(|| Ast::NeverKeyword(self.span), |v| (**v).clone());
 
-        expand_to_extends(&self.condition, &self.then_branch, &else_branch).into()
+        expand_to_extends(&self.condition, &self.then_branch, &else_branch)
     }
 }
 
@@ -58,12 +58,12 @@ pub(crate) fn expand_to_extends<'a>(
         }
         Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => match op {
             InfixOp::And => {
-                let then = expand_to_extends(&rhs, then, else_arm);
-                Some(expand_to_extends(&lhs, &then, else_arm))
+                let then = expand_to_extends(rhs, then, else_arm);
+                Some(expand_to_extends(lhs, &then, else_arm))
             }
             InfixOp::Or => {
-                let else_arm = expand_to_extends(&rhs, then, else_arm);
-                Some(expand_to_extends(&lhs, then, &else_arm))
+                let else_arm = expand_to_extends(rhs, then, else_arm);
+                Some(expand_to_extends(lhs, then, &else_arm))
             }
             _ => None,
         },

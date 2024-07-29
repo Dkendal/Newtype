@@ -183,7 +183,7 @@ fn replace_pipe_with_type_application<'a>(rhs: Ast<'a>, lhs: Ast<'a>, op: Pair<'
             Ast::ApplyGeneric(ApplyGeneric {
                 span,
                 receiver: rhs.into(),
-                args: vec![lhs.into()],
+                args: vec![lhs],
             })
         }
         Ast::ApplyGeneric(ApplyGeneric {
@@ -192,7 +192,7 @@ fn replace_pipe_with_type_application<'a>(rhs: Ast<'a>, lhs: Ast<'a>, op: Pair<'
             ..
         }) => {
             let mut params = params.clone();
-            params.insert(0, lhs.into());
+            params.insert(0, lhs);
             Ast::ApplyGeneric(ApplyGeneric {
                 span,
                 receiver: name.clone(),

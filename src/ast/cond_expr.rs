@@ -42,7 +42,7 @@ impl<'a> CondExpr<'a> {
                 ..
             } = arm;
 
-            if_expr::expand_to_extends(&condition, &then, &else_arm)
+            if_expr::expand_to_extends(condition, then, &else_arm)
         });
 
         acc
