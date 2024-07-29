@@ -1036,55 +1036,101 @@ impl<'a> Ast<'a> {
         F: Fn(&Node<'a>) -> Node<'a>,
     {
         let f_ = |ast: &Ast<'a>| -> Ast<'a> { f(&ast.into()).into() };
+        self.map_(f_)
+    }
+
+    pub fn map_<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Ast<'a>) -> Ast<'a>,
+    {
+        let g = |ast: &Node<'a>| -> Node<'a> { f(&ast.into()).into() };
 
         match &self {
-            Ast::Access(expr) => Ast::Access(expr.map(f_)),
-            Ast::ApplyGeneric(expr) => Ast::ApplyGeneric(expr.map(f_)),
+            Ast::Access(expr) => Ast::Access(expr.map(f)),
+            Ast::ApplyGeneric(expr) => Ast::ApplyGeneric(expr.map(f)),
 
-            Ast::Array(node) => Ast::Array(Rc::new(f_(node))),
+            Ast::Array(node) => Ast::Array(Rc::new(f(node))),
 
-            Ast::Builtin(expr) => Ast::Builtin(expr.map(f_)),
+            Ast::Builtin(expr) => Ast::Builtin(expr.map(f)),
 
             Ast::CondExpr(expr) => {
-                let expr = expr.map(f);
+                let expr = expr.map(g);
                 Ast::CondExpr(expr)
             }
 
-            Ast::ExtendsInfixOp(expr) => Ast::ExtendsInfixOp(expr.map(f_)),
+            Ast::ExtendsInfixOp(expr) => Ast::ExtendsInfixOp(expr.map(f)),
 
-            Ast::ExtendsExpr(expr) => Ast::ExtendsExpr(expr.map(f_)),
+            Ast::ExtendsExpr(expr) => Ast::ExtendsExpr(expr.map(f)),
 
-            Ast::ExtendsPrefixOp(expr) => Ast::ExtendsPrefixOp(expr.map(f_)),
+            Ast::ExtendsPrefixOp(expr) => Ast::ExtendsPrefixOp(expr.map(f)),
 
-            Ast::IfExpr(expr) => Ast::IfExpr(expr.map(f_)),
+            Ast::IfExpr(expr) => Ast::IfExpr(expr.map(f)),
 
             Ast::LetExpr(expr) => {
-                let expr = expr.map(f);
+                let expr = expr.map(g);
                 Ast::LetExpr(expr)
             }
 
-            Ast::MappedType(expr) => Ast::MappedType(expr.map(f_)),
+            Ast::MappedType(expr) => Ast::MappedType(expr.map(f)),
 
-            Ast::MatchExpr(expr) => Ast::MatchExpr(expr.map(f_)),
+            Ast::MatchExpr(expr) => Ast::MatchExpr(expr.map(f)),
 
-            Ast::Path(expr) => Ast::Path(expr.map(f_)),
+            Ast::Path(expr) => Ast::Path(expr.map(f)),
 
-            Ast::TypeLiteral(expr) => Ast::TypeLiteral(expr.map(f_)),
+            Ast::TypeLiteral(expr) => Ast::TypeLiteral(expr.map(f)),
 
-            Ast::Program(expr) => Ast::Program(expr.map(f_)),
+            Ast::Program(expr) => Ast::Program(expr.map(f)),
 
-            Ast::Statement(node) => Ast::Statement(f_(node).into()),
+            Ast::Statement(node) => Ast::Statement(f(node).into()),
 
-            Ast::Tuple(expr) => Ast::Tuple(expr.map(f_)),
+            Ast::Tuple(expr) => Ast::Tuple(expr.map(f)),
 
-            Ast::TypeAlias(expr) => Ast::TypeAlias(expr.map(f_)),
+            Ast::TypeAlias(expr) => Ast::TypeAlias(expr.map(f)),
 
-            Ast::UnionType(expr) => Ast::UnionType(expr.map(f_)),
+            Ast::UnionType(expr) => Ast::UnionType(expr.map(f)),
 
-            Ast::IntersectionType(expr) => Ast::IntersectionType(expr.map(f_)),
+            Ast::IntersectionType(expr) => Ast::IntersectionType(expr.map(f)),
 
             _ => self.clone(),
         }
+    }
+
+    pub fn prewalk<Context, F>(&self, ctx: Context, pre: &F) -> (Self, Context)
+    where
+        Context: Clone,
+        F: Fn(Self, Context) -> (Self, Context),
+    {
+        self.traverse(ctx, pre, &|n, c| (n, c))
+    }
+
+    pub fn postwalk<Context, F>(&self, ctx: Context, post: &F) -> (Self, Context)
+    where
+        Context: Clone,
+        F: Fn(Self, Context) -> (Self, Context),
+    {
+        self.traverse(ctx, &|n, c| (n, c), post)
+    }
+
+    pub fn traverse<Context, Pre, Post>(
+        &self,
+        ctx: Context,
+        pre: &Pre,
+        post: &Post,
+    ) -> (Self, Context)
+    where
+        Context: Clone,
+        Pre: Fn(Self, Context) -> (Self, Context),
+        Post: Fn(Self, Context) -> (Self, Context),
+    {
+        let ast = self.clone();
+
+        let (ast, ctx) = pre(ast, ctx);
+
+        let ast = ast.map_(|ast| ast.traverse(ctx.clone(), pre, post).0);
+
+        let (ast, acc) = post(ast, ctx);
+
+        (ast, acc)
     }
 
     pub fn to_node(&self, pair: Pair<'a>) -> Node<'a> {
