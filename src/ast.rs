@@ -336,7 +336,7 @@ impl<'a> typescript::Pretty for Interface<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct UnitTest<'a> {
     pub name: String,
-    pub body: Vec<Node<'a>>,
+    pub body: Vec<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }

@@ -665,7 +665,7 @@ fn parse_unittest(pair: Pair) -> UnitTest {
     let mut inner = pair.into_inner();
     let name = next_pair!(inner, Rule::string);
     let name = name.as_str().to_string();
-    let body = inner.map(parse).collect_vec();
+    let body = inner.map(parse_).collect_vec();
 
     UnitTest { span, name, body }
 }
