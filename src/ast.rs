@@ -1014,7 +1014,7 @@ impl<'a> Ast<'a> {
         serde_lexpr::to_value(self)
     }
 
-    pub fn map_<F>(&self, f: F) -> Self
+    pub fn map<F>(&self, f: F) -> Self
     where
         F: Fn(&Ast<'a>) -> Ast<'a>,
     {
@@ -1168,7 +1168,7 @@ impl<'a> Ast<'a> {
 
         let (ast, ctx) = pre(ast, ctx);
 
-        let ast = ast.map_(|ast| ast.traverse(ctx.clone(), pre, post).0);
+        let ast = ast.map(|ast| ast.traverse(ctx.clone(), pre, post).0);
 
         let (ast, acc) = post(ast, ctx);
 
