@@ -5,7 +5,7 @@ use if_expr::IfExpr;
 use itertools::Itertools;
 use let_expr::LetExpr;
 use match_expr::MatchExpr;
-use node::Node;
+use node::{Bindings, Node};
 use pest::Span;
 use pretty::RcDoc as D;
 use serde_derive::Serialize;
@@ -1043,8 +1043,6 @@ impl<'a> Ast<'a> {
     where
         F: Fn(&Ast<'a>) -> Ast<'a>,
     {
-        let g = |ast: &Node<'a>| -> Node<'a> { f(&ast.into()).into() };
-
         match &self {
             Ast::Access(expr) => Ast::Access(expr.map(f)),
             Ast::ApplyGeneric(expr) => Ast::ApplyGeneric(expr.map(f)),
@@ -1063,10 +1061,7 @@ impl<'a> Ast<'a> {
 
             Ast::IfExpr(expr) => Ast::IfExpr(expr.map(f)),
 
-            Ast::LetExpr(expr) => {
-                let expr = expr.map(g);
-                Ast::LetExpr(expr)
-            }
+            Ast::LetExpr(expr) => Ast::LetExpr(expr.map(f)),
 
             Ast::MappedType(expr) => Ast::MappedType(expr.map(f)),
 
@@ -1090,6 +1085,80 @@ impl<'a> Ast<'a> {
 
             _ => self.clone(),
         }
+    }
+
+    pub fn simplify(&self) -> Self {
+        let bindings: Bindings = Default::default();
+
+        let identity = |node, ctx| (node, ctx);
+
+        let (tree, _) = self.traverse(bindings, &identity, &|ast, ctx| {
+            let span = ast.as_span();
+
+            match ast {
+                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
+                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
+                Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
+                Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
+                Ast::Path(path) => (path.simplify(), ctx),
+                Ast::UnionType(UnionType { types, .. }) => match types.as_slice() {
+                    // Flatten nested union types (both)
+                    [Ast::UnionType(UnionType {
+                        types: lhs_types, ..
+                    }), Ast::UnionType(UnionType {
+                        types: rhs_types, ..
+                    })] => {
+                        let types = lhs_types
+                            .clone()
+                            .into_iter()
+                            .chain(rhs_types.clone())
+                            .collect();
+
+                        let ast = Ast::UnionType(UnionType { types, span });
+
+                        (ast, ctx)
+                    }
+                    // Flatten nested union types (rhs)
+                    [lhs, Ast::UnionType(UnionType {
+                        types: rhs_types, ..
+                    })] => {
+                        let mut types = rhs_types.clone();
+
+                        types.push(lhs.clone());
+
+                        let ast = Ast::UnionType(UnionType { types, span });
+
+                        (ast, ctx)
+                    }
+                    // Flatten nested union types (lhs)
+                    [Ast::UnionType(UnionType {
+                        types: lhs_types, ..
+                    }), rhs] => {
+                        let mut types = lhs_types.clone();
+
+                        types.push(rhs.clone());
+
+                        let ast = Ast::UnionType(UnionType { types, span });
+
+                        (ast, ctx)
+                    }
+                    // Move all intersection to the right
+                    types => {
+                        let types = types
+                            .iter()
+                            .sorted_by(|a, b| a.is_intersection().cmp(&b.is_intersection()))
+                            .cloned()
+                            .collect_vec();
+
+                        let ast = Ast::UnionType(UnionType { types, span });
+
+                        (ast, ctx)
+                    }
+                },
+                _ => (ast, ctx),
+            }
+        });
+        tree
     }
 
     pub fn prewalk<Context, F>(&self, ctx: Context, pre: &F) -> (Self, Context)

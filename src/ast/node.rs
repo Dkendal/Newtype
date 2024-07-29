@@ -169,7 +169,7 @@ impl<'a> Node<'a> {
                 Ast::IfExpr(if_expr) => (if_expr.simplify().into(), ctx),
                 Ast::MatchExpr(match_expr) => (match_expr.simplify().into(), ctx),
                 Ast::CondExpr(cond_expr) => (cond_expr.simplify().into(), ctx),
-                Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
+                Ast::LetExpr(let_expr) => (let_expr.simplify().into(), ctx),
                 Ast::Path(path) => (path.simplify().into(), ctx),
                 Ast::UnionType(UnionType { types, .. }) => match types.as_slice() {
                     // Flatten nested union types (both)
@@ -261,7 +261,7 @@ impl<'a> Node<'a> {
     }
 }
 
-pub type Bindings<'a> = HashMap<String, Node<'a>>;
+pub type Bindings<'a> = HashMap<String, Ast<'a>>;
 
 impl<'a> typescript::Pretty for Node<'a> {
     fn to_ts(&self) -> pretty::RcDoc<()> {

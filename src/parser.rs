@@ -550,7 +550,7 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
             let name = name.as_str().to_string();
             let value = inner.next().unwrap();
             assert_eq!(value.as_rule(), Rule::expr);
-            let value = parse(value);
+            let value = parse_(value);
 
             (name, value)
         })
@@ -560,8 +560,9 @@ fn parse_let_expr(pair: Pair) -> LetExpr {
         .clone()
         .into_inner()
         .find(match_tag("body"))
-        .map(parse)
-        .unwrap();
+        .map(parse_)
+        .unwrap()
+        .into();
 
     LetExpr {
         span,
