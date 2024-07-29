@@ -102,8 +102,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
             .unwrap();
 
             if op.as_rule() == pipe {
-                return replace_pipe_with_type_application(rhs.into(), lhs.into(), op)
-                    .into();
+                return replace_pipe_with_type_application(rhs.into(), lhs.into(), op).into();
             }
 
             let ast = match op.as_rule() {
@@ -949,25 +948,25 @@ fn parse_if_expr(pair: Pair) -> Node {
     let condition = inner
         .find(match_tag("condition"))
         .map(|p| (parse_extends_expr(p.into_inner())))
-        .unwrap();
+        .unwrap()
+        .into();
 
-    let then_branch = inner.find(match_tag("then")).map(parse).unwrap();
+    let then_branch = inner.find(match_tag("then")).map(parse_).unwrap().into();
 
     let else_branch = inner
         .find(match_tag("else"))
         .map(parse)
-        .unwrap_or_else(|| Node::new(span, Ast::NeverKeyword(span)));
+        .unwrap_or_else(|| Node::new(span, Ast::NeverKeyword(span)))
+        .into();
 
-    let else_branch = else_branch;
-
-    match &*condition.value {
+    match condition {
         // Other conditions are desugared later in the simplification step
         Ast::ExtendsInfixOp(ExtendsInfixOp { .. })
         | Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. }) => Node::from_pair(
             &pair,
             Ast::IfExpr(IfExpr {
                 span: pair.as_span(),
-                condition,
+                condition: Rc::new(condition),
                 then_branch,
                 else_branch: Some(else_branch),
             }),

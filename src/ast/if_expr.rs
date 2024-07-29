@@ -1,3 +1,5 @@
+use newtype::compose;
+
 use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
@@ -5,36 +7,31 @@ use super::*;
 pub struct IfExpr<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub condition: Node<'a>,
-    pub then_branch: Node<'a>,
-    pub else_branch: Option<Node<'a>>,
+    pub condition: Rc<Ast<'a>>,
+    pub then_branch: Rc<Ast<'a>>,
+    pub else_branch: Option<Rc<Ast<'a>>>,
 }
 
 impl<'a> IfExpr<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             span: self.span,
-            condition: f(&self.condition),
-            then_branch: f(&self.then_branch),
-            else_branch: self.else_branch.as_ref().map(f),
+            condition: f(&self.condition).into(),
+            then_branch: f(&self.then_branch).into(),
+            else_branch: self.else_branch.as_ref().map(compose!(f, Into::into)),
         }
     }
 
-    pub fn simplify(&self) -> Node<'a> {
-        let else_branch = self.else_branch.as_ref().map_or_else(
-            || node::Node::new(self.span, Ast::NeverKeyword(self.span)),
-            |v| v.clone(),
-        );
+    pub fn simplify(&self) -> Ast<'a> {
+        let else_branch = self
+            .else_branch
+            .as_ref()
+            .map_or_else(|| Ast::NeverKeyword(self.span), |v| (**v).clone());
 
-        expand_to_extends(
-            &self.condition.value,
-            &self.then_branch.value,
-            &else_branch.value,
-        )
-        .into()
+        expand_to_extends(&self.condition, &self.then_branch, &else_branch).into()
     }
 }
 
@@ -107,7 +104,7 @@ pub(crate) fn expand_to_extends<'a>(
                     lhs.clone(),
                     rhs.clone(),
                     Rc::new(then.clone()),
-                    Rc::new(else_arm.clone())
+                    Rc::new(else_arm.clone()),
                 )),
                 InfixOp::NotExtends => Ast::from(ExtendsExpr::new(
                     span,

@@ -166,7 +166,7 @@ impl<'a> Node<'a> {
             let value = node.value.as_ref();
 
             match value {
-                Ast::IfExpr(if_expr) => (if_expr.simplify(), ctx),
+                Ast::IfExpr(if_expr) => (if_expr.simplify().into(), ctx),
                 Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
                 Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
                 Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),

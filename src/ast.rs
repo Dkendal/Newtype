@@ -1032,31 +1032,20 @@ impl<'a> Ast<'a> {
 
             Ast::Array(node) => Ast::Array(Rc::new(f_(node))),
 
-            Ast::Builtin(expr) => {
-                Ast::Builtin(expr.map(f_))
-            }
+            Ast::Builtin(expr) => Ast::Builtin(expr.map(f_)),
 
             Ast::CondExpr(expr) => {
                 let expr = expr.map(f);
                 Ast::CondExpr(expr)
             }
 
-            Ast::ExtendsInfixOp(expr) => {
-                Ast::ExtendsInfixOp(expr.map(f_))
-            }
+            Ast::ExtendsInfixOp(expr) => Ast::ExtendsInfixOp(expr.map(f_)),
 
-            Ast::ExtendsExpr(expr) => {
-                Ast::ExtendsExpr(expr.map(f_))
-            }
+            Ast::ExtendsExpr(expr) => Ast::ExtendsExpr(expr.map(f_)),
 
-            Ast::ExtendsPrefixOp(expr) => {
-                Ast::ExtendsPrefixOp(expr.map(f_))
-            }
+            Ast::ExtendsPrefixOp(expr) => Ast::ExtendsPrefixOp(expr.map(f_)),
 
-            Ast::IfExpr(expr) => {
-                let expr = expr.map(f);
-                Ast::IfExpr(expr)
-            }
+            Ast::IfExpr(expr) => Ast::IfExpr(expr.map(f_)),
 
             Ast::LetExpr(expr) => {
                 let expr = expr.map(f);
