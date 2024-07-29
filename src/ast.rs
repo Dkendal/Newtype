@@ -40,7 +40,8 @@ impl<'a> Path<'a> {
             segments: self.segments.iter().map(f).collect(),
         }
     }
-    fn simplify(&self, span: Span<'a>) -> Node<'a> {
+
+    fn simplify(&self) -> Ast<'a> {
         let mut acc = vec![];
 
         for seg in self.segments.iter() {
@@ -51,12 +52,10 @@ impl<'a> Path<'a> {
             }
         }
 
-        let ast = Ast::Path(Path {
-            span,
+        Ast::Path(Path {
+            span: self.span,
             segments: acc,
-        });
-
-        Node::new(span, ast)
+        })
     }
 }
 
@@ -1054,15 +1053,9 @@ impl<'a> Ast<'a> {
 
             Ast::MappedType(expr) => Ast::MappedType(expr.map(f_)),
 
-            Ast::MatchExpr(expr) => {
-                let expr = expr.map(f);
-                Ast::MatchExpr(expr)
-            }
+            Ast::MatchExpr(expr) => Ast::MatchExpr(expr.map(f_)),
 
-            Ast::Path(expr) => {
-                let expr = expr.map(f_);
-                Ast::Path(expr)
-            }
+            Ast::Path(expr) => Ast::Path(expr.map(f_)),
 
             Ast::TypeLiteral(expr) => Ast::TypeLiteral(expr.map(f_)),
 

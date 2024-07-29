@@ -5,18 +5,18 @@ use super::*;
 pub struct MatchExpr<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub value: Node<'a>,
+    pub value: Rc<Ast<'a>>,
     pub arms: Vec<Arm<'a>>,
-    pub else_arm: Node<'a>,
+    pub else_arm: Rc<Ast<'a>>,
 }
 
 impl<'a> MatchExpr<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         let mut expr = self.clone();
-        expr.value = f(&self.value);
+        expr.value = f(&self.value).into();
         expr.arms = self
             .arms
             .iter()
@@ -26,11 +26,11 @@ impl<'a> MatchExpr<'a> {
                 body: f(&arm.body),
             })
             .collect();
-        expr.else_arm = f(&self.else_arm);
+        expr.else_arm = f(&self.else_arm).into();
         expr
     }
 
-    pub fn simplify(&self) -> Node<'a> {
+    pub fn simplify(&self) -> Ast<'a> {
         // Convert match arms to a series of extends expressions.
         // Allows for a single wildcard pattern ("_") to be used as the default case.
         let MatchExpr {
@@ -40,28 +40,25 @@ impl<'a> MatchExpr<'a> {
             ..
         } = self;
 
-        arms.iter()
-            .rev()
-            .fold(else_arm.clone(), |acc: Node, arm: &Arm| -> Node {
-                let Arm {
-                    span,
-                    pattern,
-                    body,
-                } = arm;
+        let init: Ast<'a> = (**else_arm).clone();
 
-                let span = *span;
+        arms.iter().rev().fold(init, |acc: Ast, arm: &Arm| -> Ast {
+            let Arm {
+                span,
+                pattern,
+                body,
+            } = arm;
 
-                Node {
-                    span,
-                    value: Box::new(Ast::from(ExtendsExpr {
-                        span,
-                        lhs: value.into(),
-                        rhs: pattern.into(),
-                        then_branch: body.into(),
-                        else_branch: acc.into(),
-                    })),
-                }
+            let span = *span;
+
+            Ast::from(ExtendsExpr {
+                span,
+                lhs: value.clone(),
+                rhs: pattern.clone().into(),
+                then_branch: body.clone().into(),
+                else_branch: acc.into(),
             })
+        })
     }
 }
 
@@ -69,6 +66,6 @@ impl<'a> MatchExpr<'a> {
 pub struct Arm<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
-    pub pattern: Node<'a>,
-    pub body: Node<'a>,
+    pub pattern: Ast<'a>,
+    pub body: Ast<'a>,
 }

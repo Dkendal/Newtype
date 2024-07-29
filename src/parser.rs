@@ -422,7 +422,7 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
 
     let mut inner = pair.into_inner();
 
-    let value = inner.find(match_tag("value")).map(parse).unwrap();
+    let value = inner.find(match_tag("value")).map(parse_).unwrap().into();
 
     let arms: Vec<match_expr::Arm> = inner
         .clone()
@@ -430,8 +430,8 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
         .map(|pair| {
             let span = pair.as_span();
             let mut inner = pair.into_inner();
-            let pattern = inner.find(match_tag("pattern")).map(parse).unwrap();
-            let body = inner.find(match_tag("body")).map(parse).unwrap();
+            let pattern = inner.find(match_tag("pattern")).map(parse_).unwrap();
+            let body = inner.find(match_tag("body")).map(parse_).unwrap();
 
             Arm {
                 span,
@@ -444,8 +444,9 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
     let else_arm = inner
         .find(match_tag("else"))
         .and_then(|p| p.into_inner().find(match_tag("body")))
-        .map(parse)
-        .unwrap_or_else(|| Node::new(span, Ast::NeverKeyword(span)));
+        .map(parse_)
+        .unwrap_or(Ast::NeverKeyword(span))
+        .into();
 
     MatchExpr {
         span,

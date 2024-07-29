@@ -167,10 +167,10 @@ impl<'a> Node<'a> {
 
             match value {
                 Ast::IfExpr(if_expr) => (if_expr.simplify().into(), ctx),
-                Ast::MatchExpr(match_expr) => (match_expr.simplify(), ctx),
+                Ast::MatchExpr(match_expr) => (match_expr.simplify().into(), ctx),
                 Ast::CondExpr(cond_expr) => (cond_expr.simplify(), ctx),
                 Ast::LetExpr(let_expr) => (let_expr.simplify(), ctx),
-                Ast::Path(path) => (path.simplify(span), ctx),
+                Ast::Path(path) => (path.simplify().into(), ctx),
                 Ast::UnionType(UnionType { types, .. }) => match types.as_slice() {
                     // Flatten nested union types (both)
                     [Node {
