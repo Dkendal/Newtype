@@ -649,7 +649,7 @@ pub enum Ast<'a> {
     CondExpr(CondExpr<'a>),
     ExtendsInfixOp(ExtendsInfixOp<'a>),
     ExtendsExpr(ExtendsExpr<'a>),
-    Infer(Node<'a>),
+    Infer(Rc<Ast<'a>>),
     ExtendsPrefixOp(ExtendsPrefixOp<'a>),
     Ident(Ident<'a>),
     #[serde(rename(serialize = "if"))]
@@ -699,6 +699,24 @@ impl<'a> From<&Node<'a>> for Ast<'a> {
     }
 }
 
+impl<'a> From<if_expr::IfExpr<'a>> for Ast<'a> {
+    fn from(v: if_expr::IfExpr<'a>) -> Self {
+        Self::IfExpr(v)
+    }
+}
+
+impl<'a> From<match_expr::MatchExpr<'a>> for Ast<'a> {
+    fn from(v: match_expr::MatchExpr<'a>) -> Self {
+        Self::MatchExpr(v)
+    }
+}
+
+impl<'a> From<cond_expr::CondExpr<'a>> for Ast<'a> {
+    fn from(v: cond_expr::CondExpr<'a>) -> Self {
+        Self::CondExpr(v)
+    }
+}
+
 impl<'a> From<&Node<'a>> for Rc<Ast<'a>> {
     fn from(value: &Node<'a>) -> Self {
         Rc::new((*value.value).clone())
@@ -723,23 +741,6 @@ impl<'a> From<&Rc<Ast<'a>>> for Box<Ast<'a>> {
     }
 }
 
-impl<'a> From<if_expr::IfExpr<'a>> for Ast<'a> {
-    fn from(v: if_expr::IfExpr<'a>) -> Self {
-        Self::IfExpr(v)
-    }
-}
-
-impl<'a> From<match_expr::MatchExpr<'a>> for Ast<'a> {
-    fn from(v: match_expr::MatchExpr<'a>) -> Self {
-        Self::MatchExpr(v)
-    }
-}
-
-impl<'a> From<cond_expr::CondExpr<'a>> for Ast<'a> {
-    fn from(v: cond_expr::CondExpr<'a>) -> Self {
-        Self::CondExpr(v)
-    }
-}
 
 impl<'a> typescript::Pretty for Ast<'a> {
     fn to_ts(&self) -> D<()> {
@@ -1447,7 +1448,7 @@ impl<'a> Ast<'a> {
             Ast::Access(x) => x.span,
             Ast::AnyKeyword(span) => *span,
             Ast::ApplyGeneric(x) => x.span,
-            Ast::Array(x) => x.as_span(),
+            Ast::Array(ast) => ast.as_span(),
             Ast::Builtin(x) => x.span,
             Ast::CondExpr(x) => x.span,
             Ast::ExtendsExpr(x) => x.span,
@@ -1458,7 +1459,7 @@ impl<'a> Ast<'a> {
             Ast::Ident(x) => x.span,
             Ast::IfExpr(x) => x.span,
             Ast::ImportStatement(x) => x.span,
-            Ast::Infer(x) => x.span,
+            Ast::Infer(ast) => ast.as_span(),
             Ast::Interface(x) => x.span,
             Ast::IntersectionType(x) => x.span,
             Ast::LetExpr(x) => x.span,

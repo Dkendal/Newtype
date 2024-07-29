@@ -40,7 +40,7 @@ pub(crate) fn parse_expr(pairs: Pairs) -> Node {
     EXPR_PARSER
         .map_primary(parse)
         .map_prefix(|op, child| match op.as_rule() {
-            infer => Node::from_pair(&op, Ast::Infer(child)),
+            infer => Node::from_pair(&op, Ast::Infer(child.into())),
             rule => {
                 parse_error!(op, vec![infer], vec![rule]);
             }
