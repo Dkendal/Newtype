@@ -176,11 +176,11 @@ impl<'a> typescript::Pretty for ApplyGeneric<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct MappedType<'a> {
     pub index: String,
-    pub iterable: Node<'a>,
-    pub remapped_as: Option<Node<'a>>,
+    pub iterable: Rc<Ast<'a>>,
+    pub remapped_as: Option<Rc<Ast<'a>>>,
     pub readonly_mod: Option<MappingModifier>,
     pub optional_mod: Option<MappingModifier>,
-    pub body: Node<'a>,
+    pub body: Rc<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -188,12 +188,12 @@ pub struct MappedType<'a> {
 impl<'a> MappedType<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         let mut expr = self.clone();
-        expr.iterable = f(&self.iterable);
-        expr.remapped_as = self.remapped_as.as_ref().map(&f);
-        expr.body = f(&self.body);
+        expr.iterable = Rc::new(f(&self.iterable));
+        expr.remapped_as = self.remapped_as.as_ref().map(|x| Rc::new(f(x)));
+        expr.body = f(&self.body).into();
         expr
     }
 }
@@ -1032,9 +1032,7 @@ impl<'a> Ast<'a> {
                 let expr = expr.map(f);
                 Ast::Access(expr)
             }
-            Ast::ApplyGeneric(expr) => {
-                Ast::ApplyGeneric(expr.map(f_))
-            }
+            Ast::ApplyGeneric(expr) => Ast::ApplyGeneric(expr.map(f_)),
 
             Ast::Array(node) => Ast::Array(Rc::new(f_(node))),
 
@@ -1073,10 +1071,7 @@ impl<'a> Ast<'a> {
                 Ast::LetExpr(expr)
             }
 
-            Ast::MappedType(expr) => {
-                let expr = expr.map(f);
-                Ast::MappedType(expr)
-            }
+            Ast::MappedType(expr) => Ast::MappedType(expr.map(f_)),
 
             Ast::MatchExpr(expr) => {
                 let expr = expr.map(f);

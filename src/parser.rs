@@ -501,7 +501,7 @@ fn parse_map_expr(pair: Pair) -> MappedType {
 
     let ipk = next_pair!(inner, Rule::index_property_key);
 
-    let body = inner.find(match_tag("body")).map(parse).unwrap();
+    let body = inner.find(match_tag("body")).map(parse_).unwrap().into();
 
     let mut inner = ipk.into_inner();
 
@@ -512,7 +512,11 @@ fn parse_map_expr(pair: Pair) -> MappedType {
         .as_str()
         .to_string();
 
-    let iterable = inner.find(match_tag("iterable")).map(parse).unwrap();
+    let iterable = inner
+        .find(match_tag("iterable"))
+        .map(parse_)
+        .unwrap()
+        .into();
 
     MappedType {
         span,
