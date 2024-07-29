@@ -570,7 +570,7 @@ pub struct TypeAlias<'a> {
     pub export: bool,
     pub name: Ident<'a>,
     pub params: Vec<TypeParameter<'a>>,
-    pub body: Node<'a>,
+    pub body: Rc<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -578,10 +578,10 @@ pub struct TypeAlias<'a> {
 impl<'a> TypeAlias<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
-            body: f(&self.body),
+            body: f(&self.body).into(),
             params: self.params.iter().map(|ty| ty.map(&f)).collect(),
             ..self.clone()
         }
@@ -1107,7 +1107,7 @@ impl<'a> Ast<'a> {
             }
 
             Ast::TypeAlias(expr) => {
-                let expr = expr.map(f);
+                let expr = expr.map(f_);
                 Ast::TypeAlias(expr)
             }
 
@@ -2109,15 +2109,15 @@ pub struct TypeParameter<'a> {
     #[serde(skip)]
     pub span: Span<'a>,
     pub name: String,
-    pub constraint: Option<Node<'a>>,
-    pub default: Option<Node<'a>>,
+    pub constraint: Option<Ast<'a>>,
+    pub default: Option<Ast<'a>>,
     pub rest: bool,
 }
 
 impl<'a> TypeParameter<'a> {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
             constraint: self.constraint.as_ref().map(&f),
@@ -2128,8 +2128,8 @@ impl<'a> TypeParameter<'a> {
 
     pub fn new(
         name: String,
-        constraint: Option<Node<'a>>,
-        default: Option<Node<'a>>,
+        constraint: Option<Ast<'a>>,
+        default: Option<Ast<'a>>,
         rest: bool,
         span: Span<'a>,
     ) -> Self {

@@ -4,6 +4,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     default,
     iter::FilterMap,
+    rc::Rc,
 };
 
 use crate::{
@@ -677,7 +678,7 @@ fn parse_type_alias(pair: Pair) -> Ast {
         span,
     };
 
-    let body = inner.clone().find(match_tag("body")).map(parse).unwrap();
+    let body = Rc::new(inner.clone().find(match_tag("body")).map(parse_).unwrap());
 
     let params = parse_definition_options(inner);
 
@@ -812,7 +813,7 @@ fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypePara
                     }
                 };
 
-                param.constraint = Some(body);
+                param.constraint = Some(body.into());
             });
     }
 
@@ -849,7 +850,7 @@ fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypePara
                     }
                 };
 
-                param.default = Some(body);
+                param.default = Some(body.into());
             });
     };
 
