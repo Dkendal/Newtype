@@ -29,23 +29,28 @@ impl<'a> IfExpr<'a> {
             |v| v.clone(),
         );
 
-        expand_to_extends(&self.condition, &self.then_branch, &else_branch)
+        expand_to_extends(
+            &self.condition.value,
+            &self.then_branch.value,
+            &else_branch.value,
+        )
+        .into()
     }
 }
 
 /// Expands an if expression into a series of nested ternary expressions
 pub(crate) fn expand_to_extends<'a>(
-    condition: &Node<'a>,
-    then: &Node<'a>,
-    else_arm: &Node<'a>,
-) -> Node<'a> {
+    condition: &Ast<'a>,
+    then: &Ast<'a>,
+    else_arm: &Ast<'a>,
+) -> Ast<'a> {
     // Recursive operations
-    let out: Option<Node<'a>> = match &*condition.value {
+    let out: Option<Ast<'a>> = match condition {
         // Unary operators
         Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value, .. }) => {
             match op {
                 // Swap `then` and `else` branches
-                PrefixOp::Not if value.value.is_compatible_with_not_prefix_op() => {
+                PrefixOp::Not if value.is_compatible_with_not_prefix_op() => {
                     Some(expand_to_extends(value, else_arm, then))
                 }
                 PrefixOp::Infer => todo!(),
@@ -56,12 +61,12 @@ pub(crate) fn expand_to_extends<'a>(
         }
         Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => match op {
             InfixOp::And => {
-                let then = expand_to_extends(rhs, then, else_arm);
-                Some(expand_to_extends(lhs, &then, else_arm))
+                let then = expand_to_extends(&rhs, then, else_arm);
+                Some(expand_to_extends(&lhs, &then, else_arm))
             }
             InfixOp::Or => {
-                let else_arm = expand_to_extends(rhs, then, else_arm);
-                Some(expand_to_extends(lhs, then, &else_arm))
+                let else_arm = expand_to_extends(&rhs, then, else_arm);
+                Some(expand_to_extends(&lhs, then, &else_arm))
             }
             _ => None,
         },
@@ -73,7 +78,7 @@ pub(crate) fn expand_to_extends<'a>(
     }
 
     // Terminal nodes
-    match &*condition.value {
+    match condition {
         // Binary operators
         Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => {
             let span = Span::new(
@@ -85,38 +90,32 @@ pub(crate) fn expand_to_extends<'a>(
 
             // TODO report a syntax error here
             // need to include spans in ASTNode<'a>
-            if !lhs.value.is_typescript_feature() {
-                dbg!(&lhs);
+            if !lhs.is_typescript_feature() {
+                dbg!(lhs);
                 unreachable!("value must be desugared before this point");
             }
 
-            if !rhs.value.is_typescript_feature() {
-                dbg!(rhs.to_sexp().unwrap());
+            if !rhs.is_typescript_feature() {
+                dbg!(rhs);
                 unreachable!("value must be desugared before this point");
             }
 
             match op {
                 // Equivalent to `lhs extends rhs ? then : else`
-                InfixOp::Extends => Node::new(
+                InfixOp::Extends => Ast::from(ExtendsExpr::new(
                     span,
-                    Ast::from(ExtendsExpr::new(
-                        span,
-                        lhs.into(),
-                        rhs.into(),
-                        then.into(),
-                        else_arm.into(),
-                    )),
-                ),
-                InfixOp::NotExtends => Node::new(
+                    lhs.clone(),
+                    rhs.clone(),
+                    Rc::new(then.clone()),
+                    Rc::new(else_arm.clone())
+                )),
+                InfixOp::NotExtends => Ast::from(ExtendsExpr::new(
                     span,
-                    Ast::from(ExtendsExpr::new(
-                        span,
-                        lhs.into(),
-                        rhs.into(),
-                        else_arm.into(),
-                        then.into(),
-                    )),
-                ),
+                    lhs.clone(),
+                    rhs.clone(),
+                    Rc::new(else_arm.clone()),
+                    Rc::new(then.clone()),
+                )),
                 InfixOp::Equals => todo!("equals"),
                 InfixOp::NotEquals => todo!("not equals"),
                 InfixOp::StrictEquals => todo!("strict equals"),

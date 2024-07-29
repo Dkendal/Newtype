@@ -270,11 +270,13 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
                 rule => parse_error!(op, vec![Rule::not], vec![rule]),
             };
 
-           Node::new(
+           let value = primary_node.into();
+
+        Node::new(
                 span,
                 Ast::ExtendsPrefixOp(ExtendsPrefixOp {
                     op,
-                    value: primary_node,
+                    value,
                     span
                 }),
             )
@@ -311,7 +313,10 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Node {
                 ),
             };
 
-            let ast = Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span });
+            let lhs = lhs.into();
+            let rhs = rhs.into();
+            let extends_infix_op = ExtendsInfixOp { lhs, op, rhs, span };
+            let ast = Ast::ExtendsInfixOp(extends_infix_op);
 
             Node::new(span, ast)
         })

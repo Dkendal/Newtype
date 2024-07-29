@@ -87,10 +87,10 @@ impl<'a> ExtendsExpr<'a> {
 
     pub fn new(
         span: pest::Span<'a>,
-        lhs: Ast<'a>,
-        rhs: Ast<'a>,
-        then_branch: Ast<'a>,
-        else_branch: Ast<'a>,
+        lhs: Rc<Ast<'a>>,
+        rhs: Rc<Ast<'a>>,
+        then_branch: Rc<Ast<'a>>,
+        else_branch: Rc<Ast<'a>>,
     ) -> Self {
         if !lhs.is_typescript_feature() {
             dbg!(&lhs);
@@ -111,10 +111,10 @@ impl<'a> ExtendsExpr<'a> {
 
         Self {
             span,
-            lhs: Rc::new(lhs),
-            rhs: Rc::new(rhs),
-            then_branch: Rc::new(then_branch),
-            else_branch: Rc::new(else_branch),
+            lhs,
+            rhs,
+            then_branch,
+            else_branch,
         }
     }
 }
@@ -514,9 +514,9 @@ impl<'a> UnionType<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ExtendsInfixOp<'a> {
-    pub lhs: Node<'a>,
+    pub lhs: Rc<Ast<'a>>,
     pub op: InfixOp,
-    pub rhs: Node<'a>,
+    pub rhs: Rc<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -524,11 +524,11 @@ pub struct ExtendsInfixOp<'a> {
 impl<'a> ExtendsInfixOp<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
-            lhs: f(&self.lhs),
-            rhs: f(&self.rhs),
+            lhs: f(&self.lhs).into(),
+            rhs: f(&self.rhs).into(),
             ..self.clone()
         }
     }
@@ -538,7 +538,7 @@ impl<'a> ExtendsInfixOp<'a> {
 #[serde(rename_all = "kebab-case")]
 pub struct ExtendsPrefixOp<'a> {
     pub op: PrefixOp,
-    pub value: Node<'a>,
+    pub value: Rc<Ast<'a>>,
     #[serde(skip)]
     pub span: Span<'a>,
 }
@@ -546,10 +546,10 @@ pub struct ExtendsPrefixOp<'a> {
 impl<'a> ExtendsPrefixOp<'a> {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Node<'a>) -> Node<'a>,
+        F: Fn(&Ast<'a>) -> Ast<'a>,
     {
         Self {
-            value: f(&self.value),
+            value: f(&self.value).into(),
             ..self.clone()
         }
     }
@@ -1027,9 +1027,7 @@ impl<'a> Ast<'a> {
         let f_ = |ast: &Ast<'a>| -> Ast<'a> { f(&ast.into()).into() };
 
         match &self {
-            Ast::Access(expr) => {
-                Ast::Access(expr.map(f_))
-            }
+            Ast::Access(expr) => Ast::Access(expr.map(f_)),
             Ast::ApplyGeneric(expr) => Ast::ApplyGeneric(expr.map(f_)),
 
             Ast::Array(node) => Ast::Array(Rc::new(f_(node))),
@@ -1045,18 +1043,15 @@ impl<'a> Ast<'a> {
             }
 
             Ast::ExtendsInfixOp(expr) => {
-                let expr = expr.map(f);
-                Ast::ExtendsInfixOp(expr)
+                Ast::ExtendsInfixOp(expr.map(f_))
             }
 
             Ast::ExtendsExpr(expr) => {
-                let expr = expr.map(f_);
-                Ast::ExtendsExpr(expr)
+                Ast::ExtendsExpr(expr.map(f_))
             }
 
             Ast::ExtendsPrefixOp(expr) => {
-                let expr = expr.map(f);
-                Ast::ExtendsPrefixOp(expr)
+                Ast::ExtendsPrefixOp(expr.map(f_))
             }
 
             Ast::IfExpr(expr) => {
