@@ -5,11 +5,8 @@ use super::*;
 
 use std::collections::HashMap;
 
-#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct LetExpr<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub bindings: Bindings<'a>,
     pub body: Rc<Ast<'a>>,
 }

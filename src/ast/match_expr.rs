@@ -1,10 +1,7 @@
 use super::*;
 
-#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct MatchExpr<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub value: Rc<Ast<'a>>,
     pub arms: Vec<Arm<'a>>,
     pub else_arm: Rc<Ast<'a>>,
@@ -62,10 +59,8 @@ impl<'a> MatchExpr<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
+#[ast_node]
 pub struct Arm<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub pattern: Ast<'a>,
     pub body: Ast<'a>,
 }

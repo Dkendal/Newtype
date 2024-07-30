@@ -22,6 +22,13 @@ macro_rules! assert_ast {
 
 pub(crate) use assert_ast;
 
+macro_rules! Ast {
+    ($ty:ident $($body:tt)*) => {
+        $crate::ast::Ast::$ty($ty $($body)*)
+    };
+}
+pub(crate) use Ast;
+
 macro_rules! next_pair {
     ($pairs:expr, $rule:expr) => {
         if let Some(pair) = $pairs.next() {

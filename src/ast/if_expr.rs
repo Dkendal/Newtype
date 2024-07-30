@@ -2,11 +2,8 @@ use newtype::compose;
 
 use super::*;
 
-#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct IfExpr<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub condition: Rc<Ast<'a>>,
     pub then_branch: Rc<Ast<'a>>,
     pub else_branch: Option<Rc<Ast<'a>>>,
@@ -29,7 +26,7 @@ impl<'a> IfExpr<'a> {
         let else_branch = self
             .else_branch
             .as_ref()
-            .map_or_else(|| Ast::NeverKeyword(self.span), |v| (**v).clone());
+            .map_or_else(|| Ast::NeverKeyword(self.span.into()), |v| (**v).clone());
 
         expand_to_extends(&self.condition, &self.then_branch, &else_branch)
     }
@@ -78,7 +75,7 @@ pub(crate) fn expand_to_extends<'a>(
     match condition {
         // Binary operators
         Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => {
-            let span = Span::new(
+            let span = pest::Span::new(
                 lhs.as_span().get_input(),
                 lhs.as_span().start(),
                 rhs.as_span().start(),

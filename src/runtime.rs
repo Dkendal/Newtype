@@ -22,7 +22,7 @@ pub mod builtin {
         )
         .unwrap();
 
-        Ast::NoOp(span)
+        Ast::NoOp(span.into())
     }
 
     pub fn unquote(tree: Ast) -> Ast {
@@ -41,7 +41,7 @@ pub mod builtin {
                 }) => match lhs.is_subtype(&rhs) {
                     ExtendsResult::True => (then_branch.into(), acc),
                     ExtendsResult::False => (else_branch.into(), acc),
-                    ExtendsResult::Never => (Ast::NeverKeyword(span), acc),
+                    ExtendsResult::Never => (Ast::NeverKeyword(span.into()), acc),
                     ExtendsResult::Both => {
                         let value = Ast::UnionType(UnionType {
                             types: vec![then_branch.into(), else_branch.into()],
@@ -106,23 +106,60 @@ mod tests {
         mod assert_equal {
             use super::*;
             use pretty_assertions::assert_eq;
+            use rstest::rstest;
             use serde_lexpr::to_value;
 
-            #[test]
+            #[rstest]
+            #[case("1", "1")]
+            #[case("true", "true")]
+            #[case("false", "false")]
+            #[case("{}", "{}")]
+            #[case("{ x: 1 }", "{ x: 1 }")]
+            fn test_value_is_equal(#[case] left: &str, #[case] right: &str) {
+                // add some random whitespace to affect the spans
+                let left = format!(" {} ", left,);
 
-            fn equal_values() {
+                let left = {
+                    let pair = parser::NewtypeParser::parse(parser::Rule::expr, left.as_str())
+                        .unwrap()
+                        .next()
+                        .unwrap();
+                    parser::parse(pair)
+                };
+
+                let right = {
+                    let pair = parser::NewtypeParser::parse(parser::Rule::expr, right)
+                        .unwrap()
+                        .next()
+                        .unwrap();
+                    parser::parse(pair)
+                };
+
                 assert_eq!(
-                    to_value(runtime::builtin::assert_equal(ast!("1"), ast!("1"))).unwrap(),
-                    lexpr::sexp!(#"no-op")
+                    to_value(runtime::builtin::assert_equal(left, right))
+                        .unwrap()
+                        .to_string(),
+                    lexpr::sexp!(#"(no-op)").to_string()
                 );
             }
 
             #[test]
+            fn equal_values() {
+                assert_eq!(
+                    to_value(runtime::builtin::assert_equal(ast!("1"), ast!("1")))
+                        .unwrap()
+                        .to_string(),
+                    lexpr::sexp!(#"(no-op)").to_string()
+                );
+            }
 
+            #[test]
             fn equal_values_with_whitespace() {
                 assert_eq!(
-                    to_value(runtime::builtin::assert_equal(ast!(" 1 "), ast!("1"))).unwrap(),
-                    lexpr::sexp!(#"no-op")
+                    to_value(runtime::builtin::assert_equal(ast!(" 1 "), ast!("1")))
+                        .unwrap()
+                        .to_string(),
+                    lexpr::sexp!(#"(no-op)").to_string()
                 );
             }
 

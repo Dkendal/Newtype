@@ -6,7 +6,7 @@ use if_expr::IfExpr;
 use itertools::Itertools;
 use let_expr::LetExpr;
 use match_expr::MatchExpr;
-use pest::Span;
+use newtype_macros_lib::ast_node;
 use pretty::RcDoc as D;
 use serde_derive::Serialize;
 
@@ -23,13 +23,8 @@ pub(crate) mod macros;
 
 pub type Bindings<'a> = HashMap<String, Ast<'a>>;
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct Path<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub segments: Vec<Ast<'a>>,
 }
 
@@ -62,17 +57,12 @@ impl<'a> Path<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct ExtendsExpr<'a> {
     pub lhs: Rc<Ast<'a>>,
     pub rhs: Rc<Ast<'a>>,
     pub then_branch: Rc<Ast<'a>>,
     pub else_branch: Rc<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> ExtendsExpr<'a> {
@@ -123,14 +113,9 @@ impl<'a> ExtendsExpr<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct Tuple<'a> {
     pub items: Vec<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> Tuple<'a> {
@@ -145,15 +130,10 @@ impl<'a> Tuple<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct ApplyGeneric<'a> {
     pub receiver: Rc<Ast<'a>>,
     pub args: Vec<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> ApplyGeneric<'a> {
@@ -180,10 +160,7 @@ impl<'a> typescript::Pretty for ApplyGeneric<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct MappedType<'a> {
     pub index: String,
     pub iterable: Rc<Ast<'a>>,
@@ -191,8 +168,6 @@ pub struct MappedType<'a> {
     pub readonly_mod: Option<MappingModifier>,
     pub optional_mod: Option<MappingModifier>,
     pub body: Rc<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> MappedType<'a> {
@@ -208,14 +183,9 @@ impl<'a> MappedType<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct TypeLiteral<'a> {
     pub properties: Vec<ObjectProperty<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> TypeLiteral<'a> {
@@ -265,18 +235,13 @@ impl<'a> typescript::Pretty for TypeLiteral<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct Interface<'a> {
     pub export: bool,
     pub name: String,
     pub extends: Option<String>,
     pub params: Vec<TypeParameter<'a>>,
     pub definition: Vec<ObjectProperty<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> typescript::Pretty for Interface<'a> {
@@ -347,26 +312,16 @@ impl<'a> typescript::Pretty for Interface<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct UnitTest<'a> {
     pub name: String,
     pub body: Vec<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct MacroCall<'a> {
     pub name: String,
     pub args: Vec<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> MacroCall<'a> {
@@ -391,15 +346,10 @@ impl<'a> MacroCall<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct FunctionType<'a> {
     pub params: Vec<Parameter<'a>>,
     pub return_type: Rc<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> typescript::Pretty for FunctionType<'a> {
@@ -420,16 +370,11 @@ impl<'a> typescript::Pretty for FunctionType<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct Parameter<'a> {
     pub ellipsis: bool,
     pub name: String,
     pub kind: Ast<'a>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> typescript::Pretty for Parameter<'a> {
@@ -448,16 +393,11 @@ impl<'a> typescript::Pretty for Parameter<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct Access<'a> {
     pub lhs: Rc<Ast<'a>>,
     pub rhs: Rc<Ast<'a>>,
     pub is_dot: bool,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> Access<'a> {
@@ -474,14 +414,9 @@ impl<'a> Access<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct IntersectionType<'a> {
     pub types: Vec<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> IntersectionType<'a> {
@@ -496,15 +431,10 @@ impl<'a> IntersectionType<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct Builtin<'a> {
     pub name: BuiltinKeyword,
     pub argument: Rc<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> Builtin<'a> {
@@ -519,14 +449,9 @@ impl<'a> Builtin<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct UnionType<'a> {
     pub types: Vec<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> UnionType<'a> {
@@ -541,16 +466,11 @@ impl<'a> UnionType<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct ExtendsInfixOp<'a> {
     pub lhs: Rc<Ast<'a>>,
     pub op: InfixOp,
     pub rhs: Rc<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> ExtendsInfixOp<'a> {
@@ -566,15 +486,10 @@ impl<'a> ExtendsInfixOp<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct ExtendsPrefixOp<'a> {
     pub op: PrefixOp,
     pub value: Rc<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> ExtendsPrefixOp<'a> {
@@ -589,28 +504,18 @@ impl<'a> ExtendsPrefixOp<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct ImportStatement<'a> {
     pub import_clause: ImportClause<'a>,
     pub module: String,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct TypeAlias<'a> {
     pub export: bool,
     pub name: Ident<'a>,
     pub params: Vec<TypeParameter<'a>>,
     pub body: Rc<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> TypeAlias<'a> {
@@ -626,14 +531,9 @@ impl<'a> TypeAlias<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct Program<'a> {
     pub statements: Vec<Ast<'a>>,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> Program<'a> {
@@ -645,27 +545,6 @@ impl<'a> Program<'a> {
             statements: self.statements.iter().map(f).collect(),
             span: self.span,
         }
-    }
-}
-
-/// A wrapper around a value and its span. Used for Ast variants that only
-/// contain a single value.
-#[derive(Derivative, Eq, Clone)]
-#[derivative(Debug = "transparent")]
-#[derivative(PartialEq)]
-pub struct Inner<'a, T> {
-    pub ty: T,
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(Debug = "ignore")]
-    pub span: Span<'a>,
-}
-
-impl<'a, T: serde::Serialize> serde::Serialize for Inner<'a, T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.ty.serialize(serializer)
     }
 }
 
@@ -692,39 +571,64 @@ pub enum Ast<'a> {
     Infer(Rc<Ast<'a>>),
     ExtendsPrefixOp(ExtendsPrefixOp<'a>),
     Ident(Ident<'a>),
-    #[serde(rename(serialize = "if"))]
+    #[serde(rename = "if")]
     IfExpr(IfExpr<'a>),
-    #[serde(rename(serialize = "import"))]
+    #[serde(rename = "import")]
     ImportStatement(ImportStatement<'a>),
-    #[serde(rename(serialize = "let"))]
+    #[serde(rename = "let")]
     LetExpr(LetExpr<'a>),
     MappedType(MappedType<'a>),
-    #[serde(rename(serialize = "match"))]
+    #[serde(rename = "match")]
     MatchExpr(MatchExpr<'a>),
-    #[serde(rename(serialize = "::"))]
+    #[serde(rename = "::")]
     Path(Path<'a>),
-    Number(Inner<'a, String>),
+    #[serde(rename = "number")]
+    TypeNumber(TypeNumber<'a>),
     TypeLiteral(TypeLiteral<'a>),
-    Primitive(PrimitiveType, #[serde(skip)] Span<'a>),
+    Primitive(PrimitiveType, AstSpan<'a>),
     Program(Program<'a>),
     Statement(Rc<Ast<'a>>),
     UnitTest(UnitTest<'a>),
-    String(Inner<'a, String>),
-    TemplateString(Inner<'a, String>),
+    TypeString(TypeString<'a>),
+    TemplateString(TemplateString<'a>),
     Tuple(Tuple<'a>),
     #[serde(rename(serialize = "type"))]
     TypeAlias(TypeAlias<'a>),
     #[serde(rename(serialize = "never"))]
-    NeverKeyword(#[serde(skip)] Span<'a>),
+    NeverKeyword(AstSpan<'a>),
     #[serde(rename(serialize = "unknown"))]
-    TrueKeyword(#[serde(skip)] Span<'a>),
-    FalseKeyword(#[serde(skip)] Span<'a>),
+    TrueKeyword(AstSpan<'a>),
+    FalseKeyword(AstSpan<'a>),
     Interface(Interface<'a>),
     FunctionType(FunctionType<'a>),
-    UnknownKeyword(#[serde(skip)] Span<'a>),
-    #[serde(rename(serialize = "any"))]
-    AnyKeyword(#[serde(skip)] Span<'a>),
-    NoOp(#[serde(skip)] Span<'a>),
+    UnknownKeyword(AstSpan<'a>),
+    #[serde(rename = "any")]
+    AnyKeyword(AstSpan<'a>),
+    NoOp(AstSpan<'a>),
+}
+
+#[ast_node(transparent)]
+pub struct TypeNumber<'a> {
+    pub ty: String,
+}
+
+#[ast_node(transparent)]
+pub struct TypeString<'a> {
+    pub ty: String,
+}
+
+#[ast_node(transparent)]
+pub struct TemplateString<'a> {
+    pub ty: String,
+}
+
+#[ast_node]
+pub struct AstSpan<'a> {}
+
+impl<'a> From<pest::Span<'a>> for AstSpan<'a> {
+    fn from(value: pest::Span<'a>) -> Self {
+        AstSpan { span: value }
+    }
 }
 
 impl<'a> From<Rc<Ast<'a>>> for Ast<'a> {
@@ -824,9 +728,9 @@ impl<'a> typescript::Pretty for Ast<'a> {
                     .group()
             }
             Ast::Ident(identifier) => identifier.pretty(),
-            Ast::Number(inner) => D::text(inner.ty.clone()),
+            Ast::TypeNumber(inner) => D::text(inner.ty.clone()),
             Ast::Primitive(primitive, _) => D::text(primitive.to_string()),
-            Ast::String(inner) => string_literal(inner.ty.as_str()),
+            Ast::TypeString(inner) => string_literal(inner.ty.as_str()),
             Ast::TemplateString(inner) => D::text(inner.ty.clone()),
             Ast::IfExpr(..) => {
                 unreachable!("IfExpr should be desugared before this point");
@@ -1265,9 +1169,9 @@ impl<'a> Ast<'a> {
         type P = PrimitiveType;
 
         let value = match self {
-            Ast::String(_) => P::String,
+            Ast::TypeString(_) => P::String,
 
-            Ast::Number(_) => P::Number,
+            Ast::TypeNumber(_) => P::Number,
 
             Ast::TrueKeyword(_) => P::Boolean,
 
@@ -1361,12 +1265,12 @@ impl<'a> Ast<'a> {
                 | Ast::MappedType(_)
                 | Ast::Path(_)
                 | Ast::NeverKeyword(_)
-                | Ast::Number(_)
+                | Ast::TypeNumber(_)
                 | Ast::TypeLiteral(_)
                 | Ast::Primitive(..)
                 | Ast::Program(_)
                 | Ast::Statement(_)
-                | Ast::String(_)
+                | Ast::TypeString(_)
                 | Ast::TemplateString(_)
                 | Ast::Tuple(_)
                 | Ast::UnknownKeyword(_)
@@ -1481,23 +1385,22 @@ impl<'a> Ast<'a> {
 
             (A::Primitive(lhs, _), A::Primitive(rhs, _)) => Into::into(lhs == rhs),
 
-            (A::TemplateString(_) | A::String(_), A::Primitive(PrimitiveType::String, _)) => {
+            (A::TemplateString(_) | A::TypeString(_), A::Primitive(PrimitiveType::String, _)) => {
                 T::True
             }
 
-            (A::Primitive(PrimitiveType::String, _) | A::TemplateString(_) | A::String(_), rhs)
-                if rhs.is_string_object_wrapper() =>
-            {
-                T::True
-            }
+            (
+                A::Primitive(PrimitiveType::String, _) | A::TemplateString(_) | A::TypeString(_),
+                rhs,
+            ) if rhs.is_string_object_wrapper() => T::True,
 
-            (A::Number(_), A::Primitive(PrimitiveType::Number, _)) => T::True,
+            (A::TypeNumber(_), A::Primitive(PrimitiveType::Number, _)) => T::True,
 
             // Object wrappers are equivalent to their primitive types in
             // this context.
             (lhs, rhs) if lhs.is_object_wrapper() => {
                 let primitive_type = lhs.get_primitive_type().unwrap();
-                let ast = Ast::Primitive(primitive_type, lhs.as_span());
+                let ast = Ast::Primitive(primitive_type, lhs.as_span().into());
                 ast.is_subtype(rhs)
             }
 
@@ -1514,16 +1417,16 @@ impl<'a> Ast<'a> {
         }
     }
 
-    pub fn merge_spans(&'a self, other: &'a Ast<'a>) -> Span<'a> {
+    pub fn merge_spans(&'a self, other: &'a Ast<'a>) -> pest::Span<'a> {
         let a = self.as_span();
         let b = other.as_span();
         merge_spans(a, b)
     }
 
-    pub fn as_span(&self) -> Span<'a> {
+    pub fn as_span(&self) -> pest::Span<'a> {
         match self {
             Ast::Access(x) => x.span,
-            Ast::AnyKeyword(span) => *span,
+            Ast::AnyKeyword(x) => x.span,
             Ast::ApplyGeneric(x) => x.span,
             Ast::Array(ast) => ast.as_span(),
             Ast::Builtin(x) => x.span,
@@ -1531,7 +1434,7 @@ impl<'a> Ast<'a> {
             Ast::ExtendsExpr(x) => x.span,
             Ast::ExtendsInfixOp(x) => x.span,
             Ast::ExtendsPrefixOp(x) => x.span,
-            Ast::FalseKeyword(span) => *span,
+            Ast::FalseKeyword(x) => x.span,
             Ast::FunctionType(x) => x.span,
             Ast::Ident(x) => x.span,
             Ast::IfExpr(x) => x.span,
@@ -1543,30 +1446,30 @@ impl<'a> Ast<'a> {
             Ast::MacroCall(x) => x.span,
             Ast::MappedType(x) => x.span,
             Ast::MatchExpr(x) => x.span,
-            Ast::NeverKeyword(span) => *span,
-            Ast::NoOp(span) => *span,
-            Ast::Number(x) => x.span,
+            Ast::NeverKeyword(x) => x.span,
+            Ast::NoOp(x) => x.span,
+            Ast::TypeNumber(x) => x.span,
             Ast::Path(x) => x.span,
-            Ast::Primitive(_, span) => *span,
+            Ast::Primitive(_, x) => x.span,
             Ast::Program(x) => x.span,
             Ast::Statement(ast) => ast.as_span(),
-            Ast::String(x) => x.span,
+            Ast::TypeString(x) => x.span,
             Ast::TemplateString(x) => x.span,
-            Ast::TrueKeyword(span) => *span,
+            Ast::TrueKeyword(x) => x.span,
             Ast::Tuple(x) => x.span,
             Ast::TypeAlias(x) => x.span,
             Ast::TypeLiteral(x) => x.span,
             Ast::UnionType(x) => x.span,
             Ast::UnitTest(x) => x.span,
-            Ast::UnknownKeyword(span) => *span,
+            Ast::UnknownKeyword(x) => x.span,
         }
     }
 }
 
-pub fn merge_spans<'a>(a: Span<'a>, b: Span<'a>) -> Span<'a> {
+pub fn merge_spans<'a>(a: pest::Span<'a>, b: pest::Span<'a>) -> pest::Span<'a> {
     let start = a.start().min(b.start());
     let end = a.end().min(b.end());
-    Span::new(a.get_input(), start, end).unwrap()
+    pest::Span::new(a.get_input(), start, end).unwrap()
 }
 
 #[cfg(test)]
@@ -1930,13 +1833,8 @@ impl<'a> typescript::Pretty for ImportClause<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct ImportSpecifier<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub module_export_name: Ident<'a>,
     pub alias: Option<Ident<'a>>,
 }
@@ -2078,13 +1976,8 @@ impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct PropertyKeyIndex<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub key: String,
     pub iterable: Ast<'a>,
     pub remapped_as: Option<Ast<'a>>,
@@ -2129,14 +2022,8 @@ impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
             .append(remapped_as)
     }
 }
-
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct ObjectProperty<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub readonly: bool,
     pub optional: bool,
     pub key: ObjectPropertyKey<'a>,
@@ -2181,13 +2068,9 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize)]
-#[serde(rename_all = "kebab-case")]
-#[serde(transparent)]
+#[ast_node(transparent)]
 pub struct Ident<'a> {
     pub name: String,
-    #[serde(skip)]
-    pub span: Span<'a>,
 }
 
 impl<'a> Ident<'a> {
@@ -2202,13 +2085,8 @@ impl<'a> typescript::Pretty for Ident<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct TypeParameter<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub name: String,
     pub constraint: Option<Ast<'a>>,
     pub default: Option<Ast<'a>>,
@@ -2232,7 +2110,7 @@ impl<'a> TypeParameter<'a> {
         constraint: Option<Ast<'a>>,
         default: Option<Ast<'a>>,
         rest: bool,
-        span: Span<'a>,
+        span: pest::Span<'a>,
     ) -> Self {
         Self {
             name,

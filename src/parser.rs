@@ -304,18 +304,17 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Ast {
 pub(crate) fn parse(pair: Pair) -> Ast {
     let rule = pair.clone().as_rule();
     let span = pair.clone().as_span();
-    let new = |ast| ast;
 
     // TODO: just return AST, remove calls to new/1 wrap result
     match rule {
-        Rule::program => new(parse_program(pair)),
-        Rule::statement => new(parse_statement(pair)),
-        Rule::type_alias => new(parse_type_alias(pair)),
-        Rule::unittest => new(Ast::UnitTest(parse_unittest(pair))),
+        Rule::program => parse_program(pair),
+        Rule::statement => parse_statement(pair),
+        Rule::type_alias => parse_type_alias(pair),
+        Rule::unittest => Ast::UnitTest(parse_unittest(pair)),
         Rule::interface => parse_interface(pair),
         Rule::import_statement => parse_import_statement(pair),
         Rule::if_expr => parse_if_expr(pair),
-        Rule::object_literal => new(Ast::TypeLiteral(parse_object_literal(pair))),
+        Rule::object_literal => Ast::TypeLiteral(parse_object_literal(pair)),
         Rule::primitive => {
             let value = pair.into_inner().next().unwrap();
 
@@ -331,33 +330,39 @@ pub(crate) fn parse(pair: Pair) -> Ast {
                 Rule::primitive_undefined => PrimitiveType::Undefined,
                 _ => unimplemented!("{:?}", rule),
             };
-            new(Ast::Primitive(primitive, span))
+            Ast::Primitive(primitive, span.into())
         }
-        Rule::number => new(Ast::Number(node_as_string(pair))),
+        Rule::number => Ast!(TypeNumber {
+            ty: pair.as_str().to_string(),
+            span,
+        }),
         Rule::string => parse_string(pair),
-        Rule::template_string => new(Ast::TemplateString(node_as_string(pair))),
-        Rule::ident => new(Ast::Ident(parse_ident(pair))),
-        Rule::never => new(Ast::NeverKeyword(span)),
-        Rule::any => new(Ast::AnyKeyword(span)),
-        Rule::unknown => new(Ast::UnknownKeyword(span)),
+        Rule::template_string => Ast!(TemplateString {
+            ty: pair.as_str().to_string(),
+            span,
+        }),
+        Rule::ident => Ast::Ident(parse_ident(pair)),
+        Rule::never => Ast::NeverKeyword(span.into()),
+        Rule::any => Ast::AnyKeyword(span.into()),
+        Rule::unknown => Ast::UnknownKeyword(span.into()),
         Rule::boolean => {
             let value = pair.into_inner().next().unwrap();
 
             match value.as_rule() {
-                Rule::literal_true => new(Ast::TrueKeyword(span)),
-                Rule::literal_false => new(Ast::FalseKeyword(span)),
+                Rule::literal_true => Ast::TrueKeyword(span.into()),
+                Rule::literal_false => Ast::FalseKeyword(span.into()),
                 _ => unreachable!(),
             }
         }
         Rule::tuple => parse_tuple(pair),
-        Rule::macro_call => new(Ast::MacroCall(parse_macro_call(pair))),
-        Rule::builtin => new(parse_builtin(pair)),
+        Rule::macro_call => Ast::MacroCall(parse_macro_call(pair)),
+        Rule::builtin => parse_builtin(pair),
         Rule::expr => parse_expr(pair.into_inner()),
-        Rule::match_expr => new(Ast::MatchExpr(parse_match_expr(pair))),
-        Rule::cond_expr => new(Ast::CondExpr(parse_cond_expr(pair))),
-        Rule::map_expr => new(Ast::MappedType(parse_map_expr(pair))),
-        Rule::let_expr => new(Ast::LetExpr(parse_let_expr(pair))),
-        Rule::function_type => new(Ast::FunctionType(parse_function_type(pair))),
+        Rule::match_expr => Ast::MatchExpr(parse_match_expr(pair)),
+        Rule::cond_expr => Ast::CondExpr(parse_cond_expr(pair)),
+        Rule::map_expr => Ast::MappedType(parse_map_expr(pair)),
+        Rule::let_expr => Ast::LetExpr(parse_let_expr(pair)),
+        Rule::function_type => Ast::FunctionType(parse_function_type(pair)),
 
         Rule::EOI => {
             parse_error!(pair, format!("Unexpected end of input"));
@@ -383,11 +388,7 @@ fn parse_builtin(pair: Pair) -> Ast {
         ),
     };
 
-    let argument = inner
-        .find(match_tag("argument"))
-        .map(parse)
-        .unwrap()
-        .into();
+    let argument = inner.find(match_tag("argument")).map(parse).unwrap().into();
 
     Ast::Builtin(Builtin {
         name,
@@ -426,7 +427,7 @@ fn parse_match_expr(pair: Pair) -> MatchExpr {
         .find(match_tag("else"))
         .and_then(|p| p.into_inner().find(match_tag("body")))
         .map(parse)
-        .unwrap_or(Ast::NeverKeyword(span))
+        .unwrap_or(Ast::NeverKeyword(span.into()))
         .into();
 
     MatchExpr {
@@ -446,7 +447,7 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
         .find(match_tag("else"))
         .and_then(|p| p.into_inner().find(match_tag("body")))
         .map(parse)
-        .unwrap_or(Ast::NeverKeyword(span))
+        .unwrap_or(Ast::NeverKeyword(span.into()))
         .into();
 
     let arms: Vec<cond_expr::Arm> = inner
@@ -498,11 +499,7 @@ fn parse_map_expr(pair: Pair) -> MappedType {
         .as_str()
         .to_string();
 
-    let iterable = inner
-        .find(match_tag("iterable"))
-        .map(parse)
-        .unwrap()
-        .into();
+    let iterable = inner.find(match_tag("iterable")).map(parse).unwrap().into();
 
     MappedType {
         span,
@@ -871,11 +868,10 @@ fn pair_as_string_literal(pair: Pair) -> String {
 }
 
 fn parse_string(pair: Pair) -> Ast {
-    let inner = Inner {
+    Ast!(TypeString {
         span: pair.as_span(),
         ty: pair_as_string_literal(pair.clone()),
-    };
-    Ast::String(inner)
+    })
 }
 
 fn parse_import_statement(pair: Pair) -> Ast {
@@ -935,7 +931,7 @@ fn parse_if_expr(pair: Pair) -> Ast {
     let else_branch = inner
         .find(match_tag("else"))
         .map(parse)
-        .unwrap_or_else(|| Ast::NeverKeyword(span))
+        .unwrap_or_else(|| Ast::NeverKeyword(span.into()))
         .into();
 
     match condition {
@@ -1037,11 +1033,8 @@ fn parse_index_property_key(key: Pair) -> ObjectPropertyKey {
     })
 }
 
-fn node_as_string(pair: Pair<'_>) -> Inner<'_, String> {
-    Inner {
-        ty: pair.as_str().to_string(),
-        span: pair.as_span(),
-    }
+fn node_as_string(pair: Pair<'_>) -> String {
+    pair.as_str().to_string()
 }
 
 fn match_tag<'a>(tag: &'a str) -> impl FnMut(&Pair<'a>) -> bool {
@@ -1094,14 +1087,14 @@ mod parser_tests {
     #[rstest]
     #[case(
         "Equals(T, any)",
-        sexp!((apply (receiver ident . "Equals") (args (ident . "T") any))))
+        sexp!((apply (receiver ident . "Equals") (args (ident . "T") (any)))))
     ]
     #[case(
         "A::Equals(T, any)",
         sexp!(
             (apply
                 (receiver :: (segments (ident . "A") (ident . "Equals")))
-                (args (ident . "T") any))
+                (args (ident . "T") (any)))
         )
     )]
     fn test_parse_expr_sexp_repr(#[case] input: &str, #[case] expected: lexpr::Value) {

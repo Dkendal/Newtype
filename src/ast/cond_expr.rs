@@ -1,10 +1,7 @@
 use super::*;
 
-#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[ast_node]
 pub struct CondExpr<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub arms: Vec<Arm<'a>>,
     /// Unlike match and if expressions, the else arm is *not* optional
     pub else_arm: Rc<Ast<'a>>,
@@ -49,10 +46,8 @@ impl<'a> CondExpr<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)] #[derivative(PartialEq)] #[derivative(Debug)]
+#[ast_node]
 pub struct Arm<'a> {
-    #[serde(skip)]
-    pub span: Span<'a>,
     pub condition: Ast<'a>,
     pub body: Ast<'a>,
 }
