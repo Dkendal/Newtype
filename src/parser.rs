@@ -4,7 +4,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     default,
     iter::FilterMap,
-    rc::Rc,
+    rc::Rc, result,
 };
 
 use crate::{
@@ -189,7 +189,7 @@ fn replace_pipe_with_type_application(rhs: Ast, lhs: Ast, op: Pair) -> Ast {
     }
 }
 
-pub(crate) fn parse_newtype_program(source: &str) -> Result<Ast, Box<Error<Rule>>> {
+pub(crate) fn parse_newtype_program(source: &str) -> result::Result<Ast, Box<Error<Rule>>> {
     let pair = NewtypeParser::parse(Rule::program, source)?.next().unwrap();
 
     Ok(parse(pair))

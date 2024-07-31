@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::{collections::HashMap, fmt::Display, rc::Rc, result};
 
 use cond_expr::CondExpr;
 use derivative::Derivative;
@@ -135,6 +135,8 @@ pub struct ApplyGeneric {
     pub receiver: Rc<Ast>,
     pub args: Vec<Ast>,
 }
+
+pub type Result = result::Result<Ast, errors::Error>;
 
 impl ApplyGeneric {
     fn map<F>(&self, f: F) -> Self
@@ -1182,11 +1184,7 @@ impl Span {
         pest::error::Error::new_from_span(variant, span)
     }
 
-    pub(crate) fn as_custom_error(
-        &self,
-        input: &str,
-        message: String,
-    ) -> pest::error::Error<Rule> {
+    pub(crate) fn as_custom_error(&self, input: &str, message: String) -> pest::error::Error<Rule> {
         let span = self.as_pest(input);
         let variant = pest::error::ErrorVariant::CustomError { message };
         pest::error::Error::new_from_span(variant, span)

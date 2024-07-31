@@ -172,3 +172,21 @@ export type VariableCapture(T) as
 
 export type PatternHandler(Pattern) as
   (VariableCapture(Pattern)) => unknown
+
+type IsTopType(T) as
+  A::Extends(
+    True,
+    A::Equals(T, unknown)
+    | A::Equals(T, object)
+    | A::Equals(T, Object)
+    | A::Equals(T, any)
+  )
+
+export type UnifyAll(Value, Pattern) as
+  cond do
+    IsTopType(Value) <: True ->
+      VariableCapture(Pattern),
+
+    Overlapping(Value, ExpandCapture(Pattern)) ->
+      DoUnifyAll(Value, Pattern)
+  end

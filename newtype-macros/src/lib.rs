@@ -180,7 +180,7 @@ fn ast_node_struct(attrs: AstNodeAttributes, item: &mut ItemStruct) -> TokenStre
         quote! {
             #[automatically_derived]
             impl #generics serde::Serialize for #ident #generics {
-                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
                 where S: serde::Serializer, #where_clause
                 {
                     self.#field.serialize(serializer)
