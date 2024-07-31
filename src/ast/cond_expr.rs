@@ -1,16 +1,16 @@
 use super::*;
 
 #[ast_node]
-pub struct CondExpr<'a> {
-    pub arms: Vec<Arm<'a>>,
+pub struct CondExpr {
+    pub arms: Vec<Arm>,
     /// Unlike match and if expressions, the else arm is *not* optional
-    pub else_arm: Rc<Ast<'a>>,
+    pub else_arm: Rc<Ast>,
 }
 
-impl<'a> CondExpr<'a> {
+impl CondExpr {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         let mut expr = self.clone();
         expr.arms = self
@@ -26,13 +26,13 @@ impl<'a> CondExpr<'a> {
         expr
     }
 
-    pub(crate) fn simplify(&self) -> Ast<'a> {
+    pub(crate) fn simplify(&self) -> Ast {
         // Convert a CondExpr to a series of nested ternary expressions
         let CondExpr { arms, else_arm, .. } = self;
 
-        let init_else: Ast<'a> = else_arm.into();
+        let init_else: Ast = else_arm.into();
 
-        let acc: Ast<'a> = arms.iter().rev().fold(init_else, |else_arm, arm| {
+        let acc: Ast = arms.iter().rev().fold(init_else, |else_arm, arm| {
             let Arm {
                 condition,
                 body: then,
@@ -47,7 +47,7 @@ impl<'a> CondExpr<'a> {
 }
 
 #[ast_node]
-pub struct Arm<'a> {
-    pub condition: Ast<'a>,
-    pub body: Ast<'a>,
+pub struct Arm {
+    pub condition: Ast,
+    pub body: Ast,
 }

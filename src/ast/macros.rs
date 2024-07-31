@@ -93,7 +93,7 @@ macro_rules! parse_error {
     ($pair:expr, $message:expr) => {{
         let error = Error::<Rule>::new_from_span(
             ErrorVariant::CustomError { message: $message },
-            $pair.clone().as_span(),
+            $pair.as_span(),
         );
 
         panic!("{error}");

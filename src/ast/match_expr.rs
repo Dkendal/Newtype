@@ -1,16 +1,16 @@
 use super::*;
 
 #[ast_node]
-pub struct MatchExpr<'a> {
-    pub value: Rc<Ast<'a>>,
-    pub arms: Vec<Arm<'a>>,
-    pub else_arm: Rc<Ast<'a>>,
+pub struct MatchExpr {
+    pub value: Rc<Ast>,
+    pub arms: Vec<Arm>,
+    pub else_arm: Rc<Ast>,
 }
 
-impl<'a> MatchExpr<'a> {
+impl MatchExpr {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         let mut expr = self.clone();
         expr.value = f(&self.value).into();
@@ -27,7 +27,7 @@ impl<'a> MatchExpr<'a> {
         expr
     }
 
-    pub fn simplify(&self) -> Ast<'a> {
+    pub fn simplify(&self) -> Ast {
         // Convert match arms to a series of extends expressions.
         // Allows for a single wildcard pattern ("_") to be used as the default case.
         let MatchExpr {
@@ -37,7 +37,7 @@ impl<'a> MatchExpr<'a> {
             ..
         } = self;
 
-        let init: Ast<'a> = (**else_arm).clone();
+        let init: Ast = (**else_arm).clone();
 
         arms.iter().rev().fold(init, |acc: Ast, arm: &Arm| -> Ast {
             let Arm {
@@ -60,7 +60,7 @@ impl<'a> MatchExpr<'a> {
 }
 
 #[ast_node]
-pub struct Arm<'a> {
-    pub pattern: Ast<'a>,
-    pub body: Ast<'a>,
+pub struct Arm {
+    pub pattern: Ast,
+    pub body: Ast,
 }

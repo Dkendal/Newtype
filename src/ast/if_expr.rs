@@ -3,16 +3,16 @@ use newtype::compose;
 use super::*;
 
 #[ast_node]
-pub struct IfExpr<'a> {
-    pub condition: Rc<Ast<'a>>,
-    pub then_branch: Rc<Ast<'a>>,
-    pub else_branch: Option<Rc<Ast<'a>>>,
+pub struct IfExpr {
+    pub condition: Rc<Ast>,
+    pub then_branch: Rc<Ast>,
+    pub else_branch: Option<Rc<Ast>>,
 }
 
-impl<'a> IfExpr<'a> {
+impl IfExpr {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             span: self.span,
@@ -22,24 +22,20 @@ impl<'a> IfExpr<'a> {
         }
     }
 
-    pub fn simplify(&self) -> Ast<'a> {
+    pub fn simplify(&self) -> Ast {
         let else_branch = self
             .else_branch
             .as_ref()
-            .map_or_else(|| Ast::NeverKeyword(self.span.into()), |v| (**v).clone());
+            .map_or_else(|| Ast::NeverKeyword(self.span), |v| (**v).clone());
 
         expand_to_extends(&self.condition, &self.then_branch, &else_branch)
     }
 }
 
 /// Expands an if expression into a series of nested ternary expressions
-pub(crate) fn expand_to_extends<'a>(
-    condition: &Ast<'a>,
-    then: &Ast<'a>,
-    else_arm: &Ast<'a>,
-) -> Ast<'a> {
+pub(crate) fn expand_to_extends(condition: &Ast, then: &Ast, else_arm: &Ast) -> Ast {
     // Recursive operations
-    let out: Option<Ast<'a>> = match condition {
+    let out: Option<Ast> = match condition {
         // Unary operators
         Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value, .. }) => {
             match op {
@@ -75,12 +71,7 @@ pub(crate) fn expand_to_extends<'a>(
     match condition {
         // Binary operators
         Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => {
-            let span = pest::Span::new(
-                lhs.as_span().get_input(),
-                lhs.as_span().start(),
-                rhs.as_span().start(),
-            )
-            .unwrap();
+            let span = lhs.as_span().merge(&rhs.as_span());
 
             // TODO report a syntax error here
             if !lhs.is_typescript_feature() {

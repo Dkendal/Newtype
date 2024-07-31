@@ -2,29 +2,29 @@ use core::fmt;
 
 use super::Ast;
 
-pub struct SyntaxSugarError<'a> {
-    pub node: Ast<'a>,
+pub struct SyntaxSugarError {
+    pub node: Ast,
 }
 
-impl<'a> SyntaxSugarError<'a> {
-    pub fn new(node: Ast<'a>) -> Self {
+impl SyntaxSugarError {
+    pub fn new(node: Ast) -> Self {
         Self { node }
     }
 }
 
-impl<'a> std::fmt::Display for SyntaxSugarError<'a> {
+impl std::fmt::Display for SyntaxSugarError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SyntaxSugarError: expected AST to have been desugared")
     }
 }
 
-impl<'a> fmt::Debug for SyntaxSugarError<'a> {
+impl fmt::Debug for SyntaxSugarError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SyntaxSugarError: expected AST to have been desugared")
     }
 }
 
-impl<'a> core::error::Error for SyntaxSugarError<'a> {}
+impl core::error::Error for SyntaxSugarError {}
 
 pub struct AssertionError {
     pub message: String,

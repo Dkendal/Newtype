@@ -6,15 +6,15 @@ use super::*;
 use std::collections::HashMap;
 
 #[ast_node]
-pub struct LetExpr<'a> {
-    pub bindings: Bindings<'a>,
-    pub body: Rc<Ast<'a>>,
+pub struct LetExpr {
+    pub bindings: Bindings,
+    pub body: Rc<Ast>,
 }
 
-impl<'a> LetExpr<'a> {
+impl LetExpr {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         let mut expr = self.clone();
         expr.body = f(&self.body).into();
@@ -22,7 +22,7 @@ impl<'a> LetExpr<'a> {
     }
     /// Replace all identifiers in the body of the let expression with their corresponding
     /// values
-    pub fn simplify(&self) -> Ast<'a> {
+    pub fn simplify(&self) -> Ast {
         let mut bindings = self.bindings.clone();
         // simplifiy all bindings first
         for (ident, value) in &self.bindings {

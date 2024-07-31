@@ -12,7 +12,7 @@ use serde_derive::Serialize;
 
 use crate::{
     extends_result::ExtendsResult,
-    parser::{Pair, ParserError},
+    parser::{Pair, ParserError, Rule},
     pretty::{parens, string_literal, surround},
     runtime::{self, builtin},
     typescript,
@@ -21,17 +21,17 @@ use crate::{
 pub(crate) mod errors;
 pub(crate) mod macros;
 
-pub type Bindings<'a> = HashMap<String, Ast<'a>>;
+pub type Bindings = HashMap<String, Ast>;
 
 #[ast_node]
-pub struct Path<'a> {
-    pub segments: Vec<Ast<'a>>,
+pub struct Path {
+    pub segments: Vec<Ast>,
 }
 
-impl<'a> Path<'a> {
+impl Path {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             span: self.span,
@@ -39,7 +39,7 @@ impl<'a> Path<'a> {
         }
     }
 
-    fn simplify(&self) -> Ast<'a> {
+    fn simplify(&self) -> Ast {
         let mut acc = vec![];
 
         for seg in self.segments.iter() {
@@ -58,17 +58,17 @@ impl<'a> Path<'a> {
 }
 
 #[ast_node]
-pub struct ExtendsExpr<'a> {
-    pub lhs: Rc<Ast<'a>>,
-    pub rhs: Rc<Ast<'a>>,
-    pub then_branch: Rc<Ast<'a>>,
-    pub else_branch: Rc<Ast<'a>>,
+pub struct ExtendsExpr {
+    pub lhs: Rc<Ast>,
+    pub rhs: Rc<Ast>,
+    pub then_branch: Rc<Ast>,
+    pub else_branch: Rc<Ast>,
 }
 
-impl<'a> ExtendsExpr<'a> {
+impl ExtendsExpr {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         let mut expr = self.clone();
 
@@ -80,11 +80,11 @@ impl<'a> ExtendsExpr<'a> {
     }
 
     pub fn new(
-        span: pest::Span<'a>,
-        lhs: Rc<Ast<'a>>,
-        rhs: Rc<Ast<'a>>,
-        then_branch: Rc<Ast<'a>>,
-        else_branch: Rc<Ast<'a>>,
+        span: Span,
+        lhs: Rc<Ast>,
+        rhs: Rc<Ast>,
+        then_branch: Rc<Ast>,
+        else_branch: Rc<Ast>,
     ) -> Self {
         if !lhs.is_typescript_feature() {
             dbg!(&lhs);
@@ -114,14 +114,14 @@ impl<'a> ExtendsExpr<'a> {
 }
 
 #[ast_node]
-pub struct Tuple<'a> {
-    pub items: Vec<Ast<'a>>,
+pub struct Tuple {
+    pub items: Vec<Ast>,
 }
 
-impl<'a> Tuple<'a> {
+impl Tuple {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             items: self.items.iter().map(f).collect(),
@@ -131,15 +131,15 @@ impl<'a> Tuple<'a> {
 }
 
 #[ast_node]
-pub struct ApplyGeneric<'a> {
-    pub receiver: Rc<Ast<'a>>,
-    pub args: Vec<Ast<'a>>,
+pub struct ApplyGeneric {
+    pub receiver: Rc<Ast>,
+    pub args: Vec<Ast>,
 }
 
-impl<'a> ApplyGeneric<'a> {
+impl ApplyGeneric {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         let mut expr = self.clone();
         expr.receiver = f(&self.receiver).into();
@@ -148,7 +148,7 @@ impl<'a> ApplyGeneric<'a> {
     }
 }
 
-impl<'a> typescript::Pretty for ApplyGeneric<'a> {
+impl typescript::Pretty for ApplyGeneric {
     fn to_ts(&self) -> D<()> {
         let sep = D::text(",").append(D::space());
 
@@ -161,19 +161,19 @@ impl<'a> typescript::Pretty for ApplyGeneric<'a> {
 }
 
 #[ast_node]
-pub struct MappedType<'a> {
+pub struct MappedType {
     pub index: String,
-    pub iterable: Rc<Ast<'a>>,
-    pub remapped_as: Option<Rc<Ast<'a>>>,
+    pub iterable: Rc<Ast>,
+    pub remapped_as: Option<Rc<Ast>>,
     pub readonly_mod: Option<MappingModifier>,
     pub optional_mod: Option<MappingModifier>,
-    pub body: Rc<Ast<'a>>,
+    pub body: Rc<Ast>,
 }
 
-impl<'a> MappedType<'a> {
+impl MappedType {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         let mut expr = self.clone();
         expr.iterable = Rc::new(f(&self.iterable));
@@ -184,14 +184,14 @@ impl<'a> MappedType<'a> {
 }
 
 #[ast_node]
-pub struct TypeLiteral<'a> {
-    pub properties: Vec<ObjectProperty<'a>>,
+pub struct TypeLiteral {
+    pub properties: Vec<ObjectProperty>,
 }
 
-impl<'a> TypeLiteral<'a> {
+impl TypeLiteral {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             properties: self
@@ -208,16 +208,16 @@ impl<'a> TypeLiteral<'a> {
         self.properties.is_empty()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<'_, ObjectProperty<'a>> {
+    pub fn iter(&self) -> std::slice::Iter<'_, ObjectProperty> {
         self.properties.iter()
     }
 
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, ObjectProperty<'a>> {
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, ObjectProperty> {
         self.properties.iter_mut()
     }
 }
 
-impl<'a> typescript::Pretty for TypeLiteral<'a> {
+impl typescript::Pretty for TypeLiteral {
     fn to_ts(&self) -> D<()> {
         let props = &self.properties;
 
@@ -236,15 +236,15 @@ impl<'a> typescript::Pretty for TypeLiteral<'a> {
 }
 
 #[ast_node]
-pub struct Interface<'a> {
+pub struct Interface {
     pub export: bool,
     pub name: String,
     pub extends: Option<String>,
-    pub params: Vec<TypeParameter<'a>>,
-    pub definition: Vec<ObjectProperty<'a>>,
+    pub params: Vec<TypeParameter>,
+    pub definition: Vec<ObjectProperty>,
 }
 
-impl<'a> typescript::Pretty for Interface<'a> {
+impl typescript::Pretty for Interface {
     fn to_ts(&self) -> D<()> {
         let Interface {
             export,
@@ -313,19 +313,19 @@ impl<'a> typescript::Pretty for Interface<'a> {
 }
 
 #[ast_node]
-pub struct UnitTest<'a> {
+pub struct UnitTest {
     pub name: String,
-    pub body: Vec<Ast<'a>>,
+    pub body: Vec<Ast>,
 }
 
 #[ast_node]
-pub struct MacroCall<'a> {
+pub struct MacroCall {
     pub name: String,
-    pub args: Vec<Ast<'a>>,
+    pub args: Vec<Ast>,
 }
 
-impl<'a> MacroCall<'a> {
-    fn eval(&self) -> Ast<'a> {
+impl MacroCall {
+    fn eval(&self) -> Ast {
         let name = self.name.strip_suffix("!").unwrap();
 
         match name {
@@ -347,12 +347,12 @@ impl<'a> MacroCall<'a> {
 }
 
 #[ast_node]
-pub struct FunctionType<'a> {
-    pub params: Vec<Parameter<'a>>,
-    pub return_type: Rc<Ast<'a>>,
+pub struct FunctionType {
+    pub params: Vec<Parameter>,
+    pub return_type: Rc<Ast>,
 }
 
-impl<'a> typescript::Pretty for FunctionType<'a> {
+impl typescript::Pretty for FunctionType {
     fn to_ts(&self) -> D<()> {
         let sep = D::text(",").append(D::space());
 
@@ -371,13 +371,13 @@ impl<'a> typescript::Pretty for FunctionType<'a> {
 }
 
 #[ast_node]
-pub struct Parameter<'a> {
+pub struct Parameter {
     pub ellipsis: bool,
     pub name: String,
-    pub kind: Ast<'a>,
+    pub kind: Ast,
 }
 
-impl<'a> typescript::Pretty for Parameter<'a> {
+impl typescript::Pretty for Parameter {
     fn to_ts(&self) -> D<()> {
         let kind = self.kind.to_ts();
 
@@ -394,16 +394,16 @@ impl<'a> typescript::Pretty for Parameter<'a> {
 }
 
 #[ast_node]
-pub struct Access<'a> {
-    pub lhs: Rc<Ast<'a>>,
-    pub rhs: Rc<Ast<'a>>,
+pub struct Access {
+    pub lhs: Rc<Ast>,
+    pub rhs: Rc<Ast>,
     pub is_dot: bool,
 }
 
-impl<'a> Access<'a> {
+impl Access {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             lhs: f(&self.lhs).into(),
@@ -415,14 +415,14 @@ impl<'a> Access<'a> {
 }
 
 #[ast_node]
-pub struct IntersectionType<'a> {
-    pub types: Vec<Ast<'a>>,
+pub struct IntersectionType {
+    pub types: Vec<Ast>,
 }
 
-impl<'a> IntersectionType<'a> {
+impl IntersectionType {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             types: self.types.iter().map(f).collect(),
@@ -432,15 +432,15 @@ impl<'a> IntersectionType<'a> {
 }
 
 #[ast_node]
-pub struct Builtin<'a> {
+pub struct Builtin {
     pub name: BuiltinKeyword,
-    pub argument: Rc<Ast<'a>>,
+    pub argument: Rc<Ast>,
 }
 
-impl<'a> Builtin<'a> {
+impl Builtin {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             argument: f(&self.argument).into(),
@@ -450,14 +450,14 @@ impl<'a> Builtin<'a> {
 }
 
 #[ast_node]
-pub struct UnionType<'a> {
-    pub types: Vec<Ast<'a>>,
+pub struct UnionType {
+    pub types: Vec<Ast>,
 }
 
-impl<'a> UnionType<'a> {
+impl UnionType {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             types: self.types.iter().map(f).collect(),
@@ -467,16 +467,16 @@ impl<'a> UnionType<'a> {
 }
 
 #[ast_node]
-pub struct ExtendsInfixOp<'a> {
-    pub lhs: Rc<Ast<'a>>,
+pub struct ExtendsInfixOp {
+    pub lhs: Rc<Ast>,
     pub op: InfixOp,
-    pub rhs: Rc<Ast<'a>>,
+    pub rhs: Rc<Ast>,
 }
 
-impl<'a> ExtendsInfixOp<'a> {
+impl ExtendsInfixOp {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             lhs: f(&self.lhs).into(),
@@ -487,15 +487,15 @@ impl<'a> ExtendsInfixOp<'a> {
 }
 
 #[ast_node]
-pub struct ExtendsPrefixOp<'a> {
+pub struct ExtendsPrefixOp {
     pub op: PrefixOp,
-    pub value: Rc<Ast<'a>>,
+    pub value: Rc<Ast>,
 }
 
-impl<'a> ExtendsPrefixOp<'a> {
+impl ExtendsPrefixOp {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             value: f(&self.value).into(),
@@ -505,23 +505,23 @@ impl<'a> ExtendsPrefixOp<'a> {
 }
 
 #[ast_node]
-pub struct ImportStatement<'a> {
-    pub import_clause: ImportClause<'a>,
+pub struct ImportStatement {
+    pub import_clause: ImportClause,
     pub module: String,
 }
 
 #[ast_node]
-pub struct TypeAlias<'a> {
+pub struct TypeAlias {
     pub export: bool,
-    pub name: Ident<'a>,
-    pub params: Vec<TypeParameter<'a>>,
-    pub body: Rc<Ast<'a>>,
+    pub name: Ident,
+    pub params: Vec<TypeParameter>,
+    pub body: Rc<Ast>,
 }
 
-impl<'a> TypeAlias<'a> {
+impl TypeAlias {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             body: f(&self.body).into(),
@@ -532,14 +532,14 @@ impl<'a> TypeAlias<'a> {
 }
 
 #[ast_node]
-pub struct Program<'a> {
-    pub statements: Vec<Ast<'a>>,
+pub struct Program {
+    pub statements: Vec<Ast>,
 }
 
-impl<'a> Program<'a> {
+impl Program {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             statements: self.statements.iter().map(f).collect(),
@@ -548,414 +548,77 @@ impl<'a> Program<'a> {
     }
 }
 
-#[derive(Derivative, Clone, Eq, Serialize)]
-#[derivative(PartialEq)]
-#[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
-pub enum Ast<'a> {
-    #[serde(rename(serialize = "."))]
-    Access(Access<'a>),
-    #[serde(rename(serialize = "macro"))]
-    MacroCall(MacroCall<'a>),
-    #[serde(rename(serialize = "apply"))]
-    ApplyGeneric(ApplyGeneric<'a>),
-    Array(Rc<Ast<'a>>),
-    #[serde(rename(serialize = "|"))]
-    UnionType(UnionType<'a>),
-    #[serde(rename(serialize = "&"))]
-    IntersectionType(IntersectionType<'a>),
-    Builtin(Builtin<'a>),
-    CondExpr(CondExpr<'a>),
-    ExtendsInfixOp(ExtendsInfixOp<'a>),
-    ExtendsExpr(ExtendsExpr<'a>),
-    Infer(Rc<Ast<'a>>),
-    ExtendsPrefixOp(ExtendsPrefixOp<'a>),
-    Ident(Ident<'a>),
-    #[serde(rename = "if")]
-    IfExpr(IfExpr<'a>),
-    #[serde(rename = "import")]
-    ImportStatement(ImportStatement<'a>),
-    #[serde(rename = "let")]
-    LetExpr(LetExpr<'a>),
-    MappedType(MappedType<'a>),
-    #[serde(rename = "match")]
-    MatchExpr(MatchExpr<'a>),
-    #[serde(rename = "::")]
-    Path(Path<'a>),
-    #[serde(rename = "number")]
-    TypeNumber(TypeNumber<'a>),
-    TypeLiteral(TypeLiteral<'a>),
-    Primitive(PrimitiveType, AstSpan<'a>),
-    Program(Program<'a>),
-    Statement(Rc<Ast<'a>>),
-    UnitTest(UnitTest<'a>),
-    TypeString(TypeString<'a>),
-    TemplateString(TemplateString<'a>),
-    Tuple(Tuple<'a>),
-    #[serde(rename(serialize = "type"))]
-    TypeAlias(TypeAlias<'a>),
-    #[serde(rename(serialize = "never"))]
-    NeverKeyword(AstSpan<'a>),
-    #[serde(rename(serialize = "unknown"))]
-    TrueKeyword(AstSpan<'a>),
-    FalseKeyword(AstSpan<'a>),
-    Interface(Interface<'a>),
-    FunctionType(FunctionType<'a>),
-    UnknownKeyword(AstSpan<'a>),
-    #[serde(rename = "any")]
-    AnyKeyword(AstSpan<'a>),
-    NoOp(AstSpan<'a>),
-}
-
-#[ast_node(transparent)]
-pub struct TypeNumber<'a> {
-    pub ty: String,
-}
-
-#[ast_node(transparent)]
-pub struct TypeString<'a> {
-    pub ty: String,
-}
-
-#[ast_node(transparent)]
-pub struct TemplateString<'a> {
-    pub ty: String,
-}
-
 #[ast_node]
-pub struct AstSpan<'a> {}
-
-impl<'a> From<pest::Span<'a>> for AstSpan<'a> {
-    fn from(value: pest::Span<'a>) -> Self {
-        AstSpan { span: value }
-    }
+pub enum Ast {
+    #[serde(rename(serialize = "."))]
+    Access(Access),
+    #[serde(rename(serialize = "macro"))]
+    MacroCall(MacroCall),
+    #[serde(rename(serialize = "apply"))]
+    ApplyGeneric(ApplyGeneric),
+    Array(Rc<Ast>),
+    #[serde(rename(serialize = "|"))]
+    UnionType(UnionType),
+    #[serde(rename(serialize = "&"))]
+    IntersectionType(IntersectionType),
+    Builtin(Builtin),
+    CondExpr(CondExpr),
+    ExtendsInfixOp(ExtendsInfixOp),
+    ExtendsExpr(ExtendsExpr),
+    Infer(Rc<Ast>),
+    ExtendsPrefixOp(ExtendsPrefixOp),
+    Ident(Ident),
+    #[serde(rename = "if")]
+    IfExpr(IfExpr),
+    #[serde(rename = "import")]
+    ImportStatement(ImportStatement),
+    #[serde(rename = "let")]
+    LetExpr(LetExpr),
+    MappedType(MappedType),
+    #[serde(rename = "match")]
+    MatchExpr(MatchExpr),
+    #[serde(rename = "::")]
+    Path(Path),
+    #[serde(rename = "number")]
+    TypeNumber(TypeNumber),
+    TypeLiteral(TypeLiteral),
+    #[ast_node(span)]
+    Primitive(PrimitiveType),
+    Program(Program),
+    Statement(Rc<Ast>),
+    UnitTest(UnitTest),
+    TypeString(TypeString),
+    TemplateString(TemplateString),
+    Tuple(Tuple),
+    #[serde(rename(serialize = "type"))]
+    TypeAlias(TypeAlias),
+    #[serde(rename(serialize = "never"))]
+    #[ast_node(span)]
+    NeverKeyword(),
+    #[serde(rename(serialize = "unknown"))]
+    #[ast_node(span)]
+    TrueKeyword(),
+    #[ast_node(span)]
+    FalseKeyword(),
+    Interface(Interface),
+    FunctionType(FunctionType),
+    #[ast_node(span)]
+    UnknownKeyword(),
+    #[serde(rename = "any")]
+    #[ast_node(span)]
+    AnyKeyword(),
+    #[ast_node(span)]
+    NoOp(),
 }
 
-impl<'a> From<Rc<Ast<'a>>> for Ast<'a> {
-    fn from(value: Rc<Ast<'a>>) -> Self {
-        (*value).clone()
-    }
-}
-
-impl<'a> From<&Rc<Ast<'a>>> for Ast<'a> {
-    fn from(value: &Rc<Ast<'a>>) -> Self {
-        (**value).clone()
-    }
-}
-
-impl<'a> From<if_expr::IfExpr<'a>> for Ast<'a> {
-    fn from(v: if_expr::IfExpr<'a>) -> Self {
-        Self::IfExpr(v)
-    }
-}
-
-impl<'a> From<match_expr::MatchExpr<'a>> for Ast<'a> {
-    fn from(v: match_expr::MatchExpr<'a>) -> Self {
-        Self::MatchExpr(v)
-    }
-}
-
-impl<'a> From<cond_expr::CondExpr<'a>> for Ast<'a> {
-    fn from(v: cond_expr::CondExpr<'a>) -> Self {
-        Self::CondExpr(v)
-    }
-}
-
-impl<'a> From<Rc<Ast<'a>>> for Box<Ast<'a>> {
-    fn from(value: Rc<Ast<'a>>) -> Self {
-        Box::new((*value).clone())
-    }
-}
-
-impl<'a> From<&Rc<Ast<'a>>> for Box<Ast<'a>> {
-    fn from(value: &Rc<Ast<'a>>) -> Self {
-        Box::new((**value).clone())
-    }
-}
-
-impl<'a> typescript::Pretty for Ast<'a> {
-    fn to_ts(&self) -> D<()> {
-        match self {
-            Ast::Program(Program { statements, .. }) => {
-                let mut doc = D::nil();
-                for stmnt in statements {
-                    doc = doc
-                        .append(stmnt.to_ts())
-                        .append(D::hardline())
-                        .append(D::hardline());
-                }
-                doc
-            }
-            Ast::TypeAlias(TypeAlias {
-                export,
-                name,
-                params,
-                body,
-                ..
-            }) => {
-                let body = (*body).to_ts();
-
-                let doc = if *export {
-                    D::text("export").append(D::space())
-                } else {
-                    D::nil()
-                };
-
-                let params_doc = match params {
-                    list if list.is_empty() => D::nil(),
-                    list => {
-                        let seperator = D::text(",").append(D::line());
-
-                        let body = D::intersperse(
-                            list.iter().map(|param| param.to_ts().group()),
-                            seperator,
-                        );
-
-                        D::text("<")
-                            .append(D::line_().append(body).append(D::line_()).nest(4))
-                            .append(D::text(">"))
-                            .group()
-                    }
-                };
-
-                doc.append("type")
-                    .append(D::space())
-                    .append(name.pretty())
-                    .append(params_doc)
-                    .append(D::space())
-                    .append("=")
-                    .append(D::line().append(body).nest(4))
-                    .group()
-            }
-            Ast::Ident(identifier) => identifier.pretty(),
-            Ast::TypeNumber(inner) => D::text(inner.ty.clone()),
-            Ast::Primitive(primitive, _) => D::text(primitive.to_string()),
-            Ast::TypeString(inner) => string_literal(inner.ty.as_str()),
-            Ast::TemplateString(inner) => D::text(inner.ty.clone()),
-            Ast::IfExpr(..) => {
-                unreachable!("IfExpr should be desugared before this point");
-            }
-            Ast::Access(Access {
-                lhs,
-                rhs,
-                is_dot: true,
-                ..
-            }) => {
-                let rhs = rhs
-                    .as_ident()
-                    .expect("rhs of dot access should be an ident");
-
-                lhs.to_ts()
-                    .append(D::text("["))
-                    .append(string_literal(rhs.name.as_str()))
-                    .append(D::text("]"))
-                    .group()
-            }
-            Ast::Access(Access { lhs, rhs, .. }) => lhs
-                .to_ts()
-                .append(D::text("["))
-                .append(rhs.to_ts())
-                .append(D::text("]"))
-                .group(),
-            Ast::TypeLiteral(value) => value.to_ts(),
-            Ast::ApplyGeneric(value) => value.to_ts(),
-            Ast::Tuple(Tuple { items, .. }) => {
-                let sep = D::text(",").append(D::space());
-
-                let items = D::intersperse(items.iter().map(|item| item.to_ts()), sep);
-
-                D::text("[").append(items).append(D::text("]"))
-            }
-            Ast::Array(node) => {
-                let doc = if node.is_set_op() {
-                    parens(node.to_ts())
-                } else {
-                    node.to_ts()
-                };
-
-                doc.append(D::text("[]"))
-            }
-            Ast::NeverKeyword(_) => D::text("never"),
-            Ast::AnyKeyword(_) => D::text("any"),
-            Ast::UnknownKeyword(_) => D::text("unknown"),
-            Ast::TrueKeyword(_) => D::text("true"),
-            Ast::FalseKeyword(_) => D::text("false"),
-            Ast::Infer(value) => D::text("infer").append(D::space()).append(value.to_ts()),
-
-            Ast::Builtin(Builtin { name, argument, .. }) => {
-                name.to_ts().append(" ").append(argument.to_ts())
-            }
-
-            Ast::ExtendsExpr(ExtendsExpr {
-                lhs,
-                rhs,
-                then_branch: then,
-                else_branch: els,
-                ..
-            }) => {
-                let condition_doc = lhs
-                    .to_ts()
-                    .append(D::space())
-                    .append("extends")
-                    .append(D::space())
-                    .append(rhs.to_ts());
-
-                let then_doc = D::line()
-                    .append("?")
-                    .append(D::space())
-                    .append(then.to_ts())
-                    .nest(4);
-
-                let else_doc = D::line()
-                    .append(":")
-                    .append(D::space())
-                    .append(els.to_ts())
-                    .nest(4);
-
-                condition_doc.append(then_doc).append(else_doc)
-            }
-            Ast::ExtendsInfixOp(ExtendsInfixOp {
-                lhs,
-                op: InfixOp::Extends,
-                rhs,
-                ..
-            }) => lhs
-                .to_ts()
-                .append(D::space())
-                .append("extends")
-                .append(D::space())
-                .append(rhs.to_ts())
-                .group(),
-            Ast::Statement(stmnt) => stmnt.to_ts().append(D::text(";")),
-            Ast::MappedType(MappedType {
-                index: key,
-                iterable,
-                remapped_as,
-                readonly_mod,
-                optional_mod,
-                body,
-                ..
-            }) => {
-                let remapped_as_doc = match remapped_as {
-                    Some(remapped_as) => D::space()
-                        .append("as")
-                        .append(D::space())
-                        .append(remapped_as.to_ts()),
-                    None => D::nil(),
-                };
-
-                let lhs_doc = D::nil()
-                    .append(key)
-                    .append(D::space())
-                    .append("in")
-                    .append(D::space())
-                    .append(iterable.to_ts())
-                    .append(remapped_as_doc)
-                    .group();
-
-                let rhs_doc = body.to_ts();
-
-                let rhs_doc = D::line().append(rhs_doc).nest(4).group();
-
-                let readonly_doc = match readonly_mod {
-                    Some(MappingModifier::Add) => D::text("readonly"),
-                    Some(MappingModifier::Remove) => D::text("-readonly"),
-                    None => D::nil(),
-                };
-
-                let optional_doc = match optional_mod {
-                    Some(MappingModifier::Add) => D::text("?"),
-                    Some(MappingModifier::Remove) => D::text("-?"),
-                    None => D::nil(),
-                };
-
-                let inner_doc = D::line()
-                    .append(readonly_doc)
-                    .append("[")
-                    .append(lhs_doc)
-                    .append("]")
-                    .append(optional_doc)
-                    .append(":")
-                    .append(rhs_doc)
-                    .append(D::line())
-                    .nest(4)
-                    .group();
-
-                D::nil().append("{").append(inner_doc).append("}").group()
-            }
-            Ast::LetExpr(..) => {
-                unreachable!("LetExpr should be desugared before this point")
-            }
-            Ast::ImportStatement(ImportStatement {
-                import_clause,
-                module,
-                ..
-            }) => {
-                let import_clause = import_clause.to_ts();
-
-                D::text("import type")
-                    .append(D::space())
-                    .append(import_clause)
-                    .append(D::space())
-                    .append("from")
-                    .append(D::space())
-                    .append(string_literal(module))
-            }
-            Ast::Path(Path { segments, .. }) => {
-                let sep = D::text(".");
-
-                let segments = D::intersperse(segments.iter().map(|seg| seg.to_ts()), sep);
-
-                segments
-            }
-            Ast::Interface(value) => {
-                return value.to_ts();
-            }
-            Ast::UnitTest(_) => D::nil(),
-            Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
-            Ast::UnionType(UnionType { types, .. }) => {
-                let sep = D::line().append(D::text("|")).append(D::space());
-                D::intersperse(
-                    types.iter().map(|t| match t {
-                        Ast::IntersectionType(IntersectionType { .. }) => {
-                            surround(t.to_ts(), "(", ")")
-                        }
-                        _ => t.to_ts(),
-                    }),
-                    sep,
-                )
-                .group()
-            }
-            Ast::IntersectionType(IntersectionType { types, .. }) => {
-                let sep = D::line().append(D::text("&")).append(D::space());
-                D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
-            }
-            Ast::NoOp(_) => D::nil(),
-            node @ (Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. })
-            | Ast::MatchExpr(match_expr::MatchExpr { .. })
-            | Ast::CondExpr(cond_expr::CondExpr { .. })
-            | Ast::ExtendsInfixOp(ExtendsInfixOp { .. })) => {
-                unreachable!("Ast should be desugared before this point {:#?}", node)
-            }
-            Ast::FunctionType(ty) => ty.to_ts(),
-        }
-    }
-}
-
-impl<'a> From<ExtendsExpr<'a>> for Ast<'a> {
-    fn from(v: ExtendsExpr<'a>) -> Self {
-        Ast::ExtendsExpr(v)
-    }
-}
-
-impl<'a> Ast<'a> {
+impl Ast {
     pub fn to_sexp(&self) -> serde_lexpr::Result<serde_lexpr::Value> {
         serde_lexpr::to_value(self)
     }
 
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         match &self {
             Ast::Access(expr) => Ast::Access(expr.map(f)),
@@ -1289,7 +952,7 @@ impl<'a> Ast<'a> {
 
     /// Returns `true` if the node is [`ExtendsPrefixOp`].
     ///
-    /// [`ExtendsPrefixOp`]: Ast<'a>::ExtendsPrefixOp
+    /// [`ExtendsPrefixOp`]: Ast::ExtendsPrefixOp
     #[must_use]
     pub fn is_extends_prefix_op(&self) -> bool {
         matches!(self, Self::ExtendsPrefixOp { .. })
@@ -1334,8 +997,8 @@ impl<'a> Ast<'a> {
         }
     }
 
-    pub fn is_subtype(&self, other: &Ast<'a>) -> ExtendsResult {
-        type A<'a> = Ast<'a>;
+    pub fn is_subtype(&self, other: &Ast) -> ExtendsResult {
+        type A = Ast;
         type T = ExtendsResult;
 
         if let Ast::Primitive(other, _) = other {
@@ -1400,7 +1063,7 @@ impl<'a> Ast<'a> {
             // this context.
             (lhs, rhs) if lhs.is_object_wrapper() => {
                 let primitive_type = lhs.get_primitive_type().unwrap();
-                let ast = Ast::Primitive(primitive_type, lhs.as_span().into());
+                let ast = Ast::Primitive(primitive_type, lhs.as_span());
                 ast.is_subtype(rhs)
             }
 
@@ -1417,16 +1080,10 @@ impl<'a> Ast<'a> {
         }
     }
 
-    pub fn merge_spans(&'a self, other: &'a Ast<'a>) -> pest::Span<'a> {
-        let a = self.as_span();
-        let b = other.as_span();
-        merge_spans(a, b)
-    }
-
-    pub fn as_span(&self) -> pest::Span<'a> {
+    pub fn as_span(&self) -> Span {
         match self {
             Ast::Access(x) => x.span,
-            Ast::AnyKeyword(x) => x.span,
+            Ast::AnyKeyword(x) => *x,
             Ast::ApplyGeneric(x) => x.span,
             Ast::Array(ast) => ast.as_span(),
             Ast::Builtin(x) => x.span,
@@ -1434,7 +1091,7 @@ impl<'a> Ast<'a> {
             Ast::ExtendsExpr(x) => x.span,
             Ast::ExtendsInfixOp(x) => x.span,
             Ast::ExtendsPrefixOp(x) => x.span,
-            Ast::FalseKeyword(x) => x.span,
+            Ast::FalseKeyword(x) => *x,
             Ast::FunctionType(x) => x.span,
             Ast::Ident(x) => x.span,
             Ast::IfExpr(x) => x.span,
@@ -1446,30 +1103,446 @@ impl<'a> Ast<'a> {
             Ast::MacroCall(x) => x.span,
             Ast::MappedType(x) => x.span,
             Ast::MatchExpr(x) => x.span,
-            Ast::NeverKeyword(x) => x.span,
-            Ast::NoOp(x) => x.span,
+            Ast::NeverKeyword(x) => *x,
+            Ast::NoOp(x) => *x,
             Ast::TypeNumber(x) => x.span,
             Ast::Path(x) => x.span,
-            Ast::Primitive(_, x) => x.span,
+            Ast::Primitive(_, x) => *x,
             Ast::Program(x) => x.span,
             Ast::Statement(ast) => ast.as_span(),
             Ast::TypeString(x) => x.span,
             Ast::TemplateString(x) => x.span,
-            Ast::TrueKeyword(x) => x.span,
+            Ast::TrueKeyword(x) => *x,
             Ast::Tuple(x) => x.span,
             Ast::TypeAlias(x) => x.span,
             Ast::TypeLiteral(x) => x.span,
             Ast::UnionType(x) => x.span,
             Ast::UnitTest(x) => x.span,
-            Ast::UnknownKeyword(x) => x.span,
+            Ast::UnknownKeyword(x) => *x,
         }
     }
 }
 
-pub fn merge_spans<'a>(a: pest::Span<'a>, b: pest::Span<'a>) -> pest::Span<'a> {
-    let start = a.start().min(b.start());
-    let end = a.end().min(b.end());
-    pest::Span::new(a.get_input(), start, end).unwrap()
+#[ast_node(transparent)]
+pub struct TypeNumber {
+    pub ty: String,
+}
+
+#[ast_node(transparent)]
+pub struct TypeString {
+    pub ty: String,
+}
+
+#[ast_node(transparent)]
+pub struct TemplateString {
+    pub ty: String,
+}
+
+#[derive(Debug, Clone, Copy, Eq, Serialize)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
+    pub fn end(&self) -> usize {
+        self.end
+    }
+
+    pub fn merge(&self, other: &Self) -> Self {
+        Self {
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
+        }
+    }
+
+    pub fn as_pest<'a>(&self, input: &'a str) -> pest::Span<'a> {
+        pest::Span::new(input, self.start, self.end).unwrap()
+    }
+
+    pub fn as_parsing_error(
+        &self,
+        input: &str,
+        positives: Vec<Rule>,
+        negatives: Vec<Rule>,
+    ) -> pest::error::Error<Rule> {
+        let span = self.as_pest(input);
+        let variant = pest::error::ErrorVariant::ParsingError {
+            positives,
+            negatives,
+        };
+        pest::error::Error::new_from_span(variant, span)
+    }
+
+    pub(crate) fn as_custom_error(
+        &self,
+        input: &str,
+        message: String,
+    ) -> pest::error::Error<Rule> {
+        let span = self.as_pest(input);
+        let variant = pest::error::ErrorVariant::CustomError { message };
+        pest::error::Error::new_from_span(variant, span)
+    }
+}
+
+impl From<Vec<Pair<'_>>> for Span {
+    fn from(list: Vec<Pair<'_>>) -> Self {
+        let start = list.iter().map(|p| p.as_span().start()).min().unwrap_or(0);
+        let end = list.iter().map(|p| p.as_span().end()).max().unwrap_or(0);
+        Self { start, end }
+    }
+}
+
+impl From<&Pair<'_>> for Span {
+    fn from(value: &Pair<'_>) -> Self {
+        value.as_span().into()
+    }
+}
+
+impl From<Pair<'_>> for Span {
+    fn from(value: Pair<'_>) -> Self {
+        (&value).into()
+    }
+}
+
+impl From<pest::Span<'_>> for Span {
+    fn from(value: pest::Span<'_>) -> Self {
+        Self {
+            start: value.start().to_owned(),
+            end: value.end().to_owned(),
+        }
+    }
+}
+
+impl PartialEq for Span {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl From<Rc<Ast>> for Ast {
+    fn from(value: Rc<Ast>) -> Self {
+        (*value).clone()
+    }
+}
+
+impl From<&Rc<Ast>> for Ast {
+    fn from(value: &Rc<Ast>) -> Self {
+        (**value).clone()
+    }
+}
+
+impl From<if_expr::IfExpr> for Ast {
+    fn from(v: if_expr::IfExpr) -> Self {
+        Self::IfExpr(v)
+    }
+}
+
+impl From<match_expr::MatchExpr> for Ast {
+    fn from(v: match_expr::MatchExpr) -> Self {
+        Self::MatchExpr(v)
+    }
+}
+
+impl From<cond_expr::CondExpr> for Ast {
+    fn from(v: cond_expr::CondExpr) -> Self {
+        Self::CondExpr(v)
+    }
+}
+
+impl From<Rc<Ast>> for Box<Ast> {
+    fn from(value: Rc<Ast>) -> Self {
+        Box::new((*value).clone())
+    }
+}
+
+impl From<&Rc<Ast>> for Box<Ast> {
+    fn from(value: &Rc<Ast>) -> Self {
+        Box::new((**value).clone())
+    }
+}
+
+impl typescript::Pretty for Ast {
+    fn to_ts(&self) -> D<()> {
+        match self {
+            Ast::Program(Program { statements, .. }) => {
+                let mut doc = D::nil();
+                for stmnt in statements {
+                    doc = doc
+                        .append(stmnt.to_ts())
+                        .append(D::hardline())
+                        .append(D::hardline());
+                }
+                doc
+            }
+            Ast::TypeAlias(TypeAlias {
+                export,
+                name,
+                params,
+                body,
+                ..
+            }) => {
+                let body = (*body).to_ts();
+
+                let doc = if *export {
+                    D::text("export").append(D::space())
+                } else {
+                    D::nil()
+                };
+
+                let params_doc = match params {
+                    list if list.is_empty() => D::nil(),
+                    list => {
+                        let seperator = D::text(",").append(D::line());
+
+                        let body = D::intersperse(
+                            list.iter().map(|param| param.to_ts().group()),
+                            seperator,
+                        );
+
+                        D::text("<")
+                            .append(D::line_().append(body).append(D::line_()).nest(4))
+                            .append(D::text(">"))
+                            .group()
+                    }
+                };
+
+                doc.append("type")
+                    .append(D::space())
+                    .append(name.pretty())
+                    .append(params_doc)
+                    .append(D::space())
+                    .append("=")
+                    .append(D::line().append(body).nest(4))
+                    .group()
+            }
+            Ast::Ident(identifier) => identifier.pretty(),
+            Ast::TypeNumber(inner) => D::text(inner.ty.clone()),
+            Ast::Primitive(primitive, _) => D::text(primitive.to_string()),
+            Ast::TypeString(inner) => string_literal(inner.ty.as_str()),
+            Ast::TemplateString(inner) => D::text(inner.ty.clone()),
+            Ast::IfExpr(..) => {
+                unreachable!("IfExpr should be desugared before this point");
+            }
+            Ast::Access(Access {
+                lhs,
+                rhs,
+                is_dot: true,
+                ..
+            }) => {
+                let rhs = rhs
+                    .as_ident()
+                    .expect("rhs of dot access should be an ident");
+
+                lhs.to_ts()
+                    .append(D::text("["))
+                    .append(string_literal(rhs.name.as_str()))
+                    .append(D::text("]"))
+                    .group()
+            }
+            Ast::Access(Access { lhs, rhs, .. }) => lhs
+                .to_ts()
+                .append(D::text("["))
+                .append(rhs.to_ts())
+                .append(D::text("]"))
+                .group(),
+            Ast::TypeLiteral(value) => value.to_ts(),
+            Ast::ApplyGeneric(value) => value.to_ts(),
+            Ast::Tuple(Tuple { items, .. }) => {
+                let sep = D::text(",").append(D::space());
+
+                let items = D::intersperse(items.iter().map(|item| item.to_ts()), sep);
+
+                D::text("[").append(items).append(D::text("]"))
+            }
+            Ast::Array(node) => {
+                let doc = if node.is_set_op() {
+                    parens(node.to_ts())
+                } else {
+                    node.to_ts()
+                };
+
+                doc.append(D::text("[]"))
+            }
+            Ast::NeverKeyword(_) => D::text("never"),
+            Ast::AnyKeyword(_) => D::text("any"),
+            Ast::UnknownKeyword(_) => D::text("unknown"),
+            Ast::TrueKeyword(_) => D::text("true"),
+            Ast::FalseKeyword(_) => D::text("false"),
+            Ast::Infer(value) => D::text("infer").append(D::space()).append(value.to_ts()),
+
+            Ast::Builtin(Builtin { name, argument, .. }) => {
+                name.to_ts().append(" ").append(argument.to_ts())
+            }
+
+            Ast::ExtendsExpr(ExtendsExpr {
+                lhs,
+                rhs,
+                then_branch: then,
+                else_branch: els,
+                ..
+            }) => {
+                let condition_doc = lhs
+                    .to_ts()
+                    .append(D::space())
+                    .append("extends")
+                    .append(D::space())
+                    .append(rhs.to_ts());
+
+                let then_doc = D::line()
+                    .append("?")
+                    .append(D::space())
+                    .append(then.to_ts())
+                    .nest(4);
+
+                let else_doc = D::line()
+                    .append(":")
+                    .append(D::space())
+                    .append(els.to_ts())
+                    .nest(4);
+
+                condition_doc.append(then_doc).append(else_doc)
+            }
+            Ast::ExtendsInfixOp(ExtendsInfixOp {
+                lhs,
+                op: InfixOp::Extends,
+                rhs,
+                ..
+            }) => lhs
+                .to_ts()
+                .append(D::space())
+                .append("extends")
+                .append(D::space())
+                .append(rhs.to_ts())
+                .group(),
+            Ast::Statement(stmnt) => stmnt.to_ts().append(D::text(";")),
+            Ast::MappedType(MappedType {
+                index: key,
+                iterable,
+                remapped_as,
+                readonly_mod,
+                optional_mod,
+                body,
+                ..
+            }) => {
+                let remapped_as_doc = match remapped_as {
+                    Some(remapped_as) => D::space()
+                        .append("as")
+                        .append(D::space())
+                        .append(remapped_as.to_ts()),
+                    None => D::nil(),
+                };
+
+                let lhs_doc = D::nil()
+                    .append(key)
+                    .append(D::space())
+                    .append("in")
+                    .append(D::space())
+                    .append(iterable.to_ts())
+                    .append(remapped_as_doc)
+                    .group();
+
+                let rhs_doc = body.to_ts();
+
+                let rhs_doc = D::line().append(rhs_doc).nest(4).group();
+
+                let readonly_doc = match readonly_mod {
+                    Some(MappingModifier::Add) => D::text("readonly"),
+                    Some(MappingModifier::Remove) => D::text("-readonly"),
+                    None => D::nil(),
+                };
+
+                let optional_doc = match optional_mod {
+                    Some(MappingModifier::Add) => D::text("?"),
+                    Some(MappingModifier::Remove) => D::text("-?"),
+                    None => D::nil(),
+                };
+
+                let inner_doc = D::line()
+                    .append(readonly_doc)
+                    .append("[")
+                    .append(lhs_doc)
+                    .append("]")
+                    .append(optional_doc)
+                    .append(":")
+                    .append(rhs_doc)
+                    .append(D::line())
+                    .nest(4)
+                    .group();
+
+                D::nil().append("{").append(inner_doc).append("}").group()
+            }
+            Ast::LetExpr(..) => {
+                unreachable!("LetExpr should be desugared before this point")
+            }
+            Ast::ImportStatement(ImportStatement {
+                import_clause,
+                module,
+                ..
+            }) => {
+                let import_clause = import_clause.to_ts();
+
+                D::text("import type")
+                    .append(D::space())
+                    .append(import_clause)
+                    .append(D::space())
+                    .append("from")
+                    .append(D::space())
+                    .append(string_literal(module))
+            }
+            Ast::Path(Path { segments, .. }) => {
+                let sep = D::text(".");
+
+                let segments = D::intersperse(segments.iter().map(|seg| seg.to_ts()), sep);
+
+                segments
+            }
+            Ast::Interface(value) => {
+                return value.to_ts();
+            }
+            Ast::UnitTest(_) => D::nil(),
+            Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
+            Ast::UnionType(UnionType { types, .. }) => {
+                let sep = D::line().append(D::text("|")).append(D::space());
+                D::intersperse(
+                    types.iter().map(|t| match t {
+                        Ast::IntersectionType(IntersectionType { .. }) => {
+                            surround(t.to_ts(), "(", ")")
+                        }
+                        _ => t.to_ts(),
+                    }),
+                    sep,
+                )
+                .group()
+            }
+            Ast::IntersectionType(IntersectionType { types, .. }) => {
+                let sep = D::line().append(D::text("&")).append(D::space());
+                D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
+            }
+            Ast::NoOp(_) => D::nil(),
+            node @ (Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. })
+            | Ast::MatchExpr(match_expr::MatchExpr { .. })
+            | Ast::CondExpr(cond_expr::CondExpr { .. })
+            | Ast::ExtendsInfixOp(ExtendsInfixOp { .. })) => {
+                unreachable!("Ast should be desugared before this point {:#?}", node)
+            }
+            Ast::FunctionType(ty) => ty.to_ts(),
+        }
+    }
+}
+
+impl From<ExtendsExpr> for Ast {
+    fn from(v: ExtendsExpr) -> Self {
+        Ast::ExtendsExpr(v)
+    }
 }
 
 #[cfg(test)]
@@ -1776,7 +1849,8 @@ mod simplify_tests {
             )
             .simplify()
             .to_sexp()
-            .unwrap(),
+            .unwrap()
+            .to_string(),
             parse!(
                 expr,
                 r#"
@@ -1791,6 +1865,7 @@ mod simplify_tests {
             .simplify()
             .to_sexp()
             .unwrap()
+            .to_string()
         )
     }
 }
@@ -1799,12 +1874,12 @@ mod simplify_tests {
 #[derivative(PartialEq)]
 #[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
-pub enum ImportClause<'a> {
-    Named(Vec<ImportSpecifier<'a>>),
-    Namespace { alias: Ident<'a> },
+pub enum ImportClause {
+    Named(Vec<ImportSpecifier>),
+    Namespace { alias: Ident },
 }
 
-impl<'a> typescript::Pretty for ImportClause<'a> {
+impl typescript::Pretty for ImportClause {
     fn to_ts(&self) -> D<()> {
         match self {
             ImportClause::Named(specifiers) => {
@@ -1834,12 +1909,12 @@ impl<'a> typescript::Pretty for ImportClause<'a> {
 }
 
 #[ast_node]
-pub struct ImportSpecifier<'a> {
-    pub module_export_name: Ident<'a>,
-    pub alias: Option<Ident<'a>>,
+pub struct ImportSpecifier {
+    pub module_export_name: Ident,
+    pub alias: Option<Ident>,
 }
 
-impl<'a> typescript::Pretty for ImportSpecifier<'a> {
+impl typescript::Pretty for ImportSpecifier {
     fn to_ts(&self) -> D<()> {
         let alias_doc = match &self.alias {
             Some(alias) => D::space()
@@ -1947,16 +2022,16 @@ pub enum MappingModifier {
 #[derivative(PartialEq)]
 #[derivative(Debug)]
 #[serde(rename_all = "kebab-case")]
-pub enum ObjectPropertyKey<'a> {
-    Index(PropertyKeyIndex<'a>),
+pub enum ObjectPropertyKey {
+    Index(PropertyKeyIndex),
     Key(String),
-    Computed(Ident<'a>),
+    Computed(Ident),
 }
 
-impl<'a> ObjectPropertyKey<'a> {
+impl ObjectPropertyKey {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         match self {
             ObjectPropertyKey::Index(index) => ObjectPropertyKey::Index(index.map(f)),
@@ -1966,7 +2041,7 @@ impl<'a> ObjectPropertyKey<'a> {
     }
 }
 
-impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
+impl typescript::Pretty for ObjectPropertyKey {
     fn to_ts(&self) -> D<()> {
         match self {
             ObjectPropertyKey::Index(index) => surround(index.to_ts(), "[", "]").group(),
@@ -1977,16 +2052,16 @@ impl<'a> typescript::Pretty for ObjectPropertyKey<'a> {
 }
 
 #[ast_node]
-pub struct PropertyKeyIndex<'a> {
+pub struct PropertyKeyIndex {
     pub key: String,
-    pub iterable: Ast<'a>,
-    pub remapped_as: Option<Ast<'a>>,
+    pub iterable: Ast,
+    pub remapped_as: Option<Ast>,
 }
 
-impl<'a> PropertyKeyIndex<'a> {
+impl PropertyKeyIndex {
     fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             iterable: f(&self.iterable),
@@ -1996,7 +2071,7 @@ impl<'a> PropertyKeyIndex<'a> {
     }
 }
 
-impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
+impl typescript::Pretty for PropertyKeyIndex {
     fn to_ts(&self) -> D<()> {
         let PropertyKeyIndex {
             key,
@@ -2023,17 +2098,17 @@ impl<'a> typescript::Pretty for PropertyKeyIndex<'a> {
     }
 }
 #[ast_node]
-pub struct ObjectProperty<'a> {
+pub struct ObjectProperty {
     pub readonly: bool,
     pub optional: bool,
-    pub key: ObjectPropertyKey<'a>,
-    pub value: Ast<'a>,
+    pub key: ObjectPropertyKey,
+    pub value: Ast,
 }
 
-impl<'a> ObjectProperty<'a> {
+impl ObjectProperty {
     fn map<F>(self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             value: f(&self.value),
@@ -2043,7 +2118,7 @@ impl<'a> ObjectProperty<'a> {
     }
 }
 
-impl<'a> typescript::Pretty for ObjectProperty<'a> {
+impl typescript::Pretty for ObjectProperty {
     fn to_ts(&self) -> D<()> {
         let readonly = if self.readonly {
             D::text("readonly").append(D::space())
@@ -2069,34 +2144,34 @@ impl<'a> typescript::Pretty for ObjectProperty<'a> {
 }
 
 #[ast_node(transparent)]
-pub struct Ident<'a> {
+pub struct Ident {
     pub name: String,
 }
 
-impl<'a> Ident<'a> {
+impl Ident {
     fn pretty(&self) -> D<()> {
         D::text(&self.name)
     }
 }
 
-impl<'a> typescript::Pretty for Ident<'a> {
+impl typescript::Pretty for Ident {
     fn to_ts(&self) -> D<()> {
         D::text(self.name.clone())
     }
 }
 
 #[ast_node]
-pub struct TypeParameter<'a> {
+pub struct TypeParameter {
     pub name: String,
-    pub constraint: Option<Ast<'a>>,
-    pub default: Option<Ast<'a>>,
+    pub constraint: Option<Ast>,
+    pub default: Option<Ast>,
     pub rest: bool,
 }
 
-impl<'a> TypeParameter<'a> {
+impl TypeParameter {
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(&Ast<'a>) -> Ast<'a>,
+        F: Fn(&Ast) -> Ast,
     {
         Self {
             constraint: self.constraint.as_ref().map(&f),
@@ -2107,10 +2182,10 @@ impl<'a> TypeParameter<'a> {
 
     pub fn new(
         name: String,
-        constraint: Option<Ast<'a>>,
-        default: Option<Ast<'a>>,
+        constraint: Option<Ast>,
+        default: Option<Ast>,
         rest: bool,
-        span: pest::Span<'a>,
+        span: Span,
     ) -> Self {
         Self {
             name,
@@ -2122,7 +2197,7 @@ impl<'a> TypeParameter<'a> {
     }
 }
 
-impl<'a> typescript::Pretty for TypeParameter<'a> {
+impl typescript::Pretty for TypeParameter {
     fn to_ts(&self) -> D<()> {
         let rest = if self.rest { D::text("...") } else { D::nil() };
 

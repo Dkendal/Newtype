@@ -12,17 +12,12 @@ pub mod builtin {
         tree
     }
 
-    pub fn assert_equal<'a>(left: Ast<'a>, right: Ast<'a>) -> Ast<'a> {
+    pub fn assert_equal(left: Ast, right: Ast) -> Ast {
         pretty_assertions::assert_eq!(left, right);
 
-        let span = pest::Span::new(
-            left.as_span().get_input(),
-            left.as_span().start(),
-            right.as_span().end(),
-        )
-        .unwrap();
+        let span = left.as_span().merge(&right.as_span());
 
-        Ast::NoOp(span.into())
+        Ast::NoOp(span)
     }
 
     pub fn unquote(tree: Ast) -> Ast {
@@ -41,7 +36,7 @@ pub mod builtin {
                 }) => match lhs.is_subtype(&rhs) {
                     ExtendsResult::True => (then_branch.into(), acc),
                     ExtendsResult::False => (else_branch.into(), acc),
-                    ExtendsResult::Never => (Ast::NeverKeyword(span.into()), acc),
+                    ExtendsResult::Never => (Ast::NeverKeyword(span), acc),
                     ExtendsResult::Both => {
                         let value = Ast::UnionType(UnionType {
                             types: vec![then_branch.into(), else_branch.into()],
@@ -139,7 +134,7 @@ mod tests {
                     to_value(runtime::builtin::assert_equal(left, right))
                         .unwrap()
                         .to_string(),
-                    lexpr::sexp!(#"(no-op)").to_string()
+                    lexpr::sexp!(#"no-op").to_string()
                 );
             }
 
@@ -149,7 +144,7 @@ mod tests {
                     to_value(runtime::builtin::assert_equal(ast!("1"), ast!("1")))
                         .unwrap()
                         .to_string(),
-                    lexpr::sexp!(#"(no-op)").to_string()
+                    lexpr::sexp!(#"no-op").to_string()
                 );
             }
 
@@ -159,7 +154,7 @@ mod tests {
                     to_value(runtime::builtin::assert_equal(ast!(" 1 "), ast!("1")))
                         .unwrap()
                         .to_string(),
-                    lexpr::sexp!(#"(no-op)").to_string()
+                    lexpr::sexp!(#"no-op").to_string()
                 );
             }
 

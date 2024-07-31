@@ -9,7 +9,7 @@ pub enum Ast {
 }
 
 #[ast_node]
-pub struct ExtendsExpr<'a> {
+pub struct ExtendsExpr {
     pub lhs: Rc<Ast>,
     pub rhs: Rc<Ast>,
     pub then_branch: Rc<Ast>,
