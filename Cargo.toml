@@ -31,3 +31,5 @@ slotmap = "1.1.1"
 [dev-dependencies]
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
+pest-test = "0.1"
+pest-test-gen = "0.1"
