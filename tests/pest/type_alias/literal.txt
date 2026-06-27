@@ -1,0 +1,18 @@
+With literal
+
+=======
+
+type A as 1
+
+=======
+
+(program
+  (statement
+    (type_alias
+      (ident: "A")
+      (expr
+        (number: "1")
+      )
+    )
+  )
+)

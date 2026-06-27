@@ -1,0 +1,19 @@
+Exported
+
+=======
+
+export type A as 1
+
+=======
+
+(program
+  (statement
+    (type_alias
+      (export: "export")
+      (ident: "A")
+      (expr
+        (number: "1")
+      )
+    )
+  )
+)

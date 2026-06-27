@@ -1,0 +1,18 @@
+With identifier body
+
+=======
+
+type A as B
+
+=======
+
+(program
+  (statement
+    (type_alias
+      (ident: "A")
+      (expr
+        (ident: "B")
+      )
+    )
+  )
+)

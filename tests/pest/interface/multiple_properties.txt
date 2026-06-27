@@ -1,0 +1,37 @@
+With multiple properties
+
+=======
+
+interface Foo { x: number, y: string }
+
+=======
+
+(program
+  (statement
+    (interface
+      (ident: "Foo")
+      (object_literal
+        (object_property
+          (property_key
+            (ident: "x")
+          )
+          (expr
+            (primitive
+              (primitive_number: "number")
+            )
+          )
+        )
+        (object_property
+          (property_key
+            (ident: "y")
+          )
+          (expr
+            (primitive
+              (primitive_string: "string")
+            )
+          )
+        )
+      )
+    )
+  )
+)

@@ -1,0 +1,19 @@
+With single type parameter
+
+=======
+
+interface Foo(A) {}
+
+=======
+
+(program
+  (statement
+    (interface
+      (ident: "Foo")
+      (type_parameters
+        (ident: "A")
+      )
+      (object_literal: "{}")
+    )
+  )
+)
