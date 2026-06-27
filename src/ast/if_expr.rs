@@ -1,4 +1,4 @@
-use newtype::compose;
+use crate::compose;
 
 use super::*;
 
