@@ -928,7 +928,7 @@ impl From<ExtendsExpr> for Ast {
 #[derive(Derivative, Clone, Eq, Serialize)]
 #[derivative(PartialEq)]
 #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum ImportClause {
     Named(Vec<ImportSpecifier>),
     Namespace { alias: Ident },
@@ -941,7 +941,7 @@ pub struct ImportSpecifier {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum BuiltinKeyword {
     Keyof,
 }
@@ -949,7 +949,7 @@ pub enum BuiltinKeyword {
 #[derive(Derivative, Clone, Eq, Serialize)]
 #[derivative(PartialEq)]
 #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum PrimitiveType {
     Boolean,
     Number,
@@ -965,7 +965,7 @@ pub enum PrimitiveType {
 #[derive(Derivative, Clone, Eq, Serialize)]
 #[derivative(PartialEq)]
 #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum PrefixOp {
     Infer,
     Not,
@@ -984,7 +984,7 @@ impl PrefixOp {
 #[derive(Derivative, Clone, Eq, Serialize)]
 #[derivative(PartialEq)]
 #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum InfixOp {
     Extends,
     NotExtends,
@@ -999,7 +999,7 @@ pub enum InfixOp {
 #[derive(Derivative, Clone, Eq, Serialize)]
 #[derivative(PartialEq)]
 #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum MappingModifier {
     Add,
     Remove,
@@ -1008,7 +1008,7 @@ pub enum MappingModifier {
 #[derive(Derivative, Clone, Eq, Serialize)]
 #[derivative(PartialEq)]
 #[derivative(Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum ObjectPropertyKey {
     Index(PropertyKeyIndex),
     Key(String),

@@ -1,6 +1,5 @@
 ---
 source: tests/parser.rs
 expression: "parse_extends(\"(A <: B)\").to_sexp().unwrap()"
-snapshot_kind: text
 ---
-(extends-infix-op (lhs ident . "A") (op . extends) (rhs ident . "B"))
+(extends_infix_op (lhs ident . "A") (op . extends) (rhs ident . "B"))

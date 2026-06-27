@@ -53,7 +53,7 @@ fn ast_node_enum(attrs: AstNodeAttributes, item: &mut syn::ItemEnum) -> TokenStr
     });
 
     item.attrs.push(syn::parse_quote! {
-        #[serde(rename_all = "kebab-case")]
+        #[serde(rename_all = "snake_case")]
     });
 
 
@@ -142,7 +142,7 @@ fn ast_node_struct(attrs: AstNodeAttributes, item: &mut ItemStruct) -> TokenStre
 
     if !attrs.transparent {
         item.attrs.push(syn::parse_quote! {
-            #[serde(rename_all = "kebab-case")]
+            #[serde(rename_all = "snake_case")]
         });
     }
 

@@ -3,4 +3,4 @@ source: tests/ast.rs
 expression: actual.to_sexp().unwrap()
 snapshot_kind: text
 ---
-(extends-expr (lhs ident . "a") (rhs ident . "b") (then-branch ident . "c") (else-branch ident . "d"))
+(extends_expr (lhs ident . "a") (rhs ident . "b") (then_branch ident . "c") (else_branch ident . "d"))

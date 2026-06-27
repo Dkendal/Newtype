@@ -134,7 +134,7 @@ mod tests {
                     to_value(runtime::builtin::assert_equal(left, right))
                         .unwrap()
                         .to_string(),
-                    lexpr::sexp!(#"no-op").to_string()
+                    lexpr::sexp!(#"no_op").to_string()
                 );
             }
 
@@ -144,7 +144,7 @@ mod tests {
                     to_value(runtime::builtin::assert_equal(ast!("1"), ast!("1")))
                         .unwrap()
                         .to_string(),
-                    lexpr::sexp!(#"no-op").to_string()
+                    lexpr::sexp!(#"no_op").to_string()
                 );
             }
 
@@ -154,7 +154,7 @@ mod tests {
                     to_value(runtime::builtin::assert_equal(ast!(" 1 "), ast!("1")))
                         .unwrap()
                         .to_string(),
-                    lexpr::sexp!(#"no-op").to_string()
+                    lexpr::sexp!(#"no_op").to_string()
                 );
             }
 
