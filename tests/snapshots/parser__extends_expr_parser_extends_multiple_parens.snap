@@ -1,6 +1,5 @@
 ---
-source: src/parser.rs
-assertion_line: 1147
+source: tests/parser.rs
 expression: "parse_extends(\"((A <: B))\").to_sexp().unwrap()"
 snapshot_kind: text
 ---

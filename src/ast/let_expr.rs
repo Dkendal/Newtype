@@ -1,4 +1,4 @@
-use pretty::RcDoc as D;
+use ::pretty::RcDoc as D;
 use serde::Serialize;
 
 use super::*;

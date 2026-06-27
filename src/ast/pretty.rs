@@ -1,0 +1,580 @@
+use std::fmt::Display;
+
+use pretty::RcDoc as D;
+
+use crate::{
+    ast::{
+        cond_expr, match_expr, Access, ApplyGeneric, Ast, Builtin, BuiltinKeyword, ExtendsExpr,
+        ExtendsInfixOp, ExtendsPrefixOp, FunctionType, Ident, ImportClause, ImportSpecifier,
+        ImportStatement, InfixOp, Interface, IntersectionType, MappedType, MappingModifier,
+        ObjectProperty, ObjectPropertyKey, Parameter, Path, PrimitiveType, Program,
+        PropertyKeyIndex, Tuple, TypeAlias, TypeLiteral, TypeParameter, UnionType,
+    },
+    pretty::{parens, string_literal, surround},
+    typescript,
+};
+
+impl typescript::Pretty for ApplyGeneric {
+    fn to_ts(&self) -> D<()> {
+        let sep = D::text(",").append(D::space());
+
+        let generic_inner = D::intersperse(self.args.iter().map(|param| param.to_ts()), sep);
+
+        let generic_params = D::text("<").append(generic_inner).append(D::text(">"));
+
+        self.receiver.to_ts().append(generic_params)
+    }
+}
+
+impl typescript::Pretty for TypeLiteral {
+    fn to_ts(&self) -> D<()> {
+        let props = &self.properties;
+
+        let sep = D::text(",").append(D::line());
+
+        let props = D::intersperse(props.iter().map(|prop| prop.to_ts()), sep);
+
+        D::nil()
+            .append("{")
+            .append(D::line_())
+            .append(props.nest(4))
+            .append(D::line_())
+            .append(D::text("}"))
+            .group()
+    }
+}
+
+impl typescript::Pretty for Interface {
+    fn to_ts(&self) -> D<()> {
+        let Interface {
+            export,
+            name,
+            extends,
+            params,
+            definition,
+            ..
+        } = self;
+
+        let doc = if *export {
+            D::text("export").append(D::space())
+        } else {
+            D::nil()
+        };
+
+        let extends = match extends {
+            Some(extends) => D::space()
+                .append("extends")
+                .append(D::space())
+                .append(extends)
+                .append(D::space()),
+            None => D::nil(),
+        };
+
+        let params_doc = match params {
+            list if list.is_empty() => D::nil(),
+            list => {
+                let seperator = D::text(",").append(D::line());
+
+                let params_body =
+                    D::intersperse(list.iter().map(|param| param.to_ts().group()), seperator);
+
+                D::text("<")
+                    .append(D::line_().append(params_body).append(D::line_()).nest(4))
+                    .append(D::text(">"))
+                    .group()
+            }
+        };
+
+        let body = if definition.is_empty() {
+            D::text("{}")
+        } else {
+            let body = definition.iter().map(|p| p.to_ts());
+
+            let body = D::intersperse(body, D::text(";").append(D::hardline())).append(";");
+
+            let body = D::hardline().append(body).nest(4);
+
+            D::nil()
+                .append("{")
+                .append(body)
+                .append(D::hardline())
+                .append("}")
+        };
+
+        doc.append("interface")
+            .append(D::space())
+            .append(name)
+            .append(params_doc)
+            .append(extends)
+            .append(D::space())
+            .append(body)
+            .group()
+    }
+}
+
+impl typescript::Pretty for FunctionType {
+    fn to_ts(&self) -> D<()> {
+        let sep = D::text(",").append(D::space());
+
+        let params = D::intersperse(self.params.iter().map(|param| param.to_ts()), sep);
+
+        let params = D::text("(").append(params).append(D::text(")")).group();
+
+        let return_type = self.return_type.to_ts();
+
+        params
+            .append(D::space())
+            .append("=>")
+            .append(D::space())
+            .append(return_type)
+    }
+}
+
+impl typescript::Pretty for Parameter {
+    fn to_ts(&self) -> D<()> {
+        let kind = self.kind.to_ts();
+
+        if self.ellipsis {
+            D::text("...")
+        } else {
+            D::nil()
+        }
+        .append(self.name.clone())
+        .append(":")
+        .append(D::space())
+        .append(kind)
+    }
+}
+
+impl typescript::Pretty for Ast {
+    fn to_ts(&self) -> D<()> {
+        match self {
+            Ast::Program(Program { statements, .. }) => {
+                let mut doc = D::nil();
+                for stmnt in statements {
+                    doc = doc
+                        .append(stmnt.to_ts())
+                        .append(D::hardline())
+                        .append(D::hardline());
+                }
+                doc
+            }
+            Ast::TypeAlias(TypeAlias {
+                export,
+                name,
+                params,
+                body,
+                ..
+            }) => {
+                let body = (*body).to_ts();
+
+                let doc = if *export {
+                    D::text("export").append(D::space())
+                } else {
+                    D::nil()
+                };
+
+                let params_doc = match params {
+                    list if list.is_empty() => D::nil(),
+                    list => {
+                        let seperator = D::text(",").append(D::line());
+
+                        let body = D::intersperse(
+                            list.iter().map(|param| param.to_ts().group()),
+                            seperator,
+                        );
+
+                        D::text("<")
+                            .append(D::line_().append(body).append(D::line_()).nest(4))
+                            .append(D::text(">"))
+                            .group()
+                    }
+                };
+
+                doc.append("type")
+                    .append(D::space())
+                    .append(name.pretty())
+                    .append(params_doc)
+                    .append(D::space())
+                    .append("=")
+                    .append(D::line().append(body).nest(4))
+                    .group()
+            }
+            Ast::Ident(identifier) => identifier.pretty(),
+            Ast::TypeNumber(inner) => D::text(inner.ty.clone()),
+            Ast::Primitive(primitive, _) => D::text(primitive.to_string()),
+            Ast::TypeString(inner) => string_literal(inner.ty.as_str()),
+            Ast::TemplateString(inner) => D::text(inner.ty.clone()),
+            Ast::IfExpr(..) => {
+                unreachable!("IfExpr should be desugared before this point");
+            }
+            Ast::Access(Access {
+                lhs,
+                rhs,
+                is_dot: true,
+                ..
+            }) => {
+                let rhs = rhs
+                    .as_ident()
+                    .expect("rhs of dot access should be an ident");
+
+                lhs.to_ts()
+                    .append(D::text("["))
+                    .append(string_literal(rhs.name.as_str()))
+                    .append(D::text("]"))
+                    .group()
+            }
+            Ast::Access(Access { lhs, rhs, .. }) => lhs
+                .to_ts()
+                .append(D::text("["))
+                .append(rhs.to_ts())
+                .append(D::text("]"))
+                .group(),
+            Ast::TypeLiteral(value) => value.to_ts(),
+            Ast::ApplyGeneric(value) => value.to_ts(),
+            Ast::Tuple(Tuple { items, .. }) => {
+                let sep = D::text(",").append(D::space());
+
+                let items = D::intersperse(items.iter().map(|item| item.to_ts()), sep);
+
+                D::text("[").append(items).append(D::text("]"))
+            }
+            Ast::Array(node) => {
+                let doc = if node.is_set_op() {
+                    parens(node.to_ts())
+                } else {
+                    node.to_ts()
+                };
+
+                doc.append(D::text("[]"))
+            }
+            Ast::NeverKeyword(_) => D::text("never"),
+            Ast::AnyKeyword(_) => D::text("any"),
+            Ast::UnknownKeyword(_) => D::text("unknown"),
+            Ast::TrueKeyword(_) => D::text("true"),
+            Ast::FalseKeyword(_) => D::text("false"),
+            Ast::Infer(value) => D::text("infer").append(D::space()).append(value.to_ts()),
+
+            Ast::Builtin(Builtin { name, argument, .. }) => {
+                name.to_ts().append(" ").append(argument.to_ts())
+            }
+
+            Ast::ExtendsExpr(ExtendsExpr {
+                lhs,
+                rhs,
+                then_branch: then,
+                else_branch: els,
+                ..
+            }) => {
+                let condition_doc = lhs
+                    .to_ts()
+                    .append(D::space())
+                    .append("extends")
+                    .append(D::space())
+                    .append(rhs.to_ts());
+
+                let then_doc = D::line()
+                    .append("?")
+                    .append(D::space())
+                    .append(then.to_ts())
+                    .nest(4);
+
+                let else_doc = D::line()
+                    .append(":")
+                    .append(D::space())
+                    .append(els.to_ts())
+                    .nest(4);
+
+                condition_doc.append(then_doc).append(else_doc)
+            }
+            Ast::ExtendsInfixOp(ExtendsInfixOp {
+                lhs,
+                op: InfixOp::Extends,
+                rhs,
+                ..
+            }) => lhs
+                .to_ts()
+                .append(D::space())
+                .append("extends")
+                .append(D::space())
+                .append(rhs.to_ts())
+                .group(),
+            Ast::Statement(stmnt) => stmnt.to_ts().append(D::text(";")),
+            Ast::MappedType(MappedType {
+                index: key,
+                iterable,
+                remapped_as,
+                readonly_mod,
+                optional_mod,
+                body,
+                ..
+            }) => {
+                let remapped_as_doc = match remapped_as {
+                    Some(remapped_as) => D::space()
+                        .append("as")
+                        .append(D::space())
+                        .append(remapped_as.to_ts()),
+                    None => D::nil(),
+                };
+
+                let lhs_doc = D::nil()
+                    .append(key)
+                    .append(D::space())
+                    .append("in")
+                    .append(D::space())
+                    .append(iterable.to_ts())
+                    .append(remapped_as_doc)
+                    .group();
+
+                let rhs_doc = body.to_ts();
+
+                let rhs_doc = D::line().append(rhs_doc).nest(4).group();
+
+                let readonly_doc = match readonly_mod {
+                    Some(MappingModifier::Add) => D::text("readonly"),
+                    Some(MappingModifier::Remove) => D::text("-readonly"),
+                    None => D::nil(),
+                };
+
+                let optional_doc = match optional_mod {
+                    Some(MappingModifier::Add) => D::text("?"),
+                    Some(MappingModifier::Remove) => D::text("-?"),
+                    None => D::nil(),
+                };
+
+                let inner_doc = D::line()
+                    .append(readonly_doc)
+                    .append("[")
+                    .append(lhs_doc)
+                    .append("]")
+                    .append(optional_doc)
+                    .append(":")
+                    .append(rhs_doc)
+                    .append(D::line())
+                    .nest(4)
+                    .group();
+
+                D::nil().append("{").append(inner_doc).append("}").group()
+            }
+            Ast::LetExpr(..) => {
+                unreachable!("LetExpr should be desugared before this point")
+            }
+            Ast::ImportStatement(ImportStatement {
+                import_clause,
+                module,
+                ..
+            }) => {
+                let import_clause = import_clause.to_ts();
+
+                D::text("import type")
+                    .append(D::space())
+                    .append(import_clause)
+                    .append(D::space())
+                    .append("from")
+                    .append(D::space())
+                    .append(string_literal(module))
+            }
+            Ast::Path(Path { segments, .. }) => {
+                let sep = D::text(".");
+
+                let segments = D::intersperse(segments.iter().map(|seg| seg.to_ts()), sep);
+
+                segments
+            }
+            Ast::Interface(value) => {
+                return value.to_ts();
+            }
+            Ast::UnitTest(_) => D::nil(),
+            Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
+            Ast::UnionType(UnionType { types, .. }) => {
+                let sep = D::line().append(D::text("|")).append(D::space());
+                D::intersperse(
+                    types.iter().map(|t| match t {
+                        Ast::IntersectionType(IntersectionType { .. }) => {
+                            surround(t.to_ts(), "(", ")")
+                        }
+                        _ => t.to_ts(),
+                    }),
+                    sep,
+                )
+                .group()
+            }
+            Ast::IntersectionType(IntersectionType { types, .. }) => {
+                let sep = D::line().append(D::text("&")).append(D::space());
+                D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
+            }
+            Ast::NoOp(_) => D::nil(),
+            node @ (Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. })
+            | Ast::MatchExpr(match_expr::MatchExpr { .. })
+            | Ast::CondExpr(cond_expr::CondExpr { .. })
+            | Ast::ExtendsInfixOp(ExtendsInfixOp { .. })) => {
+                unreachable!("Ast should be desugared before this point {:#?}", node)
+            }
+            Ast::FunctionType(ty) => ty.to_ts(),
+        }
+    }
+}
+
+impl typescript::Pretty for ImportClause {
+    fn to_ts(&self) -> D<()> {
+        match self {
+            ImportClause::Named(specifiers) => {
+                let sep = D::text(",").append(D::line());
+
+                let specifiers =
+                    D::intersperse(specifiers.iter().map(typescript::Pretty::to_ts), sep);
+
+                D::text("{")
+                    .append(
+                        D::nil()
+                            .append(D::line())
+                            .append(specifiers)
+                            .append(D::line())
+                            .nest(4),
+                    )
+                    .append(D::text("}"))
+                    .group()
+            }
+            ImportClause::Namespace { alias } => D::text("*")
+                .append(D::space())
+                .append("as")
+                .append(D::space())
+                .append(alias.to_ts()),
+        }
+    }
+}
+
+impl typescript::Pretty for ImportSpecifier {
+    fn to_ts(&self) -> D<()> {
+        let alias_doc = match &self.alias {
+            Some(alias) => D::space()
+                .append("as")
+                .append(D::space())
+                .append(alias.to_ts()),
+
+            None => D::nil(),
+        };
+
+        self.module_export_name.to_ts().append(alias_doc)
+    }
+}
+
+impl typescript::Pretty for BuiltinKeyword {
+    fn to_ts(&self) -> D<()> {
+        match self {
+            BuiltinKeyword::Keyof => D::text("keyof"),
+        }
+    }
+}
+
+impl Display for PrimitiveType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PrimitiveType::Boolean => write!(f, "boolean"),
+            PrimitiveType::Number => write!(f, "number"),
+            PrimitiveType::String => write!(f, "string"),
+            PrimitiveType::Object => write!(f, "object"),
+            PrimitiveType::Symbol => write!(f, "symbol"),
+            PrimitiveType::BigInt => write!(f, "bigint"),
+            PrimitiveType::Void => write!(f, "void"),
+            PrimitiveType::Undefined => write!(f, "undefined"),
+            PrimitiveType::Null => write!(f, "null"),
+        }
+    }
+}
+
+impl typescript::Pretty for ObjectPropertyKey {
+    fn to_ts(&self) -> D<()> {
+        match self {
+            ObjectPropertyKey::Index(index) => surround(index.to_ts(), "[", "]").group(),
+            ObjectPropertyKey::Key(key) => D::text(key.clone()),
+            ObjectPropertyKey::Computed(id) => surround(id.to_ts(), "[", "]").group(),
+        }
+    }
+}
+
+impl typescript::Pretty for PropertyKeyIndex {
+    fn to_ts(&self) -> D<()> {
+        let PropertyKeyIndex {
+            key,
+            iterable,
+            remapped_as,
+            ..
+        } = self;
+
+        let remapped_as = match remapped_as {
+            Some(remapped_as) => D::space()
+                .append("as")
+                .append(D::space())
+                .append(remapped_as.to_ts()),
+            None => D::nil(),
+        };
+
+        D::nil()
+            .append(key)
+            .append(D::space())
+            .append("in")
+            .append(D::space())
+            .append(iterable.to_ts())
+            .append(remapped_as)
+    }
+}
+
+impl typescript::Pretty for ObjectProperty {
+    fn to_ts(&self) -> D<()> {
+        let readonly = if self.readonly {
+            D::text("readonly").append(D::space())
+        } else {
+            D::nil()
+        };
+
+        let optional = if self.optional {
+            D::text("?")
+        } else {
+            D::nil()
+        };
+
+        let doc = D::nil();
+
+        doc.append(readonly)
+            .append(self.key.to_ts())
+            .append(optional)
+            .append(D::text(":"))
+            .append(D::space())
+            .append(self.value.to_ts())
+    }
+}
+
+impl typescript::Pretty for Ident {
+    fn to_ts(&self) -> D<()> {
+        D::text(self.name.clone())
+    }
+}
+
+impl typescript::Pretty for TypeParameter {
+    fn to_ts(&self) -> D<()> {
+        let rest = if self.rest { D::text("...") } else { D::nil() };
+
+        let constraint = match &self.constraint {
+            Some(constraint) => D::space()
+                .append("extends")
+                .append(D::space())
+                .append(constraint.to_ts()),
+            None => D::nil(),
+        };
+
+        let default_value = match &self.default {
+            Some(value) => D::space()
+                .append("=")
+                .append(D::space())
+                .append(value.to_ts()),
+            None => D::nil(),
+        };
+
+        D::nil()
+            .append(rest)
+            .append(self.name.clone())
+            .append(constraint)
+            .append(default_value)
+    }
+}

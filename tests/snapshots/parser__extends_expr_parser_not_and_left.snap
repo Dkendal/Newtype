@@ -1,6 +1,5 @@
 ---
-source: src/parser.rs
-assertion_line: 1162
+source: tests/parser.rs
 expression: "parse_extends(\"not (A <: B) and C <: D\").to_sexp().unwrap()"
 snapshot_kind: text
 ---

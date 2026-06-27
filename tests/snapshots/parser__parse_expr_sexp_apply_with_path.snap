@@ -1,6 +1,5 @@
 ---
-source: src/parser.rs
-assertion_line: 1075
+source: tests/parser.rs
 expression: actual.to_sexp().unwrap()
 snapshot_kind: text
 ---

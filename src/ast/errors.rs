@@ -2,8 +2,7 @@ use core::fmt;
 
 use super::Ast;
 
-pub enum Error {
-}
+pub enum Error {}
 
 pub struct AssertionError {
     pub message: String,
