@@ -1,0 +1,5 @@
+[tasks.test]
+run = "cargo nextest run"
+
+[tasks.build]
+run = "cargo build"
