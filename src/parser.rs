@@ -35,7 +35,7 @@ pub type ParserError = Error<Rule>;
 pub type Pair<'i> = pest::iterators::Pair<'i, Rule>;
 pub type Pairs<'i> = pest::iterators::Pairs<'i, Rule>;
 
-pub(crate) fn parse_expr(pairs: Pairs) -> Ast {
+pub fn parse_expr(pairs: Pairs) -> Ast {
     use Rule::*;
 
     EXPR_PARSER
@@ -278,7 +278,7 @@ pub(crate) fn parse_extends_expr(pairs: Pairs) -> Ast {
         .parse(pairs)
 }
 
-pub(crate) fn parse(pair: Pair) -> Ast {
+pub fn parse(pair: Pair) -> Ast {
     let rule = pair.clone().as_rule();
     let span: Span = pair.as_span().into();
 

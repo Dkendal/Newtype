@@ -1,6 +1,5 @@
 ---
-source: src/ast.rs
-assertion_line: 1701
+source: tests/ast.rs
 expression: actual.to_sexp().unwrap()
 snapshot_kind: text
 ---
