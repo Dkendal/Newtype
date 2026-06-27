@@ -1,15 +1,5 @@
 use crate::{ast::Ast, parser::parse_newtype_program};
 
-macro_rules! assert_sexpr {
-    ($rule:expr, $processor:expr, $input:expr, $expected:expr) => {{
-        let pairs = crate::parser::NewtypeParser::parse($rule, $input).unwrap();
-        let actual = $processor(pairs);
-        pretty_assertions::assert_eq!(actual.to_sexp().unwrap().to_string(), $expected.to_string());
-    }};
-}
-
-pub(crate) use assert_sexpr;
-
 macro_rules! ast {
     ($input:expr) => {{
         use crate::parser;

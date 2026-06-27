@@ -1,0 +1,7 @@
+---
+source: src/parser.rs
+assertion_line: 2093
+expression: actual.to_sexp().unwrap()
+snapshot_kind: text
+---
+(macro (name . "unquote!") (args (number . "1")))

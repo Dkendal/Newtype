@@ -1,0 +1,7 @@
+---
+source: src/ast.rs
+assertion_line: 1695
+expression: actual.to_sexp().unwrap()
+snapshot_kind: text
+---
+(:: (segments (ident . "A") (ident . "B") (ident . "C") (ident . "D")))

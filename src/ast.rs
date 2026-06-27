@@ -1685,51 +1685,20 @@ mod simplify_tests {
         pest::Parser,
         test_support::parse,
     };
-    use lexpr::sexp;
     use pretty_assertions::{assert_eq, assert_ne};
-    use rstest::rstest;
 
-    #[rstest]
-    #[case(
-        "A::B::C::D",
-        sexp!((:: (segments (ident . "A") (ident . "B") (ident . "C") (ident . "D"))))
-    )]
-    fn test_simplify_expr(#[case] input: &str, #[case] expected: lexpr::Value) {
+    #[test]
+    fn simplify_path_access() {
         use crate::parser::{self, Rule};
-
-        let result = parser::NewtypeParser::parse(Rule::expr, input);
-
-        match result {
-            Ok(pairs) => {
-                let actual = parser::parse_expr(pairs).simplify();
-
-                pretty_assertions::assert_eq!(
-                    actual.to_sexp().unwrap().to_string(),
-                    expected.to_string()
-                );
-            }
-            Err(err) => {
-                panic!("{}", err);
-            }
-        }
+        let pairs = parser::NewtypeParser::parse(Rule::expr, "A::B::C::D").unwrap();
+        let actual = parser::parse_expr(pairs).simplify();
+        insta::assert_snapshot!(actual.to_sexp().unwrap());
     }
 
     #[test]
     fn simplify_basic() {
-        assert_eq!(
-            parse!(expr, "if a <: b then c else d end")
-                .simplify()
-                .to_sexp()
-                .unwrap()
-                .to_string(),
-            lexpr::sexp!(
-                (#"extends-expr"
-                    (lhs ident . "a")
-                    (rhs ident . "b")
-                    (#"then-branch" ident . "c")
-                    (#"else-branch" ident . "d")))
-            .to_string()
-        )
+        let actual = parse!(expr, "if a <: b then c else d end").simplify();
+        insta::assert_snapshot!(actual.to_sexp().unwrap());
     }
 
     #[test]

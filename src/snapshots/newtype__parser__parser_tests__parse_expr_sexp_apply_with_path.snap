@@ -1,0 +1,7 @@
+---
+source: src/parser.rs
+assertion_line: 1075
+expression: actual.to_sexp().unwrap()
+snapshot_kind: text
+---
+(apply (receiver :: (segments (ident . "A") (ident . "Equals"))) (args (ident . "T") any))

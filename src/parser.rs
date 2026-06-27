@@ -1059,37 +1059,20 @@ mod parser_tests {
     use textwrap_macros::dedent;
     use Rule::*;
 
-    #[rstest]
-    #[case(
-        "Equals(T, any)",
-        sexp!((apply (receiver ident . "Equals") (args (ident . "T") any))))
-    ]
-    #[case(
-        "A::Equals(T, any)",
-        sexp!(
-            (apply
-                (receiver :: (segments (ident . "A") (ident . "Equals")))
-                (args (ident . "T") any))
-        )
-    )]
-    fn test_parse_expr_sexp_repr(#[case] input: &str, #[case] expected: lexpr::Value) {
+    #[test]
+    fn parse_expr_sexp_apply() {
         use crate::parser;
+        let pairs = parser::NewtypeParser::parse(Rule::expr, "Equals(T, any)").unwrap();
+        let actual = parser::parse_expr(pairs);
+        insta::assert_snapshot!(actual.to_sexp().unwrap());
+    }
 
-        let result = parser::NewtypeParser::parse(Rule::expr, input);
-
-        match result {
-            Ok(pairs) => {
-                let actual = parser::parse_expr(pairs);
-
-                pretty_assertions::assert_eq!(
-                    actual.to_sexp().unwrap().to_string(),
-                    expected.to_string()
-                );
-            }
-            Err(err) => {
-                panic!("{}", err);
-            }
-        }
+    #[test]
+    fn parse_expr_sexp_apply_with_path() {
+        use crate::parser;
+        let pairs = parser::NewtypeParser::parse(Rule::expr, "A::Equals(T, any)").unwrap();
+        let actual = parser::parse_expr(pairs);
+        insta::assert_snapshot!(actual.to_sexp().unwrap());
     }
 
     #[rstest]
@@ -1144,136 +1127,52 @@ mod parser_tests {
         };
     }
 
+    fn parse_extends(input: &str) -> Ast {
+        let pairs = NewtypeParser::parse(Rule::extends_expr, input).unwrap();
+        crate::parser::parse_extends_expr(pairs)
+    }
+
     #[test]
     fn extends_expr_parser_extends() {
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "A <: B",
-            lexpr::sexp!((#"extends-infix-op" (lhs #"ident" . "A") (op . #"extends") (rhs #"ident" . "B")))
-        );
+        insta::assert_snapshot!(parse_extends("A <: B").to_sexp().unwrap());
     }
 
     #[test]
     fn extends_expr_parser_extends_parens() {
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "(A <: B)",
-            lexpr::sexp!((#"extends-infix-op" (lhs #"ident" . "A") (op . #"extends") (rhs #"ident" . "B")))
-        );
+        insta::assert_snapshot!(parse_extends("(A <: B)").to_sexp().unwrap());
     }
 
     #[test]
     fn extends_expr_parser_extends_multiple_parens() {
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "((A <: B))",
-            lexpr::sexp!((#"extends-infix-op" (lhs #"ident" . "A") (op . #"extends") (rhs #"ident" . "B")))
-        );
+        insta::assert_snapshot!(parse_extends("((A <: B))").to_sexp().unwrap());
     }
 
     #[test]
     fn extends_expr_parser_not_with_parens_extends() {
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "not (A <: B)",
-            lexpr::sexp!(
-                (#"extends-prefix-op"
-                    (op . not)
-                    (value #"extends-infix-op"
-                        (lhs #"ident" . "A")
-                        (op . extends)
-                        (rhs #"ident" . "B")))
-            )
-        );
+        insta::assert_snapshot!(parse_extends("not (A <: B)").to_sexp().unwrap());
     }
 
     #[test]
     fn extends_expr_parser_and() {
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "A <: B and C <: D",
-            lexpr::sexp!(
-                (#"extends-infix-op"
-                    (lhs #"extends-infix-op"
-                        (lhs ident . "A")
-                        (op . extends)
-                        (rhs ident . "B"))
-                (op . and)
-                (rhs #"extends-infix-op"
-                    (lhs ident . "C")
-                    (op . extends)
-                    (rhs ident . "D")))
-            )
-        );
+        insta::assert_snapshot!(parse_extends("A <: B and C <: D").to_sexp().unwrap());
     }
 
     #[test]
-    fn extends_expr_parser_not_and() {
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "not (A <: B) and C <: D",
-            lexpr::sexp!(
-                (#"extends-infix-op"
-                    (lhs #"extends-prefix-op"
-                        (op . not)
-                        (value #"extends-infix-op"
-                            (lhs ident . "A")
-                            (op . extends)
-                            (rhs ident . "B")))
-                    (op . and)
-                    (rhs #"extends-infix-op"
-                        (lhs ident . "C")
-                        (op . extends)
-                        (rhs ident . "D")))
-            )
-        );
+    fn extends_expr_parser_not_and_left() {
+        insta::assert_snapshot!(parse_extends("not (A <: B) and C <: D").to_sexp().unwrap());
+    }
 
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "A <: B and (not (C <: D))",
-            lexpr::sexp!(
-                (#"extends-infix-op"
-                    (lhs #"extends-infix-op"
-                        (lhs ident . "A")
-                        (op . extends)
-                        (rhs ident . "B"))
-                    (op . and)
-                    (rhs #"extends-prefix-op"
-                        (op . not)
-                        (value #"extends-infix-op"
-                            (lhs ident . "C")
-                            (op . extends)
-                            (rhs ident . "D"))))
-            )
-        );
+    #[test]
+    fn extends_expr_parser_not_and_right() {
+        insta::assert_snapshot!(parse_extends("A <: B and (not (C <: D))").to_sexp().unwrap());
+    }
 
-        assert_sexpr!(
-            Rule::extends_expr,
-            crate::parser::parse_extends_expr,
-            "not (A <: B) and (not (C <: D))",
-            lexpr::sexp!(
-                (#"extends-infix-op"
-                    (lhs #"extends-prefix-op"
-                        (op . not)
-                        (value #"extends-infix-op"
-                            (lhs ident . "A")
-                            (op . extends)
-                            (rhs ident . "B")))
-                    (op . and)
-                    (rhs #"extends-prefix-op"
-                        (op . not)
-                        (value #"extends-infix-op"
-                            (lhs ident . "C")
-                            (op . extends)
-                            (rhs ident . "D"))))
-            )
+    #[test]
+    fn extends_expr_parser_not_and_both() {
+        insta::assert_snapshot!(
+            parse_extends("not (A <: B) and (not (C <: D))")
+                .to_sexp()
+                .unwrap()
         );
     }
 
@@ -2189,12 +2088,9 @@ mod parser_tests {
 
         #[test]
         fn parsing() {
-            assert_sexpr!(
-                R,
-                crate::parser::parse_expr,
-                "unquote!(1)",
-                lexpr::sexp!((macro (name . "unquote!") (args (number . "1"))))
-            );
+            let pairs = NewtypeParser::parse(R, "unquote!(1)").unwrap();
+            let actual = crate::parser::parse_expr(pairs);
+            insta::assert_snapshot!(actual.to_sexp().unwrap());
         }
 
         #[ignore]

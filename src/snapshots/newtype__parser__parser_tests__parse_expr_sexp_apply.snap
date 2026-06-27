@@ -1,0 +1,7 @@
+---
+source: src/parser.rs
+assertion_line: 1067
+expression: actual.to_sexp().unwrap()
+snapshot_kind: text
+---
+(apply (receiver ident . "Equals") (args (ident . "T") any))

@@ -1,0 +1,7 @@
+---
+source: src/parser.rs
+assertion_line: 1172
+expression: "parse_extends(\"not (A <: B) and (not (C <: D))\").to_sexp().unwrap()"
+snapshot_kind: text
+---
+(extends-infix-op (lhs extends-prefix-op (op . not) (value extends-infix-op (lhs ident . "A") (op . extends) (rhs ident . "B"))) (op . and) (rhs extends-prefix-op (op . not) (value extends-infix-op (lhs ident . "C") (op . extends) (rhs ident . "D"))))
