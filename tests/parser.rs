@@ -147,6 +147,7 @@ fn dot_access() {
     assert_typescript!(expr, r#"A['x']"#, r#"A.x"#);
 }
 
+#[test]
 fn chained_dot_access() {
     assert_typescript!(expr, r#"A['x']['y']['z']"#, r#"A.x.y.z"#);
 }
@@ -162,9 +163,6 @@ fn array_access_indexer() {
 }
 
 mod primitives {
-    const R: Rule = Rule::expr;
-    use super::*;
-
     #[test]
     fn number() {
         assert_typescript!("type A = number;", "type A as number");
@@ -192,7 +190,6 @@ mod primitives {
 }
 
 mod literals {
-    const R: Rule = Rule::expr;
     use super::*;
 
     #[test]
@@ -282,7 +279,6 @@ mod literals {
 }
 
 mod bin_ops {
-    const R: Rule = Rule::expr;
     use rstest::rstest;
 
     use super::*;
@@ -315,6 +311,7 @@ mod bin_ops {
         );
     }
 
+    #[test]
     fn union() {
         assert_typescript!("type A = 1 | 2;", "type A as 1 | 2");
     }
@@ -346,7 +343,6 @@ mod bin_ops {
 }
 
 mod if_expr {
-    const R: Rule = if_expr;
     use super::*;
 
     #[test]
