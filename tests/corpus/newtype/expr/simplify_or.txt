@@ -1,0 +1,17 @@
+An `or` condition nests into two ifs
+
+=======
+
+if a <: b or c <: d
+then e
+else f
+end
+
+=======
+
+if a <: b then e
+else
+    if c <: d then e
+    else f
+    end
+end

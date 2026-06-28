@@ -1,0 +1,17 @@
+Negating a condition swaps the branches
+
+=======
+
+if a <: b then
+    d
+else
+    c
+end
+
+=======
+
+if not (a <: b) then
+    c
+else
+    d
+end
