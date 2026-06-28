@@ -1,6 +1,3 @@
-#![feature(assert_matches)]
-#![feature(box_patterns)]
-#![feature(macro_metavar_expr)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_macros)]

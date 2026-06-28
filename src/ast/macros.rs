@@ -1,14 +1,3 @@
-macro_rules! node {
-    ($value: pat) => {
-        $crate::ast::Node {
-            span: _,
-            value: box $value,
-        }
-    };
-}
-
-pub(crate) use node;
-
 macro_rules! assert_ast {
     ($pair:expr, $rule:expr) => {
         assert_eq!($pair.clone().as_rule(), $rule, "Rule mismatch");
@@ -67,9 +56,11 @@ macro_rules! take_pairs {
 pub(crate) use take_pairs;
 
 macro_rules! take_tags {
+    (@unit $_t:expr) => { () };
     ($pairs:expr, [$($tag:expr),+]) => {{
+        const COUNT: usize = <[()]>::len(&[$(take_tags!(@unit $tag)),+]);
         let tags = [$($tag),+];
-        let mut init: [Option<Pair>; ${count($tag)}] = Default::default();
+        let mut init: [Option<Pair>; COUNT] = Default::default();
 
         for pair in $pairs {
             if let Some(tag) = pair.as_node_tag() {
