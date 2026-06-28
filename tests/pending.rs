@@ -1,0 +1,199 @@
+//! Pending tests for features that are **not yet implemented** in the parser /
+//! renderer / simplifier.
+//!
+//! Every test here is `#[ignore]`d, so a normal `cargo test` run stays green.
+//! They are executable specifications you can use to drive — and verify — a
+//! future implementation:
+//!
+//! ```text
+//! cargo test --test pending -- --ignored        # run them all
+//! cargo test --test pending typeof -- --ignored  # run one group
+//! ```
+//!
+//! Each currently fails (it panics on a `todo!()`/`unreachable!()`, or asserts
+//! output the parser silently drops today). When the corresponding feature is
+//! implemented, its test should go green; remove the `#[ignore]` then — or, even
+//! better, promote the case into the corpus under `tests/corpus/`.
+//!
+//! Two assertion styles are used:
+//!
+//! * [`assert_renders_like`] — the expected TypeScript is well-defined (the
+//!   renderer already supports it; only the parser/lowering is missing). The
+//!   comparison ignores insignificant whitespace so it pins behaviour without
+//!   being brittle about exact spacing.
+//! * [`assert_renders_ok`] — the *semantics* are an open design decision
+//!   (there is no specified output yet), so we only assert the pipeline runs to
+//!   a non-empty result. Tighten this into an `assert_renders_like` once the
+//!   intended output is decided.
+
+use newtype::parser::Rule;
+
+/// Collapse runs of whitespace so comparisons aren't brittle about spacing.
+fn norm(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Assert `source` (parsed from `rule`) renders to `expected`, ignoring
+/// insignificant whitespace.
+fn assert_renders_like(rule: Rule, source: &str, expected: &str) {
+    let actual = newtype::corpus::render(rule, source.trim());
+    pretty_assertions::assert_eq!(
+        norm(expected),
+        norm(&actual),
+        "\n  source:   {}\n  rendered: {}",
+        source.trim(),
+        actual.trim()
+    );
+}
+
+/// Assert `source` (parsed from `rule`) renders to *something* without panicking.
+/// Use for features whose exact output is still an open question.
+fn assert_renders_ok(rule: Rule, source: &str) {
+    let actual = newtype::corpus::render(rule, source.trim());
+    assert!(
+        !actual.trim().is_empty(),
+        "expected a non-empty render for: {}",
+        source.trim()
+    );
+}
+
+/// `typeof(...)` builtin. Implemented: `BuiltinKeyword` only has `Keyof`;
+/// `parse_builtin` (src/parser.rs) hits `unreachable!()` for `typeof`, and the
+/// renderer would print `typeof <arg>` by analogy with `keyof`.
+mod typeof_builtin {
+    use super::*;
+
+    #[ignore = "typeof builtin unimplemented: parse_builtin only maps Rule::keyof (src/parser.rs)"]
+    #[test]
+    fn typeof_identifier() {
+        assert_renders_like(Rule::expr, "typeof(A)", "typeof A");
+    }
+
+    #[ignore = "typeof builtin unimplemented: parse_builtin only maps Rule::keyof (src/parser.rs)"]
+    #[test]
+    fn typeof_nested() {
+        assert_renders_like(Rule::expr, "typeof(keyof(A))", "typeof keyof A");
+    }
+}
+
+/// `interface Foo extends Bar { ... }`. The renderer already emits the
+/// `extends` clause (src/ast/pretty.rs), but `parse_interface` hardcodes
+/// `extends = None` (src/parser.rs), so the clause is parsed then dropped — the
+/// interface renders today as `interface Foo {}`.
+mod interface_extends {
+    use super::*;
+
+    #[ignore = "interface extends dropped: parse_interface hardcodes extends = None (src/parser.rs)"]
+    #[test]
+    fn empty_body() {
+        assert_renders_like(Rule::interface, "interface Foo extends Bar {}", "interface Foo extends Bar {}");
+    }
+
+    #[ignore = "interface extends dropped: parse_interface hardcodes extends = None (src/parser.rs)"]
+    #[test]
+    fn with_members() {
+        assert_renders_like(
+            Rule::interface,
+            "interface Foo extends Bar { x: 1 }",
+            "interface Foo extends Bar { x: 1; }",
+        );
+    }
+}
+
+/// Namespace imports: `import * as Foo from :a`. The renderer supports
+/// `ImportClause::Namespace` (`* as <alias>`), but the parser lowering panics
+/// with "not yet implemented" (src/parser.rs).
+mod namespace_import {
+    use super::*;
+
+    #[ignore = "namespace import lowering unimplemented: src/parser.rs panics (not yet implemented)"]
+    #[test]
+    fn star_as_alias() {
+        assert_renders_like(
+            Rule::program,
+            "import * as Foo from :a",
+            "import type * as Foo from 'a';",
+        );
+    }
+}
+
+/// Mapped-type modifiers. The `MappedType` renderer already handles
+/// `readonly` / optional `?` / `as` remap (src/ast/pretty.rs), but
+/// `parse_map_expr` hardcodes them to `None` (src/parser.rs), so they are
+/// parsed then dropped — these render today as a plain `{ [k in t]: 1 }`.
+mod map_expr_modifiers {
+    use super::*;
+
+    #[ignore = "map_expr modifiers dropped: parse_map_expr hardcodes readonly/optional/remap = None (src/parser.rs)"]
+    #[test]
+    fn readonly() {
+        assert_renders_like(Rule::map_expr, "map readonly k in t do 1 end", "{ readonly [k in t]: 1 }");
+    }
+
+    #[ignore = "map_expr modifiers dropped: parse_map_expr hardcodes readonly/optional/remap = None (src/parser.rs)"]
+    #[test]
+    fn optional() {
+        assert_renders_like(Rule::map_expr, "map ?k in t do 1 end", "{ [k in t]?: 1 }");
+    }
+
+    #[ignore = "map_expr modifiers dropped: parse_map_expr hardcodes readonly/optional/remap = None (src/parser.rs)"]
+    #[test]
+    fn remap() {
+        assert_renders_like(Rule::map_expr, "map k in t as r do 1 end", "{ [k in t as r]: 1 }");
+    }
+}
+
+/// Equality operators in extends conditions: `=`, `!=`, `==`, `!==`.
+/// `expand_to_extends` (src/ast/if_expr.rs) has `todo!()` for all four, so any
+/// `if`/`cond` using them panics during `simplify()`. The exact lowering is an
+/// open design decision, so these only assert the pipeline runs — replace with
+/// `assert_renders_like` once the intended TypeScript is settled.
+mod equality_operators {
+    use super::*;
+
+    #[ignore = "equality operator lowering is todo!() in src/ast/if_expr.rs; output semantics undecided"]
+    #[test]
+    fn equals() {
+        assert_renders_ok(Rule::if_expr, "if a = b then c else d end");
+    }
+
+    #[ignore = "equality operator lowering is todo!() in src/ast/if_expr.rs; output semantics undecided"]
+    #[test]
+    fn not_equals() {
+        assert_renders_ok(Rule::if_expr, "if a != b then c else d end");
+    }
+
+    #[ignore = "equality operator lowering is todo!() in src/ast/if_expr.rs; output semantics undecided"]
+    #[test]
+    fn strict_equals() {
+        assert_renders_ok(Rule::if_expr, "if a == b then c else d end");
+    }
+
+    #[ignore = "equality operator lowering is todo!() in src/ast/if_expr.rs; output semantics undecided"]
+    #[test]
+    fn strict_not_equals() {
+        assert_renders_ok(Rule::if_expr, "if a !== b then c else d end");
+    }
+}
+
+/// Macro calls (`name!(...)`). `Ast::MacroCall` is `todo!()` in src/runtime.rs
+/// and `unreachable!()` in the renderer, so any macro panics during
+/// simplify/render. `unquote!` has a defined intent (evaluate its argument; see
+/// the `#[ignore]`d `unquote::evaluates_expression` test in tests/parser.rs);
+/// the others have no specified output yet.
+mod macro_calls {
+    use super::*;
+
+    #[ignore = "macro expansion unimplemented: Ast::MacroCall is todo!() in src/runtime.rs"]
+    #[test]
+    fn unquote_evaluates_argument() {
+        // Intended: unquote! evaluates its argument at compile time.
+        assert_renders_like(Rule::expr, "unquote!(1)", "1");
+    }
+
+    #[ignore = "macro expansion unimplemented: Ast::MacroCall is todo!() in src/runtime.rs; output undecided"]
+    #[test]
+    fn generic_macro_call_runs() {
+        assert_renders_ok(Rule::expr, "dbg!(A)");
+    }
+}
