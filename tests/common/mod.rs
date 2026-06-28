@@ -36,6 +36,17 @@ macro_rules! parse {
 }
 
 #[macro_export]
+macro_rules! assert_expr_eq {
+    ($a:expr, $b:expr) => {{
+        use newtype::parser::Rule::expr;
+        pretty_assertions::assert_eq!(
+            parse!(expr, $a).simplify().to_sexp().unwrap(),
+            parse!(expr, $b).simplify().to_sexp().unwrap(),
+        )
+    }};
+}
+
+#[macro_export]
 macro_rules! assert_typescript {
     ($rule:expr, $expected:expr, $source:expr) => {
         let source = ::textwrap_macros::dedent!($source).trim();

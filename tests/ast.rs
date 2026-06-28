@@ -132,10 +132,8 @@ mod is_subtype_tests {
 }
 
 mod simplify_tests {
-    use super::*;
     use newtype::parser::{self, Rule::expr};
     use pest::Parser;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn simplify_path_access() {
@@ -152,136 +150,86 @@ mod simplify_tests {
 
     #[test]
     fn simplify_not() {
-        assert_eq!(
-            parse!(
-                expr,
-                r#"
-                if a <: b then
-                    d
-                else
-                    c
-                end
-                "#
-            )
-            .simplify()
-            .to_sexp()
-            .unwrap(),
-            parse!(
-                expr,
-                r#"
-                if not (a <: b) then
-                    c
-                else
-                    d
-                end
-                "#
-            )
-            .simplify()
-            .to_sexp()
-            .unwrap(),
+        assert_expr_eq!(
+            r#"
+            if a <: b then
+                d
+            else
+                c
+            end
+            "#,
+            r#"
+            if not (a <: b) then
+                c
+            else
+                d
+            end
+            "#
         )
     }
 
     #[test]
     fn simplify_and() {
-        assert_eq!(
-            parse!(
-                expr,
-                r#"
-                if a <: b and c <: d then
+        assert_expr_eq!(
+            r#"
+            if a <: b and c <: d then
+                e
+            else
+                f
+            end
+            "#,
+            r#"
+            if a <: b then
+                if c <: d then
                     e
                 else
                     f
                 end
-                "#
-            )
-            .simplify()
-            .to_sexp()
-            .unwrap(),
-            parse!(
-                expr,
-                r#"
-                if a <: b then
-                    if c <: d then
-                        e
-                    else
-                        f
-                    end
-                else
-                    f
-                end
-                "#
-            )
-            .simplify()
-            .to_sexp()
-            .unwrap(),
+            else
+                f
+            end
+            "#
         )
     }
 
     #[test]
     fn simplify_or() {
-        assert_eq!(
-            parse!(
-                expr,
-                r#"
-                if a <: b or c <: d
-                then e
+        assert_expr_eq!(
+            r#"
+            if a <: b or c <: d
+            then e
+            else f
+            end
+            "#,
+            r#"
+            if a <: b then e
+            else
+                if c <: d then e
                 else f
                 end
-                "#
-            )
-            .simplify()
-            .to_sexp()
-            .unwrap(),
-            parse!(
-                expr,
-                r#"
-                if a <: b then e
-                else
-                    if c <: d then e
-                    else f
-                    end
-                end
-                "#
-            )
-            .simplify()
-            .to_sexp()
-            .unwrap(),
+            end
+            "#
         )
     }
 
     #[test]
     fn simplify_match_expr() {
-        assert_eq!(
-            parse!(
-                expr,
-                r#"
-                match A do
-                    number -> 1,
-                    string -> 2,
-                    else -> 3
+        assert_expr_eq!(
+            r#"
+            match A do
+                number -> 1,
+                string -> 2,
+                else -> 3
+            end
+            "#,
+            r#"
+            if A <: number then 1
+            else
+                if A <: string then 2
+                else 3
                 end
-                "#
-            )
-            .simplify()
-            .to_sexp()
-            .unwrap()
-            .to_string(),
-            parse!(
-                expr,
-                r#"
-                if A <: number then 1
-                else
-                    if A <: string then 2
-                    else 3
-                    end
-                end
-                "#
-            )
-            .simplify()
-            .to_sexp()
-            .unwrap()
-            .to_string()
+            end
+            "#
         )
     }
 }
