@@ -309,22 +309,8 @@ mod known_bugs {
         assert_renders_like(Rule::expr, "A.b[C]", "A['b'][C]");
     }
 
-    /// An intersection of parenthesised unions drops the grouping: the
-    /// `IntersectionType` printer never parenthesises union members, so
-    /// `(A | B) & (C | D)` renders as `A | B & C | D` — which is a *different*
-    /// type (`&` binds tighter). It must keep the parens.
-    #[ignore = "BUG: intersection printer drops parens around union members (src/ast/pretty.rs)"]
-    #[test]
-    fn intersection_of_unions_keeps_parens() {
-        assert_renders_like(Rule::expr, "(A | B) & (C | D)", "(A | B) & (C | D)");
-    }
-
-    /// Same root cause, nested: a union inside an intersection inside a union
-    /// loses the inner union's parens. `A | (B & (C | D))` renders today as
-    /// `A | (B & C | D)`.
-    #[ignore = "BUG: union nested in intersection loses parens (src/ast/pretty.rs)"]
-    #[test]
-    fn union_in_intersection_keeps_parens() {
-        assert_renders_like(Rule::expr, "A | (B & (C | D))", "A | (B & (C | D))");
-    }
+    // NOTE: the intersection-of-unions parenthesisation bugs were fixed; their
+    // cases now live in the corpus as
+    // tests/corpus/typescript/expr/intersection_of_unions.txt and
+    // union_in_intersection.txt.
 }

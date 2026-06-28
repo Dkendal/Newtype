@@ -1,0 +1,9 @@
+A union nested inside an intersection keeps its parens
+
+=======
+
+A | (B & (C | D))
+
+=======
+
+A | (B & (C | D))

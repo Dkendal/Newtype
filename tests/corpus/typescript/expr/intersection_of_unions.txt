@@ -1,0 +1,9 @@
+Intersection of two unions keeps grouping parens
+
+=======
+
+(A | B) & (C | D)
+
+=======
+
+(A | B) & (C | D)

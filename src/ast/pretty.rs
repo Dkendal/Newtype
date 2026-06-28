@@ -401,7 +401,17 @@ impl typescript::Pretty for Ast {
             }
             Ast::IntersectionType(IntersectionType { types, .. }) => {
                 let sep = D::line().append(D::text("&")).append(D::space());
-                D::intersperse(types.iter().map(|t| t.to_ts()), sep).group()
+                D::intersperse(
+                    types.iter().map(|t| match t {
+                        // `&` binds tighter than `|`, so a union member must be
+                        // parenthesised or it changes meaning (`(A | B) & C`
+                        // would otherwise print as `A | B & C` = `A | (B & C)`).
+                        Ast::UnionType(UnionType { .. }) => surround(t.to_ts(), "(", ")"),
+                        _ => t.to_ts(),
+                    }),
+                    sep,
+                )
+                .group()
             }
             Ast::NoOp(_) => D::nil(),
             node @ (Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. })
