@@ -1,7 +1,7 @@
 /// Utility functions for pretty printing
 use pretty::RcDoc;
 
-pub(crate) fn string_literal(string: &str) -> RcDoc<()> {
+pub(crate) fn string_literal(string: &str) -> RcDoc<'_, ()> {
     RcDoc::text("\'")
         .append(RcDoc::text(string.replace("\'", "\\\'")))
         .append(RcDoc::text("\'"))
@@ -19,7 +19,7 @@ pub(crate) fn single_quote(doc: RcDoc<()>) -> RcDoc<()> {
     surround(doc, "'", "'")
 }
 
-pub(crate) fn surround<'a, T>(doc: RcDoc<'a, ()>, left: T, right: T) -> RcDoc<()>
+pub(crate) fn surround<'a, T>(doc: RcDoc<'a, ()>, left: T, right: T) -> RcDoc<'a, ()>
 where
     T: Into<std::borrow::Cow<'a, str>>,
 {

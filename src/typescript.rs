@@ -5,5 +5,5 @@ pub trait Pretty {
         String::from_utf8(w).unwrap()
     }
 
-    fn to_ts(&self) -> ::pretty::RcDoc<()>;
+    fn to_ts(&self) -> ::pretty::RcDoc<'_, ()>;
 }

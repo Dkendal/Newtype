@@ -1044,7 +1044,7 @@ pub struct Ident {
 }
 
 impl Ident {
-    pub(crate) fn pretty(&self) -> D<()> {
+    pub(crate) fn pretty(&self) -> D<'_, ()> {
         D::text(&self.name)
     }
 }

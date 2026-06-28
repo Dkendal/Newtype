@@ -15,7 +15,7 @@ use crate::{
 };
 
 impl typescript::Pretty for ApplyGeneric {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let sep = D::text(",").append(D::space());
 
         let generic_inner = D::intersperse(self.args.iter().map(|param| param.to_ts()), sep);
@@ -27,7 +27,7 @@ impl typescript::Pretty for ApplyGeneric {
 }
 
 impl typescript::Pretty for TypeLiteral {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let props = &self.properties;
 
         let sep = D::text(",").append(D::line());
@@ -45,7 +45,7 @@ impl typescript::Pretty for TypeLiteral {
 }
 
 impl typescript::Pretty for Interface {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let Interface {
             export,
             name,
@@ -113,7 +113,7 @@ impl typescript::Pretty for Interface {
 }
 
 impl typescript::Pretty for FunctionType {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let sep = D::text(",").append(D::space());
 
         let params = D::intersperse(self.params.iter().map(|param| param.to_ts()), sep);
@@ -131,7 +131,7 @@ impl typescript::Pretty for FunctionType {
 }
 
 impl typescript::Pretty for Parameter {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let kind = self.kind.to_ts();
 
         if self.ellipsis {
@@ -147,7 +147,7 @@ impl typescript::Pretty for Parameter {
 }
 
 impl typescript::Pretty for Ast {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         match self {
             Ast::Program(Program { statements, .. }) => {
                 let mut doc = D::nil();
@@ -416,7 +416,7 @@ impl typescript::Pretty for Ast {
 }
 
 impl typescript::Pretty for ImportClause {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         match self {
             ImportClause::Named(specifiers) => {
                 let sep = D::text(",").append(D::line());
@@ -445,7 +445,7 @@ impl typescript::Pretty for ImportClause {
 }
 
 impl typescript::Pretty for ImportSpecifier {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let alias_doc = match &self.alias {
             Some(alias) => D::space()
                 .append("as")
@@ -460,7 +460,7 @@ impl typescript::Pretty for ImportSpecifier {
 }
 
 impl typescript::Pretty for BuiltinKeyword {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         match self {
             BuiltinKeyword::Keyof => D::text("keyof"),
         }
@@ -484,7 +484,7 @@ impl Display for PrimitiveType {
 }
 
 impl typescript::Pretty for ObjectPropertyKey {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         match self {
             ObjectPropertyKey::Index(index) => surround(index.to_ts(), "[", "]").group(),
             ObjectPropertyKey::Key(key) => D::text(key.clone()),
@@ -494,7 +494,7 @@ impl typescript::Pretty for ObjectPropertyKey {
 }
 
 impl typescript::Pretty for PropertyKeyIndex {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let PropertyKeyIndex {
             key,
             iterable,
@@ -521,7 +521,7 @@ impl typescript::Pretty for PropertyKeyIndex {
 }
 
 impl typescript::Pretty for ObjectProperty {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let readonly = if self.readonly {
             D::text("readonly").append(D::space())
         } else {
@@ -546,13 +546,13 @@ impl typescript::Pretty for ObjectProperty {
 }
 
 impl typescript::Pretty for Ident {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         D::text(self.name.clone())
     }
 }
 
 impl typescript::Pretty for TypeParameter {
-    fn to_ts(&self) -> D<()> {
+    fn to_ts(&self) -> D<'_, ()> {
         let rest = if self.rest { D::text("...") } else { D::nil() };
 
         let constraint = match &self.constraint {

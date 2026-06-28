@@ -901,7 +901,7 @@ fn parse_if_expr(pair: Pair) -> Ast {
 
     let condition = inner
         .find(match_tag("condition"))
-        .map(|p| (parse_extends_expr(p.into_inner())))
+        .map(|p| parse_extends_expr(p.into_inner()) )
         .unwrap();
 
     let then_branch = inner.find(match_tag("then")).map(parse).unwrap().into();
