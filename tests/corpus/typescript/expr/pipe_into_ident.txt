@@ -1,0 +1,9 @@
+The pipe operator lowers to a type application
+
+=======
+
+A |> B
+
+=======
+
+B<A>

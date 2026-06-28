@@ -1,0 +1,9 @@
+keyof applied to a dot access
+
+=======
+
+keyof(A.b)
+
+=======
+
+keyof A['b']

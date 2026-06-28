@@ -1,0 +1,9 @@
+Index signature remapped with an as clause
+
+=======
+
+{ [k in K as r]: value }
+
+=======
+
+{[k in K as r]: value}

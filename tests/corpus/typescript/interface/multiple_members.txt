@@ -1,0 +1,17 @@
+interface with multiple mixed members
+
+=======
+
+interface Foo {
+    readonly x: number,
+    ?y: string,
+    z: boolean,
+}
+
+=======
+
+interface Foo {
+    readonly x: number;
+    y?: string;
+    z: boolean;
+}

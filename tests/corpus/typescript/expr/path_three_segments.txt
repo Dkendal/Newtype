@@ -1,0 +1,9 @@
+The path operator chains multiple segments
+
+=======
+
+A::B::C
+
+=======
+
+A.B.C

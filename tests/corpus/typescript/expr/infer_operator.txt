@@ -1,0 +1,9 @@
+The infer prefix operator lowers to the infer keyword
+
+=======
+
+?A
+
+=======
+
+infer A

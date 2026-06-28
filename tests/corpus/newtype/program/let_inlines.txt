@@ -1,0 +1,9 @@
+A let-binding inlines to its value inside a type alias
+
+=======
+
+type A as let a = 1 in a
+
+=======
+
+type A as 1

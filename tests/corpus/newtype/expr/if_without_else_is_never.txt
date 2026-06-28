@@ -1,0 +1,9 @@
+An if without an else branch defaults the else to never
+
+=======
+
+if a <: b then c end
+
+=======
+
+if a <: b then c else never end

@@ -1,0 +1,21 @@
+Three levels of nested if expressions
+
+=======
+
+if a <: b then
+    if c <: d then
+        if e <: f then
+            x
+        end
+    end
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? e extends f
+            ? x
+            : never
+        : never
+    : never

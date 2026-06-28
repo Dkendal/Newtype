@@ -1,0 +1,9 @@
+Object literal with a nested object value
+
+=======
+
+{x: {y: 1}}
+
+=======
+
+{x: {y: 1}}

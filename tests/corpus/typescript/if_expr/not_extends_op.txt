@@ -1,0 +1,15 @@
+The not-extends operator swaps the branches with an else
+
+=======
+
+if a </: b then
+    x
+else
+    y
+end
+
+=======
+
+a extends b
+    ? y
+    : x

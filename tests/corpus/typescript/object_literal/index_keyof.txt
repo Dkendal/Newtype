@@ -1,0 +1,9 @@
+Index signature over keyof a type
+
+=======
+
+{ [k in keyof(T)]: value }
+
+=======
+
+{[k in keyof T]: value}

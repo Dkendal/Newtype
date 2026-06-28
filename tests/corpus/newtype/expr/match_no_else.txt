@@ -1,0 +1,14 @@
+A match without an explicit else defaults the final else to never
+
+=======
+
+match A do
+    number -> 1
+end
+
+=======
+
+match A do
+    number -> 1,
+    else -> never
+end

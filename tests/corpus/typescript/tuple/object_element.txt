@@ -1,0 +1,9 @@
+tuple containing object literal elements
+
+=======
+
+[{x: 1}, {y: 2}]
+
+=======
+
+[{x: 1}, {y: 2}]

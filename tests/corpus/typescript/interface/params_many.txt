@@ -1,0 +1,9 @@
+interface with many type parameters
+
+=======
+
+interface Foo(A, B, C) {}
+
+=======
+
+interface Foo<A, B, C> {}

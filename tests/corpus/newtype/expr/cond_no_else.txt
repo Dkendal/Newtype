@@ -1,0 +1,14 @@
+A cond without an explicit else defaults the final else to never
+
+=======
+
+cond do
+    a <: b -> c
+end
+
+=======
+
+cond do
+    a <: b -> c,
+    else -> never
+end

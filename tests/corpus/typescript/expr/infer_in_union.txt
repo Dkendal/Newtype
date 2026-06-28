@@ -1,0 +1,9 @@
+infer prefix binds to its operand within a union
+
+=======
+
+?A | B
+
+=======
+
+infer A | B

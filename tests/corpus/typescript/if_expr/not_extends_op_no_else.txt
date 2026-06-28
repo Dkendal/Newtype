@@ -1,0 +1,13 @@
+The not-extends operator without an else puts never in the then position
+
+=======
+
+if a </: b then
+    x
+end
+
+=======
+
+a extends b
+    ? never
+    : x

@@ -1,0 +1,9 @@
+Type application on a path receiver
+
+=======
+
+A::B(C)
+
+=======
+
+A.B<C>

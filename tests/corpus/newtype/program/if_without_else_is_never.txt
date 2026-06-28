@@ -1,0 +1,17 @@
+An if without an else branch in a type alias defaults to never
+
+=======
+
+type A as
+    if a <: b then
+        c
+    end
+
+=======
+
+type A as
+    if a <: b then
+        c
+    else
+        never
+    end

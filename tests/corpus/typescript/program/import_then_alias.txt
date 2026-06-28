@@ -1,0 +1,8 @@
+An import followed by a type alias that uses it
+=======
+import { Foo } from :mod
+type A as Foo | number
+=======
+import type { Foo } from 'mod';
+
+type A = Foo | number;

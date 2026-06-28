@@ -1,0 +1,17 @@
+An or condition repeats the then branch in the else position
+
+=======
+
+if a <: b or c <: d then
+    x
+else
+    y
+end
+
+=======
+
+a extends b
+    ? x
+    : c extends d
+        ? x
+        : y

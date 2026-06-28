@@ -1,0 +1,9 @@
+The path operator joins two segments with a dot
+
+=======
+
+A::B
+
+=======
+
+A.B

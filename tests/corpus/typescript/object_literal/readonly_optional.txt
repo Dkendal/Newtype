@@ -1,0 +1,9 @@
+Property with both readonly and optional modifiers
+
+=======
+
+{ readonly ?x: 1 }
+
+=======
+
+{readonly x?: 1}

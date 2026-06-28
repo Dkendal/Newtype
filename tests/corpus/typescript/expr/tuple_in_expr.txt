@@ -1,0 +1,9 @@
+A tuple term renders as a tuple type
+
+=======
+
+[A, B]
+
+=======
+
+[A, B]

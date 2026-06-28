@@ -1,0 +1,8 @@
+Multiple interfaces in one program
+=======
+interface Foo {}
+interface Bar {}
+=======
+interface Foo {};
+
+interface Bar {};

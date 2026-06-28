@@ -1,0 +1,9 @@
+A single let binding inlines its value
+
+=======
+
+let a = 1 in a
+
+=======
+
+1

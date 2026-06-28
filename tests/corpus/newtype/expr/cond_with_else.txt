@@ -1,0 +1,18 @@
+A cond expression desugars to a chain of ifs
+
+=======
+
+cond do
+    a <: b -> c,
+    d <: e -> f,
+    else -> g
+end
+
+=======
+
+if a <: b then c
+else
+    if d <: e then f
+    else g
+    end
+end

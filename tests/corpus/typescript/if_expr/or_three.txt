@@ -1,0 +1,17 @@
+Three or-ed conditions chain the else positions
+
+=======
+
+if a <: b or c <: d or e <: f then
+    x
+end
+
+=======
+
+a extends b
+    ? x
+    : c extends d
+        ? x
+        : e extends f
+            ? x
+            : never

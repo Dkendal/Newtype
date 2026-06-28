@@ -1,0 +1,23 @@
+An `and` condition in a type alias nests into two ifs
+
+=======
+
+type A as
+    if a <: b and c <: d then
+        e
+    else
+        f
+    end
+
+=======
+
+type A as
+    if a <: b then
+        if c <: d then
+            e
+        else
+            f
+        end
+    else
+        f
+    end

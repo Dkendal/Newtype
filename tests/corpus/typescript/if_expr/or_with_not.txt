@@ -1,0 +1,15 @@
+An or condition with a negated left operand
+
+=======
+
+if not (a <: b) or c <: d then
+    x
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? x
+        : never
+    : x

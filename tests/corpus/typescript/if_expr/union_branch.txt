@@ -1,0 +1,15 @@
+An if with union types in both branches
+
+=======
+
+if a <: b then
+    x | y
+else
+    y | z
+end
+
+=======
+
+a extends b
+    ? x | y
+    : y | z

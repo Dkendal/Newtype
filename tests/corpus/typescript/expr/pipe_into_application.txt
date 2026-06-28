@@ -1,0 +1,9 @@
+The pipe operator prepends to an existing application
+
+=======
+
+A |> B(C)
+
+=======
+
+B<A, C>

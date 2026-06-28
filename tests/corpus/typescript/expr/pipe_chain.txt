@@ -1,0 +1,9 @@
+Chained pipe operators nest type applications
+
+=======
+
+A |> B |> C
+
+=======
+
+C<B<A>>

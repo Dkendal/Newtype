@@ -1,0 +1,9 @@
+Exported generic type alias
+
+=======
+
+export type A(x) as x
+
+=======
+
+export type A<x> = x

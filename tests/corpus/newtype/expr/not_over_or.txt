@@ -1,0 +1,12 @@
+Negating an or condition swaps branches across the nesting
+
+=======
+
+if not (a <: b or c <: d) then e else f end
+
+=======
+
+if a <: b then f
+else
+    if c <: d then f else e end
+end

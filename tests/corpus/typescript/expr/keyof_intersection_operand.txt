@@ -1,0 +1,9 @@
+keyof on one operand of an intersection
+
+=======
+
+keyof(A) & B
+
+=======
+
+keyof A & B

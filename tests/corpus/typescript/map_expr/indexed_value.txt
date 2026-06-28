@@ -1,0 +1,9 @@
+Mapped type with an indexed-access value expression
+
+=======
+
+map k in K do v[k] end
+
+=======
+
+{ [k in K]: v[k] }

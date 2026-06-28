@@ -1,0 +1,9 @@
+Generic type alias with multiple params having both constraints and defaults
+
+=======
+
+type A(x, y) defaults x = number, y = string where x <: number, y <: string as x
+
+=======
+
+type A<x extends number = number, y extends string = string> = x

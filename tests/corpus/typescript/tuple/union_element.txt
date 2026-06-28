@@ -1,0 +1,9 @@
+tuple with a union-typed element
+
+=======
+
+[A | B, C]
+
+=======
+
+[A | B, C]

@@ -1,0 +1,19 @@
+A condition combining and with or at equal precedence is left associative
+
+=======
+
+if a <: b and c <: d or e <: f then
+    x
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? x
+        : e extends f
+            ? x
+            : never
+    : e extends f
+        ? x
+        : never

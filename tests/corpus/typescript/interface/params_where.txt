@@ -1,0 +1,9 @@
+interface with a type parameter constrained by a where clause
+
+=======
+
+interface Foo(A) where A <: number {}
+
+=======
+
+interface Foo<A extends number> {}
