@@ -1,0 +1,9 @@
+tuple with nested objects holding union values
+
+=======
+
+[{x: A | B}, {y: C | D}]
+
+=======
+
+[{x: A | B}, {y: C | D}]

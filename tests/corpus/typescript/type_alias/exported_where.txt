@@ -1,0 +1,9 @@
+Exported generic type alias with a where clause
+
+=======
+
+export type A(x) where x <: number as x
+
+=======
+
+export type A<x extends number> = x

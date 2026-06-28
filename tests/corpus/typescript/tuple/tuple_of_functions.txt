@@ -1,0 +1,9 @@
+tuple whose elements are all function types
+
+=======
+
+[() => void, (a: string) => number]
+
+=======
+
+[() => void, (a: string) => number]

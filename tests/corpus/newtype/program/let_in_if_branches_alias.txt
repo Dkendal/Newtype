@@ -1,0 +1,15 @@
+Lets inside if branches inside a type alias inline independently
+
+=======
+
+type A as
+    if a <: b then
+        let x = 1 in x
+    else
+        let y = 2 in y
+    end
+
+=======
+
+type A as
+    if a <: b then 1 else 2 end

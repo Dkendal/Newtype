@@ -1,0 +1,9 @@
+Generic type alias with three where constraints
+
+=======
+
+type A(x, y, z) where x <: number, y <: string, z <: boolean as x
+
+=======
+
+type A<x extends number, y extends string, z extends boolean> = x

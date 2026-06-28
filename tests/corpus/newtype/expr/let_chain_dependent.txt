@@ -1,0 +1,9 @@
+Each nested let can reference the previous binding
+
+=======
+
+let a = 1 in let b = a in let c = b in c
+
+=======
+
+1

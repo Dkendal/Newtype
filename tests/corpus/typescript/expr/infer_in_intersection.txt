@@ -1,0 +1,9 @@
+infer prefix on the left of an intersection
+
+=======
+
+?A & B
+
+=======
+
+infer A & B

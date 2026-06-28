@@ -1,0 +1,9 @@
+Function type with an unnamed function-type param gets a generated name
+
+=======
+
+((x: any) => void, B) => void
+
+=======
+
+(arg0: (x: any) => void, arg1: B) => void

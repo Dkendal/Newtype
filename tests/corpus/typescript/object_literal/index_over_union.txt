@@ -1,0 +1,9 @@
+Index signature mapped over a union of keys
+
+=======
+
+{ [k in A | B | C]: value }
+
+=======
+
+{[k in A | B | C]: value}

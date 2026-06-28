@@ -1,0 +1,9 @@
+Chained application over a nested application
+
+=======
+
+A(B(C))(D)
+
+=======
+
+A<B<C>><D>

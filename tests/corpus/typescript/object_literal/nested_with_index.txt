@@ -1,0 +1,9 @@
+Nested object literal whose value is an index signature
+
+=======
+
+{ outer: { [k in K]: value } }
+
+=======
+
+{outer: {[k in K]: value}}

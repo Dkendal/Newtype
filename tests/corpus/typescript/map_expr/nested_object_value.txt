@@ -1,0 +1,9 @@
+Mapped type with a nested object value body
+
+=======
+
+map k in K do {outer: {inner: v[k]}} end
+
+=======
+
+{ [k in K]: {outer: {inner: v[k]}} }

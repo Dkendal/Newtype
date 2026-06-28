@@ -1,0 +1,11 @@
+Three type aliases in one program
+=======
+type A as number
+type B as string
+type C as boolean
+=======
+type A = number;
+
+type B = string;
+
+type C = boolean;

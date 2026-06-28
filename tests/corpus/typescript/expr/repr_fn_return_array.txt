@@ -1,0 +1,9 @@
+Function type returning an array type
+
+=======
+
+(...rest: any[]) => A[]
+
+=======
+
+(...rest: any[]) => A[]

@@ -1,0 +1,9 @@
+Indexed access followed by dot access
+
+=======
+
+A[B].c
+
+=======
+
+A[B]['c']

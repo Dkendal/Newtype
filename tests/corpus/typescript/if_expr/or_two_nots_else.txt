@@ -1,0 +1,17 @@
+An or of two negated conditions with an else branch
+
+=======
+
+if (not (a <: b)) or (not (c <: d)) then
+    x
+else
+    y
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? y
+        : x
+    : x

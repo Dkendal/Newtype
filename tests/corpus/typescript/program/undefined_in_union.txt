@@ -1,0 +1,5 @@
+Primitive undefined in a union
+=======
+type A as undefined | number
+=======
+type A = undefined | number;

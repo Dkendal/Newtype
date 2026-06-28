@@ -1,0 +1,9 @@
+Generic type alias whose params are used in an intersection body
+
+=======
+
+type A(x, y) as x & y
+
+=======
+
+type A<x, y> = x & y

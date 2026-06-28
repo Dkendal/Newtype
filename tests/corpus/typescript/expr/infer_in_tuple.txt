@@ -1,0 +1,9 @@
+infer prefixes on tuple elements
+
+=======
+
+[?A, ?B]
+
+=======
+
+[infer A, infer B]

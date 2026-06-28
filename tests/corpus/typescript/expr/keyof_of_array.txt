@@ -1,0 +1,9 @@
+keyof applied to an array type
+
+=======
+
+keyof(A[])
+
+=======
+
+keyof A[]

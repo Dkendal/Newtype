@@ -1,0 +1,9 @@
+Mapped type iterating over an indexed access
+
+=======
+
+map k in keyof(T[U]) do T[k] end
+
+=======
+
+{ [k in keyof T[U]]: T[k] }

@@ -1,0 +1,9 @@
+infer operand within a three-way intersection
+
+=======
+
+?A & B & C
+
+=======
+
+infer A & B & C

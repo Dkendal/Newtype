@@ -1,0 +1,9 @@
+Mapped type with an object-literal value body
+
+=======
+
+map k in K do {x: 1, y: 2} end
+
+=======
+
+{ [k in K]: {x: 1, y: 2} }

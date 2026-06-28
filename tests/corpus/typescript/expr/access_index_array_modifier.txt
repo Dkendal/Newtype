@@ -1,0 +1,9 @@
+Array modifier applied after an indexed access
+
+=======
+
+A[B][]
+
+=======
+
+A[B][]

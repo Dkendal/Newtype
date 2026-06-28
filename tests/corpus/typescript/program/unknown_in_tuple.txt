@@ -1,0 +1,5 @@
+Primitive unknown as a tuple element
+=======
+type A as [unknown, number]
+=======
+type A = [unknown, number];

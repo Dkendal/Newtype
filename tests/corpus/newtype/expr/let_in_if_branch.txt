@@ -1,0 +1,13 @@
+Lets inside if branches inline independently
+
+=======
+
+if a <: b then
+    let x = 1 in x
+else
+    let y = 2 in y
+end
+
+=======
+
+if a <: b then 1 else 2 end

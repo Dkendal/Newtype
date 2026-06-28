@@ -1,0 +1,9 @@
+Chained applications nest as successive type arguments
+
+=======
+
+A(B)(C)
+
+=======
+
+A<B><C>

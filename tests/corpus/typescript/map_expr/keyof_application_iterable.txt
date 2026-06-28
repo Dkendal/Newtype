@@ -1,0 +1,9 @@
+Mapped type iterating over keyof a type application
+
+=======
+
+map k in keyof(F(T)) do T[k] end
+
+=======
+
+{ [k in keyof F<T>]: T[k] }

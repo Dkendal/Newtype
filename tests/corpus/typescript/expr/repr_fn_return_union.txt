@@ -1,0 +1,9 @@
+Function type returning a union
+
+=======
+
+(x: any) => A | B
+
+=======
+
+(x: any) => A | B

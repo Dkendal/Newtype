@@ -1,0 +1,9 @@
+infer inside an intersection argument of an application
+
+=======
+
+A(?B & C)
+
+=======
+
+A<infer B & C>

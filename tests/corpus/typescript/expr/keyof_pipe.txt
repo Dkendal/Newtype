@@ -1,0 +1,9 @@
+keyof piped into a type application
+
+=======
+
+keyof(A) |> B
+
+=======
+
+B<keyof A>

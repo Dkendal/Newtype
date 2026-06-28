@@ -1,0 +1,9 @@
+infer prefix inside a type application
+
+=======
+
+A(?B)
+
+=======
+
+A<infer B>

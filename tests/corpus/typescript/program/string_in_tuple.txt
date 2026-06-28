@@ -1,0 +1,5 @@
+Primitive string as a tuple element
+=======
+type A as [string, number]
+=======
+type A = [string, number];

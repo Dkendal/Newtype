@@ -1,0 +1,9 @@
+Path receiver with a multi-argument application
+
+=======
+
+A::B(C, D)
+
+=======
+
+A.B<C, D>

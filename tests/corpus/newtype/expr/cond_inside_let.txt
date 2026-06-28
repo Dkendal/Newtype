@@ -1,0 +1,12 @@
+A cond inside a let inlines the binding and expands to ifs
+
+=======
+
+let g = 3 in cond do
+    a <: b -> c,
+    else -> g
+end
+
+=======
+
+if a <: b then c else 3 end

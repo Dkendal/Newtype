@@ -1,0 +1,17 @@
+A negated left side and-ed with a grouped or condition
+
+=======
+
+if not (a <: b) and (c <: d or e <: f) then
+    x
+end
+
+=======
+
+a extends b
+    ? never
+    : c extends d
+        ? x
+        : e extends f
+            ? x
+            : never

@@ -1,0 +1,9 @@
+Mapped type with an intersection value body
+
+=======
+
+map k in K do A & B end
+
+=======
+
+{ [k in K]: A & B }

@@ -1,0 +1,27 @@
+An if whose then and else branches are each nested ifs
+
+=======
+
+if a <: b then
+    if c <: d then
+        x
+    else
+        y
+    end
+else
+    if e <: f then
+        z
+    else
+        w
+    end
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? x
+        : y
+    : e extends f
+        ? z
+        : w

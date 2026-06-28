@@ -1,0 +1,9 @@
+Three chained applications
+
+=======
+
+A(B)(C)(D)
+
+=======
+
+A<B><C><D>

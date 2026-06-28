@@ -1,0 +1,9 @@
+infer prefix on both union operands
+
+=======
+
+?A | ?B
+
+=======
+
+infer A | infer B

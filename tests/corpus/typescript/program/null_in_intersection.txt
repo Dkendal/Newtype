@@ -1,0 +1,5 @@
+Primitive null in an intersection
+=======
+type A as null & B
+=======
+type A = null & B;

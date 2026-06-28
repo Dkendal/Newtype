@@ -1,0 +1,9 @@
+Type alias whose body is an intersection expression
+
+=======
+
+type A as 1 & 2 & 3
+
+=======
+
+type A = 1 & 2 & 3

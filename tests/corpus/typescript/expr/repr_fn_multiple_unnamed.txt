@@ -1,0 +1,9 @@
+Function type with multiple unnamed params gets generated names
+
+=======
+
+(any, string) => void
+
+=======
+
+(arg0: any, arg1: string) => void

@@ -1,0 +1,9 @@
+interface with multiple type parameters having both constraints and defaults
+
+=======
+
+interface Foo(A, B) defaults A = number, B = string where A <: number, B <: string {}
+
+=======
+
+interface Foo<A extends number = number, B extends string = string> {}

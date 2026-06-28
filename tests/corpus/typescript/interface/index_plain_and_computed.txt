@@ -1,0 +1,17 @@
+interface mixing an index signature, a plain property, and a computed key
+
+=======
+
+interface Foo {
+    [K in T]: number,
+    y: string,
+    [Z]: boolean,
+}
+
+=======
+
+interface Foo {
+    [K in T]: number;
+    y: string;
+    [Z]: boolean;
+}

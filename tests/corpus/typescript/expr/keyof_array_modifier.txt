@@ -1,0 +1,9 @@
+Array modifier applied to a keyof
+
+=======
+
+keyof(A)[]
+
+=======
+
+keyof A[]

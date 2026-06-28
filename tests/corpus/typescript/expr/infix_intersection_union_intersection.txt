@@ -1,0 +1,9 @@
+Two intersections combined by a union get parenthesized
+
+=======
+
+A & B | C & D
+
+=======
+
+(A & B) | (C & D)

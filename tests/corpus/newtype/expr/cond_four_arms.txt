@@ -1,0 +1,22 @@
+A cond with four arms expands to a chain of four ifs
+
+=======
+
+cond do
+    a <: b -> w,
+    c <: d -> x,
+    e <: f -> y,
+    else -> z
+end
+
+=======
+
+if a <: b then w
+else
+    if c <: d then x
+    else
+        if e <: f then y
+        else z
+        end
+    end
+end

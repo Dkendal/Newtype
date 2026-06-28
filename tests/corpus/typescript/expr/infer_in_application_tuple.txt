@@ -1,0 +1,9 @@
+infer inside a tuple argument of an application
+
+=======
+
+A([?B])
+
+=======
+
+A<[infer B]>

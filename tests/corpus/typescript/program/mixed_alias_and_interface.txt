@@ -1,0 +1,11 @@
+Aliases and an interface mixed in one program
+=======
+type A as number
+interface Foo {}
+type B as string
+=======
+type A = number;
+
+interface Foo {};
+
+type B = string;

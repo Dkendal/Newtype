@@ -1,0 +1,25 @@
+Four levels of nested if expressions
+
+=======
+
+if a <: b then
+    if c <: d then
+        if e <: f then
+            if g <: h then
+                x
+            end
+        end
+    end
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? e extends f
+            ? g extends h
+                ? x
+                : never
+            : never
+        : never
+    : never

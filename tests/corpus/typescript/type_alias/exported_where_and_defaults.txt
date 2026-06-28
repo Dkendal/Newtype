@@ -1,0 +1,9 @@
+Exported generic type alias with both where and defaults clauses
+
+=======
+
+export type A(x) defaults x = number where x <: number as x
+
+=======
+
+export type A<x extends number = number> = x

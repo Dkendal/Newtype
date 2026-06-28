@@ -1,0 +1,9 @@
+infer mixed with a plain argument in an application
+
+=======
+
+A(?B, C)
+
+=======
+
+A<infer B, C>

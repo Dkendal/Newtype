@@ -1,0 +1,9 @@
+keyof applied to a path receiver
+
+=======
+
+keyof(A::B)
+
+=======
+
+keyof A.B

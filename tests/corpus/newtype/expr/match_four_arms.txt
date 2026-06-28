@@ -1,0 +1,26 @@
+A match with four arms nests four ifs
+
+=======
+
+match A do
+    number -> 1,
+    string -> 2,
+    boolean -> 3,
+    bigint -> 4,
+    else -> 5
+end
+
+=======
+
+if A <: number then 1
+else
+    if A <: string then 2
+    else
+        if A <: boolean then 3
+        else
+            if A <: bigint then 4
+            else 5
+            end
+        end
+    end
+end

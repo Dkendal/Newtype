@@ -1,0 +1,9 @@
+interface with multiple type parameters that have defaults
+
+=======
+
+interface Foo(A, B) defaults A = number, B = string {}
+
+=======
+
+interface Foo<A = number, B = string> {}

@@ -1,0 +1,9 @@
+Array modifier applied after a dot access
+
+=======
+
+A.b[]
+
+=======
+
+A['b'][]

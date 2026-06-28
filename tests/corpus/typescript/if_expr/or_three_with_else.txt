@@ -1,0 +1,19 @@
+Three or-ed conditions repeat the then branch and fall through to the else
+
+=======
+
+if a <: b or c <: d or e <: f then
+    x
+else
+    y
+end
+
+=======
+
+a extends b
+    ? x
+    : c extends d
+        ? x
+        : e extends f
+            ? x
+            : y

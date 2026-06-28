@@ -1,0 +1,23 @@
+A four-arm cond inside a type alias expands to a chain of ifs
+
+=======
+
+type A as cond do
+    a <: b -> w,
+    c <: d -> x,
+    e <: f -> y,
+    else -> z
+end
+
+=======
+
+type A as
+    if a <: b then w
+    else
+        if c <: d then x
+        else
+            if e <: f then y
+            else z
+            end
+        end
+    end

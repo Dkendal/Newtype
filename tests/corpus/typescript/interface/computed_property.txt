@@ -1,0 +1,13 @@
+interface with a computed property key
+
+=======
+
+interface Foo {
+    [K]: T,
+}
+
+=======
+
+interface Foo {
+    [K]: T;
+}

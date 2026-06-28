@@ -1,0 +1,9 @@
+keyof operands inside a three-way intersection
+
+=======
+
+keyof(A) & keyof(B) & C
+
+=======
+
+keyof A & keyof B & C

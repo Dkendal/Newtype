@@ -1,0 +1,9 @@
+Path application piped into another application
+
+=======
+
+A::B(C) |> D
+
+=======
+
+D<A.B<C>>

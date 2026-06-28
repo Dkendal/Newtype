@@ -1,0 +1,15 @@
+generic interface with a constrained parameter used in members
+
+=======
+
+interface Foo(A) where A <: number {
+    x: A,
+    y: A,
+}
+
+=======
+
+interface Foo<A extends number> {
+    x: A;
+    y: A;
+}

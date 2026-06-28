@@ -1,0 +1,9 @@
+keyof fed through a chain of pipes
+
+=======
+
+keyof(A) |> B |> C
+
+=======
+
+C<B<keyof A>>

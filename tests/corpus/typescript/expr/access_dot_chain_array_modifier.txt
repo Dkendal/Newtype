@@ -1,0 +1,9 @@
+Array modifier after a chained dot access
+
+=======
+
+A.b.c[]
+
+=======
+
+A['b']['c'][]

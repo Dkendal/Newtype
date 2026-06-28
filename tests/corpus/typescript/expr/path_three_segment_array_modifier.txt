@@ -1,0 +1,9 @@
+Array modifier applied to a three-segment path
+
+=======
+
+A::B::C[]
+
+=======
+
+A.B.C[]

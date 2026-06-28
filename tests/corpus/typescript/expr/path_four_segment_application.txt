@@ -1,0 +1,9 @@
+Four-segment path with an application
+
+=======
+
+A::B::C::D(E)
+
+=======
+
+A.B.C.D<E>

@@ -1,0 +1,9 @@
+tuple with union-of-object elements
+
+=======
+
+[{a: 1} | {b: 2}, C | D]
+
+=======
+
+[{a: 1} | {b: 2}, C | D]

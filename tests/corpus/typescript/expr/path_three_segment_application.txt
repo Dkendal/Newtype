@@ -1,0 +1,9 @@
+Three-segment path with an application
+
+=======
+
+A::B::C(D)
+
+=======
+
+A.B.C<D>

@@ -1,0 +1,9 @@
+exported interface with a type parameter
+
+=======
+
+export interface Foo(A) {}
+
+=======
+
+export interface Foo<A> {}

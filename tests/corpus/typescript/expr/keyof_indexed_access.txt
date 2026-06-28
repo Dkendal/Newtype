@@ -1,0 +1,9 @@
+Indexed access on a keyof
+
+=======
+
+keyof(A)[B]
+
+=======
+
+keyof A[B]

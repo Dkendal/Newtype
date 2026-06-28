@@ -1,0 +1,9 @@
+Function type returning a function type
+
+=======
+
+(x: any) => (y: any) => void
+
+=======
+
+(x: any) => (y: any) => void

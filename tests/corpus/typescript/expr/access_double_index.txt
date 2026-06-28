@@ -1,0 +1,9 @@
+Two consecutive indexed accesses
+
+=======
+
+A[B][C]
+
+=======
+
+A[B][C]

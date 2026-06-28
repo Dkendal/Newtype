@@ -1,0 +1,19 @@
+Three and-ed conditions repeat the else branch at each level
+
+=======
+
+if a <: b and c <: d and e <: f then
+    x
+else
+    y
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? e extends f
+            ? x
+            : y
+        : y
+    : y

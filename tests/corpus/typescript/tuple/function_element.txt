@@ -1,0 +1,9 @@
+tuple containing function-type elements
+
+=======
+
+[(x: number) => string, boolean]
+
+=======
+
+[(x: number) => string, boolean]

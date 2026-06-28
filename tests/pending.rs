@@ -26,7 +26,11 @@
 //!   a non-empty result. Tighten this into an `assert_renders_like` once the
 //!   intended output is decided.
 
+use newtype::extends_result::ExtendsResult;
 use newtype::parser::Rule;
+
+#[macro_use]
+mod common;
 
 /// Collapse runs of whitespace so comparisons aren't brittle about spacing.
 fn norm(s: &str) -> String {
@@ -195,5 +199,132 @@ mod macro_calls {
     #[test]
     fn generic_macro_call_runs() {
         assert_renders_ok(Rule::expr, "dbg!(A)");
+    }
+}
+
+/// The `unittest "name" do ... end` statement. The renderer maps
+/// `Ast::UnitTest` to `D::nil()` (src/ast/pretty.rs), so a unittest is meant to
+/// contribute *no* TypeScript output — it is a compile-time-only construct. But
+/// today a program containing a unittest emits a stray `;` line where the
+/// unittest used to be (alongside the otherwise-correct rendering of the real
+/// statements). The intended behaviour is that the unittest disappears entirely
+/// while the surrounding type alias still renders cleanly.
+mod unittest_statement {
+    use super::*;
+
+    #[ignore = "unittest emits a stray ';' instead of nothing (src/ast/pretty.rs Ast::UnitTest => D::nil)"]
+    #[test]
+    fn produces_no_output() {
+        assert_renders_like(
+            Rule::program,
+            "unittest \"sanity\" do A end\ntype Foo as 1",
+            "type Foo = 1;",
+        );
+    }
+}
+
+/// `is_subtype` (src/ast/subtype.rs) has `todo!()` arms for several
+/// left-hand-side AST variants: `Access`, `ApplyGeneric`, `Array`, `Builtin`,
+/// `Path`, a non-empty `TypeLiteral`, `Ident`, and `Tuple`. Each of these
+/// panics with "not yet implemented" the moment it is asked whether it is a
+/// subtype of anything. The intended subtyping result is undecided, so each
+/// test only asserts the call *returns* an `ExtendsResult` without panicking;
+/// the RHS (`string`) is chosen so no earlier match arm short-circuits the
+/// answer, forcing evaluation to reach the variant's `todo!()`.
+mod subtype_engine {
+    use super::*;
+
+    /// Assert `a.is_subtype(b)` returns *some* `ExtendsResult` (i.e. the engine
+    /// does not panic). Currently every case below panics on a `todo!()`.
+    fn assert_subtype_total(a: &str, b: &str) {
+        let result = ast!(a).is_subtype(&ast!(b));
+        assert!(matches!(
+            result,
+            ExtendsResult::True | ExtendsResult::False | ExtendsResult::Both | ExtendsResult::Never
+        ));
+    }
+
+    #[ignore = "is_subtype Access LHS is todo!() in src/ast/subtype.rs"]
+    #[test]
+    fn access_lhs() {
+        assert_subtype_total("A[B]", "string");
+    }
+
+    #[ignore = "is_subtype ApplyGeneric LHS is todo!() in src/ast/subtype.rs"]
+    #[test]
+    fn apply_generic_lhs() {
+        assert_subtype_total("A(B)", "string");
+    }
+
+    #[ignore = "is_subtype Array LHS is todo!() in src/ast/subtype.rs"]
+    #[test]
+    fn array_lhs() {
+        assert_subtype_total("A[]", "string");
+    }
+
+    #[ignore = "is_subtype Builtin LHS is todo!() in src/ast/subtype.rs"]
+    #[test]
+    fn builtin_lhs() {
+        assert_subtype_total("keyof(A)", "string");
+    }
+
+    #[ignore = "is_subtype Path LHS is todo!() in src/ast/subtype.rs"]
+    #[test]
+    fn path_lhs() {
+        assert_subtype_total("A::B", "string");
+    }
+
+    #[ignore = "is_subtype non-empty TypeLiteral LHS is todo!() in src/ast/subtype.rs"]
+    #[test]
+    fn type_literal_lhs() {
+        assert_subtype_total("{ x: 1 }", "string");
+    }
+
+    #[ignore = "is_subtype Ident LHS is todo!() in src/ast/subtype.rs"]
+    #[test]
+    fn ident_lhs() {
+        assert_subtype_total("Foo", "string");
+    }
+
+    #[ignore = "is_subtype Tuple LHS is todo!() in src/ast/subtype.rs"]
+    #[test]
+    fn tuple_lhs() {
+        assert_subtype_total("[A, B]", "string");
+    }
+}
+
+/// Known correctness bugs in *implemented* features (as opposed to the
+/// unimplemented features above). These render the wrong TypeScript today; each
+/// test asserts the correct output, so it fails now and will pass once the bug
+/// is fixed. Discovered while building out the corpus.
+mod known_bugs {
+    use super::*;
+
+    /// A dot access followed by an indexed access panics in the renderer
+    /// ("rhs of dot access should be an ident", src/ast/pretty.rs), instead of
+    /// chaining: `A.b` -> `A['b']`, then `[C]` -> `A['b'][C]`.
+    #[ignore = "BUG: dot-then-index access panics in src/ast/pretty.rs (rhs of dot access should be an ident)"]
+    #[test]
+    fn dot_then_indexed_access() {
+        assert_renders_like(Rule::expr, "A.b[C]", "A['b'][C]");
+    }
+
+    /// An intersection of parenthesised unions drops the grouping: the
+    /// `IntersectionType` printer never parenthesises union members, so
+    /// `(A | B) & (C | D)` renders as `A | B & C | D` — which is a *different*
+    /// type (`&` binds tighter). It must keep the parens.
+    #[ignore = "BUG: intersection printer drops parens around union members (src/ast/pretty.rs)"]
+    #[test]
+    fn intersection_of_unions_keeps_parens() {
+        assert_renders_like(Rule::expr, "(A | B) & (C | D)", "(A | B) & (C | D)");
+    }
+
+    /// Same root cause, nested: a union inside an intersection inside a union
+    /// loses the inner union's parens. `A | (B & (C | D))` renders today as
+    /// `A | (B & C | D)`.
+    #[ignore = "BUG: union nested in intersection loses parens (src/ast/pretty.rs)"]
+    #[test]
+    fn union_in_intersection_keeps_parens() {
+        assert_renders_like(Rule::expr, "A | (B & (C | D))", "A | (B & (C | D))");
     }
 }

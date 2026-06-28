@@ -1,0 +1,9 @@
+Template-string indexed access followed by an indexed access
+
+=======
+
+A[`${k}`][C]
+
+=======
+
+A[`${k}`][C]

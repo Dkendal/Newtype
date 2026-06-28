@@ -1,0 +1,9 @@
+Union of four identifiers
+
+=======
+
+A | B | C | D
+
+=======
+
+A | B | C | D

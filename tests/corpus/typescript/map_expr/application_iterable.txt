@@ -1,0 +1,9 @@
+Mapped type iterating over a type application
+
+=======
+
+map k in F(T) do k end
+
+=======
+
+{ [k in F<T>]: k }
