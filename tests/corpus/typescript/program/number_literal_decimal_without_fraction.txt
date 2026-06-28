@@ -1,0 +1,5 @@
+Decimal literal with trailing dot and no fraction
+=======
+type A as 100.
+=======
+type A = 100.;

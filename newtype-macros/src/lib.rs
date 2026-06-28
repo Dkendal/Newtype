@@ -198,3 +198,250 @@ fn ast_node_struct(attrs: AstNodeAttributes, item: &mut ItemStruct) -> TokenStre
         #additional
     })
 }
+
+// ---------------------------------------------------------------------------
+// corpus-style test generation (typescript_tests / equivalent_tests)
+// ---------------------------------------------------------------------------
+
+use proc_macro2::TokenStream as TokenStream2;
+use quote::format_ident;
+use std::collections::HashMap;
+use std::path::{Path as StdPath, PathBuf};
+use syn::parse::{Parse, ParseStream};
+use syn::{LitBool, LitInt, LitStr, Path as SynPath, Token};
+
+/// Parsed arguments for the corpus test attribute macros.
+struct TsTestsArgs {
+    /// Path to the `Rule` enum, e.g. `newtype::parser::Rule`.
+    rule_path: SynPath,
+    /// Variant of `Rule` to start parsing from, e.g. `"program"` or `"expr"`.
+    rule_name: String,
+    /// Directory (relative to the consuming crate's `CARGO_MANIFEST_DIR`)
+    /// containing the fixtures.
+    dir: String,
+    /// File extension of fixtures (without the dot). Defaults to `txt`.
+    ext: String,
+    /// Whether to descend into subdirectories. Defaults to `false`.
+    recursive: bool,
+}
+
+impl Parse for TsTestsArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        // Positional: <Rule path> , "<rule name>"
+        let rule_path: SynPath = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let rule_name: LitStr = input.parse()?;
+
+        let mut dir: Option<String> = None;
+        let mut ext = String::from("txt");
+        let mut recursive = false;
+
+        // Remaining: comma-separated `key = value` pairs.
+        while input.peek(Token![,]) {
+            input.parse::<Token![,]>()?;
+            if input.is_empty() {
+                break; // tolerate a trailing comma
+            }
+            let key: syn::Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            match key.to_string().as_str() {
+                "dir" => dir = Some(input.parse::<LitStr>()?.value()),
+                "ext" => ext = input.parse::<LitStr>()?.value(),
+                "recursive" => recursive = input.parse::<LitBool>()?.value(),
+                // `width` is accepted for forward-compatibility but currently
+                // fixed in the runtime; parse and ignore so call sites don't break.
+                "width" => {
+                    let _ = input.parse::<LitInt>()?;
+                }
+                other => {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!("unknown corpus-test argument `{other}`"),
+                    ))
+                }
+            }
+        }
+
+        let dir = dir.ok_or_else(|| {
+            syn::Error::new(rule_name.span(), "a corpus-test macro requires a `dir = \"...\"` argument")
+        })?;
+
+        Ok(TsTestsArgs {
+            rule_path,
+            rule_name: rule_name.value(),
+            dir,
+            ext,
+            recursive,
+        })
+    }
+}
+
+/// Collects fixture files under `root`, returning `(test_ident_name, absolute_path)`
+/// pairs. `test_ident_name` is the path relative to `root` (without extension),
+/// sanitized into a valid Rust identifier fragment.
+fn collect_fixtures(root: &StdPath, ext: &str, recursive: bool, out: &mut Vec<(String, PathBuf)>) {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+    // Deterministic order so generated test names are stable across runs.
+    entries.sort();
+
+    for path in entries {
+        if path.is_dir() {
+            if recursive {
+                collect_fixtures(&path, ext, recursive, out);
+            }
+        } else if path.extension().and_then(|e| e.to_str()) == Some(ext) {
+            out.push((String::new(), path));
+        }
+    }
+}
+
+/// Turns a fixture path into a valid identifier fragment, relative to `base`.
+fn ident_fragment(base: &StdPath, path: &StdPath) -> String {
+    let rel = path.strip_prefix(base).unwrap_or(path);
+    let rel = rel.with_extension("");
+    let raw = rel.to_string_lossy();
+    let mut name = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        if ch.is_ascii_alphanumeric() {
+            name.push(ch);
+        } else {
+            name.push('_');
+        }
+    }
+    // Identifiers can't start with a digit.
+    if name.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(true) {
+        name.insert(0, '_');
+    }
+    name
+}
+
+/// Shared implementation for the corpus-test attribute macros. `runner` is the
+/// path to the `newtype::corpus` function each generated `#[test]` should call
+/// with `(rule, path)` — e.g. `run_case` or `run_equivalence_case`.
+fn corpus_tests_impl(attr: TokenStream, item: TokenStream, runner: TokenStream2) -> TokenStream {
+    let args = parse_macro_input!(attr as TsTestsArgs);
+    let mut module = match parse_macro_input!(item as Item) {
+        Item::Mod(module) => module,
+        other => {
+            return syn::Error::new_spanned(
+                other,
+                "a corpus-test macro may only be applied to a module",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .expect("CARGO_MANIFEST_DIR is set by cargo during compilation");
+    let root = StdPath::new(&manifest_dir).join(&args.dir);
+
+    let mut fixtures = Vec::new();
+    collect_fixtures(&root, &args.ext, args.recursive, &mut fixtures);
+
+    let rule_path = &args.rule_path;
+    let rule_variant = format_ident!("{}", args.rule_name);
+
+    let (_, content) = module.content.get_or_insert_with(Default::default);
+
+    if fixtures.is_empty() {
+        // Surface an obviously-failing test rather than silently generating
+        // nothing when a `dir` is wrong or empty.
+        let dir_lit = args.dir.clone();
+        let ext_lit = args.ext.clone();
+        let item: Item = syn::parse_quote! {
+            #[test]
+            fn no_fixtures_found() {
+                panic!(
+                    "found no `*.{}` fixtures under {:?}; check the `dir` argument",
+                    #ext_lit, #dir_lit
+                );
+            }
+        };
+        content.push(item);
+    }
+
+    // Reject identifier collisions (e.g. `foo-bar.txt` and `foo_bar.txt` both
+    // map to `foo_bar`) with a clear error instead of an opaque
+    // duplicate-definition one.
+    let mut seen: HashMap<String, PathBuf> = HashMap::new();
+    for (_, path) in &fixtures {
+        let frag = ident_fragment(&root, path);
+        if let Some(prev) = seen.insert(frag.clone(), path.clone()) {
+            let msg = format!(
+                "corpus fixtures {:?} and {:?} both map to the test name `test_{}`; rename one",
+                prev, path, frag
+            );
+            return syn::Error::new_spanned(&module, msg).to_compile_error().into();
+        }
+
+        let fn_name = format_ident!("test_{}", frag);
+        let path_lit = path.to_string_lossy().to_string();
+        let item: Item = syn::parse_quote! {
+            #[test]
+            fn #fn_name() {
+                #runner(
+                    #rule_path::#rule_variant,
+                    ::std::path::Path::new(#path_lit),
+                );
+            }
+        };
+        content.push(item);
+    }
+
+    quote!(#module).into()
+}
+
+/// Generates one `#[test]` function per fixture file in `dir` for a corpus of
+/// "newtype source -> expected TypeScript" tests. Mirrors the ergonomics of
+/// `pest_test_gen::pest_tests`, but asserts on rendered TypeScript output
+/// (via [`newtype::corpus::run_case`](../newtype/corpus/fn.run_case.html))
+/// rather than on a parse tree.
+///
+/// # Arguments
+///
+/// * **rule_path** (positional, required): path to the `Rule` enum, e.g.
+///   `newtype::parser::Rule`.
+/// * **rule_name** (positional, required): the `Rule` variant to start parsing
+///   from, e.g. `"program"`, `"expr"`, or `"if_expr"`.
+/// * `dir` (required): directory of fixtures, relative to the consuming crate's
+///   manifest directory.
+/// * `ext` (optional): fixture file extension, default `"txt"`.
+/// * `recursive` (optional): recurse into subdirectories, default `false`.
+///
+/// # Example
+///
+/// ```ignore
+/// #[typescript_tests(newtype::parser::Rule, "program", dir = "tests/corpus/typescript/type_alias")]
+/// #[cfg(test)]
+/// mod type_alias {}
+/// ```
+#[proc_macro_attribute]
+pub fn typescript_tests(attr: TokenStream, item: TokenStream) -> TokenStream {
+    corpus_tests_impl(attr, item, quote!(newtype::corpus::run_case))
+}
+
+/// Generates one `#[test]` function per fixture file in `dir` for a corpus of
+/// newtype *equivalence* tests: the two snippets in each fixture must simplify
+/// to the same AST. The corpus form of the inline `assert_expr_eq!` macro,
+/// backed by
+/// [`newtype::corpus::run_equivalence_case`](../newtype/corpus/fn.run_equivalence_case.html).
+///
+/// Arguments are identical to [`macro@typescript_tests`].
+///
+/// # Example
+///
+/// ```ignore
+/// #[equivalent_tests(newtype::parser::Rule, "expr", dir = "tests/corpus/newtype/expr")]
+/// #[cfg(test)]
+/// mod expr {}
+/// ```
+#[proc_macro_attribute]
+pub fn equivalent_tests(attr: TokenStream, item: TokenStream) -> TokenStream {
+    corpus_tests_impl(attr, item, quote!(newtype::corpus::run_equivalence_case))
+}

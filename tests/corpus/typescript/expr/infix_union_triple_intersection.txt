@@ -1,0 +1,9 @@
+Union with a three-way intersection
+
+=======
+
+A | (B & C & D)
+
+=======
+
+A | (B & C & D)

@@ -1,0 +1,9 @@
+interface with an optional property
+=======
+interface Foo {
+    ?x: number,
+}
+=======
+interface Foo {
+    x?: number;
+}

@@ -1,0 +1,9 @@
+Parenthesized intersection on the left of a union, normalized
+
+=======
+
+(A & B) | C
+
+=======
+
+C | (A & B)

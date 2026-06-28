@@ -1,0 +1,9 @@
+Nested let expressions inline through each level
+=======
+type A as
+    let a = 1 in
+    let b = [a, a] in
+    let c = [b, b] in
+    c
+=======
+type A = [[1, 1], [1, 1]];

@@ -1,0 +1,17 @@
+A nested if expression
+
+=======
+
+if a <: b then
+    if c <: d then
+        x
+    end
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? x
+        : never
+    : never

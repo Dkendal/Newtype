@@ -1,0 +1,9 @@
+Function type with no args
+
+=======
+
+() => void
+
+=======
+
+() => void

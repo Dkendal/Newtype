@@ -1,0 +1,9 @@
+Function type with an unnamed rest arg gets a generated name
+
+=======
+
+(...any[]) => void
+
+=======
+
+(...rest: any[]) => void

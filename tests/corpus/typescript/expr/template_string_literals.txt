@@ -1,0 +1,9 @@
+Template string literal renders unchanged
+
+=======
+
+`1`
+
+=======
+
+`1`

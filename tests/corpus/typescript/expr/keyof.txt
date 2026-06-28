@@ -1,0 +1,9 @@
+keyof call lowers to the keyof operator
+
+=======
+
+keyof(A)
+
+=======
+
+keyof A

@@ -1,0 +1,9 @@
+Nested keyof calls lower to repeated keyof operators
+
+=======
+
+keyof(keyof(A))
+
+=======
+
+keyof keyof A

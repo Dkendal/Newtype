@@ -1,0 +1,9 @@
+Union of two number literals
+
+=======
+
+1 | 2
+
+=======
+
+1 | 2

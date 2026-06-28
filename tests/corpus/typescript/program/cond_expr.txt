@@ -1,0 +1,15 @@
+A cond expression with and-joined guards becomes nested conditional types
+=======
+type A(x) as cond do
+    x <: number -> 1,
+    x <: {} and x <: {a: 1} -> 2,
+end
+=======
+type A<x> =
+    x extends number
+        ? 1
+        : x extends {}
+            ? x extends {a: 1}
+                ? 2
+                : never
+            : never;

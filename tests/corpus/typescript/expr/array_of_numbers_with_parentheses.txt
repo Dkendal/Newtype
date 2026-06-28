@@ -1,0 +1,9 @@
+Redundant parentheses around an array element are dropped
+
+=======
+
+(number)[]
+
+=======
+
+number[]

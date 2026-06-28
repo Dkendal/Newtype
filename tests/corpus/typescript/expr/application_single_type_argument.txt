@@ -1,0 +1,9 @@
+Application with one type argument lowers to angle brackets
+
+=======
+
+A(1)
+
+=======
+
+A<1>

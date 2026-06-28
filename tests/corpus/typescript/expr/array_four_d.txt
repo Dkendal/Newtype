@@ -1,0 +1,9 @@
+Three-dimensional array of numbers
+
+=======
+
+number[][][]
+
+=======
+
+number[][][]

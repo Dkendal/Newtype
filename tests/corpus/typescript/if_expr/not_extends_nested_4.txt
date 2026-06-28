@@ -1,0 +1,17 @@
+A negated outer and negated inner nested condition
+
+=======
+
+if not (a <: b) then
+    if not (c <: d) then
+        x
+    end
+end
+
+=======
+
+a extends b
+    ? never
+    : c extends d
+        ? never
+        : x

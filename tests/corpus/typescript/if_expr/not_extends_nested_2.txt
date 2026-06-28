@@ -1,0 +1,19 @@
+A nested negated inner condition with an inner else
+
+=======
+
+if a <: b then
+    if not (c <: d) then
+        x
+    else
+        y
+    end
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? y
+        : x
+    : never

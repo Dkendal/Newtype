@@ -1,0 +1,9 @@
+Double-quoted index access renders with single quotes
+
+=======
+
+A["field"]
+
+=======
+
+A['field']

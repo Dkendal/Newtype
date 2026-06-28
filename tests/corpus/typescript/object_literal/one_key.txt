@@ -1,0 +1,5 @@
+Object literal with a single key
+=======
+{x: 1}
+=======
+{x: 1}

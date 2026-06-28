@@ -1,0 +1,13 @@
+A negated condition swaps the branches
+
+=======
+
+if not (a <: b) then
+    c
+end
+
+=======
+
+a extends b
+    ? never
+    : c

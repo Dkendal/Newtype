@@ -1,0 +1,9 @@
+Function type with a named rest arg
+
+=======
+
+(...args: any[]) => void
+
+=======
+
+(...args: any[]) => void

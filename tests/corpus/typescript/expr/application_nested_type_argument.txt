@@ -1,0 +1,9 @@
+Application nested as a type argument
+
+=======
+
+A(B(1))
+
+=======
+
+A<B<1>>

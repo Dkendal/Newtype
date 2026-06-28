@@ -1,0 +1,13 @@
+An if without else uses never for the false branch
+
+=======
+
+if 1 <: number then
+    1
+end
+
+=======
+
+1 extends number
+    ? 1
+    : never

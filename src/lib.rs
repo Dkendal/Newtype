@@ -16,6 +16,7 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 
 pub mod ast;
+pub mod corpus;
 pub mod extends_result;
 pub mod parser;
 pub mod pretty;

@@ -1,0 +1,9 @@
+Atom literal lowers to a single-quoted string
+
+=======
+
+:x
+
+=======
+
+'x'

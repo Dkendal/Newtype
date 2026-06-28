@@ -1,0 +1,9 @@
+Application mixing an identifier and a literal type argument
+
+=======
+
+A(B, 1)
+
+=======
+
+A<B, 1>

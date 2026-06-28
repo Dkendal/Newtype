@@ -1,0 +1,8 @@
+A let binding referencing an earlier binding inlines its value
+=======
+type A as
+    let a = 1,
+        b = a,
+    in [a, b]
+=======
+type A = [1, a];

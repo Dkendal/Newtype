@@ -1,0 +1,9 @@
+Two unions followed by an intersection, parens added in output
+
+=======
+
+A | B | C & D
+
+=======
+
+A | B | (C & D)

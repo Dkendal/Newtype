@@ -1,0 +1,7 @@
+interface with a type parameter that has a default
+=======
+interface Foo(A)
+defaults A = any
+{}
+=======
+interface Foo<A = any> {}

@@ -1,0 +1,15 @@
+A simple if/else lowers to a conditional type
+
+=======
+
+if 1 <: number then
+    1
+else
+    0
+end
+
+=======
+
+1 extends number
+    ? 1
+    : 0

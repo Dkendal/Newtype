@@ -1,0 +1,9 @@
+Dot access lowers to indexed access
+
+=======
+
+A.x
+
+=======
+
+A['x']

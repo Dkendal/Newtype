@@ -1,0 +1,19 @@
+A nested if with an inner else branch
+
+=======
+
+if a <: b then
+    if c <: d then
+        x
+    else
+        y
+    end
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? x
+        : y
+    : never

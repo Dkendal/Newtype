@@ -1,0 +1,9 @@
+Application with several empty-array type arguments
+
+=======
+
+A([], [], [])
+
+=======
+
+A<[], [], []>

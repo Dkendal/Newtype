@@ -1,0 +1,21 @@
+A nested if with both inner and outer else branches
+
+=======
+
+if a <: b then
+    if c <: d then
+        x
+    else
+        y
+    end
+else
+    z
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? x
+        : y
+    : z

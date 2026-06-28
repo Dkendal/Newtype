@@ -1,0 +1,9 @@
+Explicitly parenthesized intersection inside a union
+
+=======
+
+A | (B & C)
+
+=======
+
+A | (B & C)

@@ -1,0 +1,9 @@
+interface with a readonly property
+=======
+interface Foo {
+    readonly x: number,
+}
+=======
+interface Foo {
+    readonly x: number;
+}

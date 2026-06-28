@@ -1,0 +1,15 @@
+A condition combining not and and
+
+=======
+
+if not (a <: b) and c <: d then
+    x
+end
+
+=======
+
+a extends b
+    ? never
+    : c extends d
+        ? x
+        : never

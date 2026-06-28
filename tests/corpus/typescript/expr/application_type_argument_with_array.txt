@@ -1,0 +1,9 @@
+Application with an empty-array type argument
+
+=======
+
+A(1, [])
+
+=======
+
+A<1, []>

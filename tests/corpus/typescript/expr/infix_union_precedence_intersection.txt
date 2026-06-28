@@ -1,0 +1,9 @@
+Intersection binds tighter than union; parens added in output
+
+=======
+
+A | B & C
+
+=======
+
+A | (B & C)

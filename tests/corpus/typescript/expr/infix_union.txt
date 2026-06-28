@@ -1,0 +1,9 @@
+Union of two identifiers
+
+=======
+
+A | B
+
+=======
+
+A | B

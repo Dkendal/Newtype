@@ -1,0 +1,9 @@
+Union of three identifiers
+
+=======
+
+A | B | C
+
+=======
+
+A | B | C

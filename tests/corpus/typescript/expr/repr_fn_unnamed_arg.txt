@@ -1,0 +1,9 @@
+Function type with a positional unnamed arg gets a generated name
+
+=======
+
+(any) => void
+
+=======
+
+(arg0: any) => void

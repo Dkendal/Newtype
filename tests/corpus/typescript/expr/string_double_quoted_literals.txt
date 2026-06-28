@@ -1,0 +1,9 @@
+Double-quoted string literal renders with single quotes
+
+=======
+
+"1"
+
+=======
+
+'1'

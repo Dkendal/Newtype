@@ -1,0 +1,9 @@
+Empty object literal renders unchanged
+
+=======
+
+{}
+
+=======
+
+{}

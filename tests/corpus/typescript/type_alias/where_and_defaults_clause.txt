@@ -1,0 +1,9 @@
+Generic type alias with both where and defaults clauses
+
+=======
+
+type A(x) defaults x = number where x <: number as x
+
+=======
+
+type A<x extends number = number> = x

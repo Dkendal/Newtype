@@ -1,0 +1,15 @@
+A condition combining and with a negated right side
+
+=======
+
+if a <: b and (not (c <: d)) then
+    x
+end
+
+=======
+
+a extends b
+    ? c extends d
+        ? never
+        : x
+    : never

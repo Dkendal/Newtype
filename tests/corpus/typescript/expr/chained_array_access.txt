@@ -1,0 +1,9 @@
+Chained indexed access renders unchanged
+
+=======
+
+A['x']['y']['z']
+
+=======
+
+A['x']['y']['z']

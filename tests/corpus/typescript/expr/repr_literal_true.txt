@@ -1,0 +1,9 @@
+Boolean true literal renders unchanged
+
+=======
+
+true
+
+=======
+
+true

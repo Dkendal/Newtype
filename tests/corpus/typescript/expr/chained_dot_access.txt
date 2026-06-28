@@ -1,0 +1,9 @@
+Chained dot access lowers to chained indexed access
+
+=======
+
+A.x.y.z
+
+=======
+
+A['x']['y']['z']

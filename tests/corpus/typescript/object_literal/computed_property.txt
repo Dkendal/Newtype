@@ -1,0 +1,5 @@
+Computed property key
+=======
+{[K]: T}
+=======
+{[K]: T}

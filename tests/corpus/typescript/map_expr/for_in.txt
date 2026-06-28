@@ -1,0 +1,9 @@
+Mapped type from a for-in loop
+
+=======
+
+map k in t do 1 end
+
+=======
+
+{ [k in t]: 1 }

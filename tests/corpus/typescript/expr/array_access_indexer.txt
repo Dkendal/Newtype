@@ -1,0 +1,9 @@
+Index access by a type renders unchanged
+
+=======
+
+A[string]
+
+=======
+
+A[string]

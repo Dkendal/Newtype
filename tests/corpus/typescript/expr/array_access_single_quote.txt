@@ -1,0 +1,9 @@
+Single-quoted index access renders unchanged
+
+=======
+
+A['field']
+
+=======
+
+A['field']

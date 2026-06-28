@@ -1,0 +1,9 @@
+Generic type alias with a defaults clause
+
+=======
+
+type A(x) defaults x = number as x
+
+=======
+
+type A<x = number> = x
