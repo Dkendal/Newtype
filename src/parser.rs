@@ -147,7 +147,7 @@ pub fn parse_expr(pairs: Pairs) -> Ast {
 }
 
 /// Replace the pipe operator macro with a type application
-/// ```
+/// ```text
 /// A |> B
 /// # B(A)
 /// ```
