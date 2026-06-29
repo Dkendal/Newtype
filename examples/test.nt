@@ -1,0 +1,4 @@
+unittest "string is assignable" do
+  assert string <: unknown
+  assert not (number <: string)
+end

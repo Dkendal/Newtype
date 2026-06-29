@@ -1,0 +1,15 @@
+a unittest can reference a top-level type alias by name
+
+=======
+
+type Foo as 1
+
+unittest "alias" do
+  assert Foo <: number
+  assert Foo == 1
+  assert not (Foo <: string)
+end
+
+=======
+
+type Foo = 1;

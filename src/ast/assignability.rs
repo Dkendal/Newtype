@@ -1,6 +1,9 @@
 use crate::{
-    ast::{Access, Ast, Builtin, IntersectionType, ObjectProperty, ObjectPropertyKey,
-        PrimitiveType, Tuple, TypeLiteral, UnionType},
+    ast::{
+        type_env::{fingerprint, ResolveCtx},
+        Access, Ast, Builtin, IntersectionType, ObjectProperty, ObjectPropertyKey, PrimitiveType,
+        Tuple, TypeLiteral, UnionType,
+    },
     extends_result::ExtendsResult,
 };
 
@@ -9,14 +12,48 @@ impl Ast {
     /// relation (`internal/checker/relater.go`). Answers "is `self` assignable
     /// to `other`" in the sense of a conditional type `self extends other`.
     ///
+    /// This is the purely-structural entry point: named references (idents,
+    /// generic applications, …) are treated as free type variables. To resolve
+    /// references against a program's definitions, use
+    /// [`is_assignable_to_ctx`](Self::is_assignable_to_ctx) with a populated
+    /// [`ResolveCtx`].
+    pub fn is_assignable_to(&self, other: &Ast) -> ExtendsResult {
+        self.is_assignable_to_ctx(other, &ResolveCtx::empty())
+    }
+
+    /// Assignability under a resolution context. When `ctx` carries an
+    /// environment, named references on either side are resolved to their
+    /// definitions and the check recurses; a coinductive assumption set keeps
+    /// recursive definitions terminating.
+    ///
     /// The four outcomes are interpreted by the runtime (`runtime::builtin::unquote`):
     /// `True` → take the `then` branch; `False` → take the `else` branch;
     /// `Never` → the LHS is the bottom type, collapse to `never`; `Both` → the
     /// relation is indeterminate (the LHS is `any`, or an unresolvable
     /// reference), so the union of both branches is produced.
-    pub fn is_assignable_to(&self, other: &Ast) -> ExtendsResult {
+    pub fn is_assignable_to_ctx(&self, other: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
         type A = Ast;
         type T = ExtendsResult;
+
+        // Resolve named references against the environment first. If either side
+        // names a definition, expand it and recurse — guarding the relation so a
+        // recursive definition encountered while proving itself is taken to hold.
+        if let Some(env) = ctx.env() {
+            let lhs_resolved = env.resolve_head(self);
+            let rhs_resolved = env.resolve_head(other);
+
+            if lhs_resolved.is_some() || rhs_resolved.is_some() {
+                let pair = (fingerprint(self), fingerprint(other));
+                if !ctx.assume(&pair) {
+                    return T::True;
+                }
+                let lhs = lhs_resolved.as_ref().unwrap_or(self);
+                let rhs = rhs_resolved.as_ref().unwrap_or(other);
+                let result = lhs.is_assignable_to_ctx(rhs, ctx);
+                ctx.discharge(&pair);
+                return result;
+            }
+        }
 
         if let Ast::Primitive(other, _) = other {
             if let Some(value) = self.get_primitive_type() {
@@ -48,16 +85,20 @@ impl Ast {
             // Target-union: assignable to some member. Target-intersection:
             // assignable to every member. Source arms come first so that
             // `(A | B) <: (C | D)` distributes correctly.
-            (A::UnionType(UnionType { types, .. }), rhs) => Self::union_source_assignable(types, rhs),
-
-            (A::IntersectionType(IntersectionType { types, .. }), rhs) => {
-                Self::intersection_source_assignable(types, rhs)
+            (A::UnionType(UnionType { types, .. }), rhs) => {
+                Self::union_source_assignable(types, rhs, ctx)
             }
 
-            (lhs, A::UnionType(UnionType { types, .. })) => Self::assignable_to_union(lhs, types),
+            (A::IntersectionType(IntersectionType { types, .. }), rhs) => {
+                Self::intersection_source_assignable(types, rhs, ctx)
+            }
+
+            (lhs, A::UnionType(UnionType { types, .. })) => {
+                Self::assignable_to_union(lhs, types, ctx)
+            }
 
             (lhs, A::IntersectionType(IntersectionType { types, .. })) => {
-                Self::assignable_to_intersection(lhs, types)
+                Self::assignable_to_intersection(lhs, types, ctx)
             }
 
             // Indexed-access / generic-application / qualified references cannot
@@ -68,7 +109,7 @@ impl Ast {
 
             (A::ApplyGeneric(_), _) => T::Both,
 
-            (A::Array(element), rhs) => Self::array_assignable_to(element, rhs),
+            (A::Array(element), rhs) => Self::array_assignable_to(element, rhs, ctx),
 
             (A::Builtin(Builtin { .. }), _) => T::Both,
 
@@ -84,7 +125,7 @@ impl Ast {
 
             (lhs, rhs) if lhs.is_non_nullish() && rhs.is_object_object_wrapper() => T::True,
 
-            (A::TypeLiteral(lhs), rhs) => Self::type_literal_assignable_to(lhs, rhs),
+            (A::TypeLiteral(lhs), rhs) => Self::type_literal_assignable_to(lhs, rhs, ctx),
 
             (A::Primitive(lhs, _), A::Primitive(rhs, _)) => Into::into(lhs == rhs),
 
@@ -104,21 +145,21 @@ impl Ast {
             (lhs, rhs) if lhs.is_object_wrapper() => {
                 let primitive_type = lhs.get_primitive_type().unwrap();
                 let ast = Ast::Primitive(primitive_type, lhs.as_span());
-                ast.is_assignable_to(rhs)
+                ast.is_assignable_to_ctx(rhs, ctx)
             }
 
-            (A::Tuple(tuple), rhs) => Self::tuple_assignable_to(tuple, rhs),
+            (A::Tuple(tuple), rhs) => Self::tuple_assignable_to(tuple, rhs, ctx),
 
             (_, _) => T::False,
         }
     }
 
     /// `[A, B, …]` (array element type `element`) assignable to `rhs`.
-    fn array_assignable_to(element: &Ast, rhs: &Ast) -> ExtendsResult {
+    fn array_assignable_to(element: &Ast, rhs: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
         match rhs {
             // Covariant element relation: `A[] <: B[]` iff `A <: B`.
             Ast::Array(rhs_element) => {
-                ExtendsResult::True.and(element.is_assignable_to(rhs_element))
+                ExtendsResult::True.and(element.is_assignable_to_ctx(rhs_element, ctx))
             }
             // A variable-length array is not assignable to a fixed-arity tuple.
             Ast::Tuple(_) => ExtendsResult::False,
@@ -128,7 +169,7 @@ impl Ast {
     }
 
     /// `[A, B, …]` tuple assignable to `rhs`.
-    fn tuple_assignable_to(tuple: &Tuple, rhs: &Ast) -> ExtendsResult {
+    fn tuple_assignable_to(tuple: &Tuple, rhs: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
         match rhs {
             // Element-wise, same arity (no optional/rest modelling in tuples).
             Ast::Tuple(other) => {
@@ -140,17 +181,19 @@ impl Ast {
                     .iter()
                     .zip(other.items.iter())
                     .fold(ExtendsResult::True, |acc, (a, b)| {
-                        acc.and(a.is_assignable_to(b))
+                        acc.and(a.is_assignable_to_ctx(b, ctx))
                     })
             }
             // `[A, B] <: T[]` iff every element is assignable to `T`. An empty
             // tuple is vacuously assignable to any array.
-            Ast::Array(rhs_element) => tuple
-                .items
-                .iter()
-                .fold(ExtendsResult::True, |acc, item| {
-                    acc.and(item.is_assignable_to(rhs_element))
-                }),
+            Ast::Array(rhs_element) => {
+                tuple
+                    .items
+                    .iter()
+                    .fold(ExtendsResult::True, |acc, item| {
+                        acc.and(item.is_assignable_to_ctx(rhs_element, ctx))
+                    })
+            }
             rhs if Self::accepts_any_object(rhs) => ExtendsResult::True,
             _ => ExtendsResult::False,
         }
@@ -161,7 +204,7 @@ impl Ast {
     /// source with an assignable value; extra source properties are allowed (no
     /// fresh-literal excess-property check at this layer). Handles the empty
     /// source `{}` too — it is assignable to any all-optional target.
-    fn type_literal_assignable_to(lhs: &TypeLiteral, rhs: &Ast) -> ExtendsResult {
+    fn type_literal_assignable_to(lhs: &TypeLiteral, rhs: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
         match rhs {
             rhs if Self::accepts_any_object(rhs) => ExtendsResult::True,
             Ast::TypeLiteral(target) => {
@@ -187,7 +230,7 @@ impl Ast {
 
                     match source_prop {
                         Some(source_prop) => {
-                            acc = acc.and(Self::property_relation(source_prop, target_prop));
+                            acc = acc.and(Self::property_relation(source_prop, target_prop, ctx));
                         }
                         None if target_prop.optional => {}
                         None if source_has_complex_key => return ExtendsResult::Both,
@@ -202,65 +245,73 @@ impl Ast {
 
     /// Relation between a present source property and the target property it
     /// matches by name.
-    fn property_relation(source: &ObjectProperty, target: &ObjectProperty) -> ExtendsResult {
+    fn property_relation(
+        source: &ObjectProperty,
+        target: &ObjectProperty,
+        ctx: &ResolveCtx,
+    ) -> ExtendsResult {
         // An optional source property may be absent, so it is not assignable to a
         // required target property.
         if source.optional && !target.optional {
             return ExtendsResult::False;
         }
 
-        let mut value = source.value.is_assignable_to(&target.value);
+        let mut value = source.value.is_assignable_to_ctx(&target.value, ctx);
 
         // An optional target property has type `T | undefined`, so an
         // `undefined`-typed source value still satisfies it.
         if target.optional {
             let undefined = Ast::Primitive(PrimitiveType::Undefined, source.value.as_span());
-            value = value.or(source.value.is_assignable_to(&undefined));
+            value = value.or(source.value.is_assignable_to_ctx(&undefined, ctx));
         }
 
         value
     }
 
     /// Source union: assignable iff *every* member is assignable to `rhs`.
-    fn union_source_assignable(members: &[Ast], rhs: &Ast) -> ExtendsResult {
+    fn union_source_assignable(members: &[Ast], rhs: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
         members
             .iter()
             .fold(ExtendsResult::True, |acc, member| {
-                acc.and(member.is_assignable_to(rhs))
+                acc.and(member.is_assignable_to_ctx(rhs, ctx))
             })
     }
 
     /// Target union: assignable iff `lhs` is assignable to *some* member.
-    fn assignable_to_union(lhs: &Ast, members: &[Ast]) -> ExtendsResult {
+    fn assignable_to_union(lhs: &Ast, members: &[Ast], ctx: &ResolveCtx) -> ExtendsResult {
         // `boolean` is the union `true | false`; it is assignable to a target
         // union only if both of its members are.
         if matches!(lhs, Ast::Primitive(PrimitiveType::Boolean, _)) {
             let span = lhs.as_span();
             let t = Ast::TrueKeyword(span);
             let f = Ast::FalseKeyword(span);
-            return Self::assignable_to_union(&t, members)
-                .and(Self::assignable_to_union(&f, members));
+            return Self::assignable_to_union(&t, members, ctx)
+                .and(Self::assignable_to_union(&f, members, ctx));
         }
 
         members
             .iter()
             .fold(ExtendsResult::False, |acc, member| {
-                acc.or(lhs.is_assignable_to(member))
+                acc.or(lhs.is_assignable_to_ctx(member, ctx))
             })
     }
 
     /// Target intersection: assignable iff `lhs` is assignable to *every* member.
-    fn assignable_to_intersection(lhs: &Ast, members: &[Ast]) -> ExtendsResult {
+    fn assignable_to_intersection(lhs: &Ast, members: &[Ast], ctx: &ResolveCtx) -> ExtendsResult {
         members
             .iter()
             .fold(ExtendsResult::True, |acc, member| {
-                acc.and(lhs.is_assignable_to(member))
+                acc.and(lhs.is_assignable_to_ctx(member, ctx))
             })
     }
 
     /// Source intersection: assignable iff *some* member is assignable, or —
     /// for an object target — the merged shape of all object members is.
-    fn intersection_source_assignable(members: &[Ast], rhs: &Ast) -> ExtendsResult {
+    fn intersection_source_assignable(
+        members: &[Ast],
+        rhs: &Ast,
+        ctx: &ResolveCtx,
+    ) -> ExtendsResult {
         // `never & T` reduces to `never`, which collapses the conditional.
         if members.iter().any(|m| matches!(m, Ast::NeverKeyword(_))) {
             return ExtendsResult::Never;
@@ -269,7 +320,7 @@ impl Ast {
         let some = members
             .iter()
             .fold(ExtendsResult::False, |acc, member| {
-                acc.or(member.is_assignable_to(rhs))
+                acc.or(member.is_assignable_to_ctx(rhs, ctx))
             });
 
         if some == ExtendsResult::True {
@@ -279,12 +330,28 @@ impl Ast {
         // The intersection carries the union of all its object members'
         // properties, so merge them and try the combined shape against the
         // target (e.g. `{a:1} & {b:2} <: {a:number, b:number}`, and likewise
-        // against a union target containing such a shape).
-        if let Some(merged) = Self::merge_object_members(members) {
-            return some.or(Ast::TypeLiteral(merged).is_assignable_to(rhs));
+        // against a union target containing such a shape). The merged members
+        // may themselves be references (e.g. an interface's `extends` parent),
+        // so resolve each before merging.
+        let resolved: Vec<Ast> = members
+            .iter()
+            .map(|member| Self::resolve_for_merge(member, ctx))
+            .collect();
+
+        if let Some(merged) = Self::merge_object_members(&resolved) {
+            return some.or(Ast::TypeLiteral(merged).is_assignable_to_ctx(rhs, ctx));
         }
 
         some
+    }
+
+    /// Resolve a node to its definition body if it is a known reference, for the
+    /// purpose of merging object members (interface inheritance). Non-references
+    /// are returned unchanged.
+    fn resolve_for_merge(member: &Ast, ctx: &ResolveCtx) -> Ast {
+        ctx.env()
+            .and_then(|env| env.resolve_head(member))
+            .unwrap_or_else(|| member.clone())
     }
 
     /// Collect the properties of every object-literal member into one shape.

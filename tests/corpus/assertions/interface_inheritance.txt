@@ -1,0 +1,22 @@
+an interface resolves to its object shape, including inherited members
+
+=======
+
+interface Point { x: number }
+interface Point3 extends Point { z: number }
+
+unittest "interfaces" do
+  assert { x: 1, y: 2 } <: Point
+  assert { x: 1, z: 3 } <: Point3
+  assert not ({ z: 3 } <: Point3)
+end
+
+=======
+
+interface Point {
+    x: number;
+};
+
+interface Point3 extends Point {
+    z: number;
+};

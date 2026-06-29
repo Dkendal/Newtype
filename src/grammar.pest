@@ -27,7 +27,11 @@ namespace_import = {
 }
 
 unittest = {
-    "unittest" ~ #name = string ~ "do" ~ #body = (expr)* ~ "end"
+    "unittest" ~ #name = string ~ "do" ~ #body = (assert_stmt)* ~ "end"
+}
+
+assert_stmt = {
+    "assert" ~ #claim = extends_expr
 }
 
 named_import = {
@@ -354,6 +358,7 @@ ident_chars = @{ ASCII_ALPHANUMERIC | "$" | "_" }
 
 keyword = _{
     "as"
+  | "assert"
   | "class"
   | "const"
   | "export"

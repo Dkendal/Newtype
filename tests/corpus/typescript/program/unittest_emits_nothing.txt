@@ -1,0 +1,14 @@
+a unittest is compile-time only: it emits no TypeScript, leaving surrounding statements untouched (no stray `;`)
+
+=======
+
+unittest "sanity" do
+    assert string <: unknown
+    assert not (number <: string)
+end
+
+type Foo as 1
+
+=======
+
+type Foo = 1;

@@ -1,0 +1,14 @@
+an omitted generic argument falls back to its declared default
+
+=======
+
+type WithDefault(A, B) defaults B = string as [A, B]
+
+unittest "defaults" do
+  assert WithDefault(number) == [number, string]
+  assert WithDefault(number, boolean) == [number, boolean]
+end
+
+=======
+
+type WithDefault<A, B = string> = [A, B];

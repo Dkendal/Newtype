@@ -65,8 +65,7 @@ impl typescript::Pretty for Interface {
             Some(extends) => D::space()
                 .append("extends")
                 .append(D::space())
-                .append(extends)
-                .append(D::space()),
+                .append(extends),
             None => D::nil(),
         };
 
@@ -152,6 +151,11 @@ impl typescript::Pretty for Ast {
             Ast::Program(Program { statements, .. }) => {
                 let mut doc = D::nil();
                 for stmnt in statements {
+                    // Compile-time-only statements (e.g. `unittest`) emit nothing
+                    // and must not leave a stray `;` or blank lines behind.
+                    if stmnt.is_zero_output() {
+                        continue;
+                    }
                     doc = doc
                         .append(stmnt.to_ts())
                         .append(D::hardline())
@@ -299,6 +303,7 @@ impl typescript::Pretty for Ast {
                 .append(D::space())
                 .append(rhs.to_ts())
                 .group(),
+            Ast::Statement(stmnt) if stmnt.is_zero_output() => stmnt.to_ts(),
             Ast::Statement(stmnt) => stmnt.to_ts().append(D::text(";")),
             Ast::MappedType(MappedType {
                 index: key,
@@ -385,6 +390,9 @@ impl typescript::Pretty for Ast {
                 return value.to_ts();
             }
             Ast::UnitTest(_) => D::nil(),
+            Ast::Assert(_) => {
+                unreachable!("Assert only appears inside a unittest body, which is never rendered")
+            }
             Ast::MacroCall(_) => unreachable!("MacroCall should be desugared before this point"),
             Ast::UnionType(UnionType { types, .. }) => {
                 let sep = D::line().append(D::text("|")).append(D::space());

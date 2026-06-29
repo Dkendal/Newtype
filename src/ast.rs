@@ -218,6 +218,14 @@ pub struct UnitTest {
     pub body: Vec<Ast>,
 }
 
+/// A single `assert <claim>` statement inside a `unittest` body. The `claim` is
+/// an `extends_expr` (e.g. `A <: B`, `A == B`, `not (A <: B)`), so it carries
+/// the same relational operators used by `if`/`cond`/`where`.
+#[ast_node]
+pub struct Assert {
+    pub claim: Rc<Ast>,
+}
+
 #[ast_node]
 pub struct MacroCall {
     pub name: String,
@@ -233,11 +241,11 @@ impl MacroCall {
                 [node] => builtin::dbg(node.to_owned()),
                 _ => panic!("dbg! expects exactly one argument"),
             },
-            "assert_equal" => match self.args.as_slice() {
+            "assert_equal!" => match self.args.as_slice() {
                 [lhs, rhs] => builtin::assert_equal(lhs.to_owned(), rhs.to_owned()),
                 _ => panic!("assert_equal! expects exactly two arguments"),
             },
-            "unquote" => match self.args.as_slice() {
+            "unquote!" => match self.args.as_slice() {
                 [node] => builtin::unquote(node.to_owned()),
                 _ => panic!("unquote! expects exactly one argument"),
             },
@@ -427,6 +435,7 @@ pub enum Ast {
     UnionType(UnionType),
     #[serde(rename(serialize = "&"))]
     IntersectionType(IntersectionType),
+    Assert(Assert),
     Builtin(Builtin),
     CondExpr(CondExpr),
     ExtendsInfixOp(ExtendsInfixOp),
@@ -694,6 +703,18 @@ impl Ast {
         matches!(self, Self::Ident(_))
     }
 
+    /// Compile-time-only statements that contribute no TypeScript output, so
+    /// they must not get a trailing `;` or surrounding blank lines when rendered
+    /// (e.g. a `unittest` block).
+    #[must_use]
+    pub fn is_zero_output(&self) -> bool {
+        match self {
+            Ast::Statement(inner) => inner.is_zero_output(),
+            Ast::UnitTest(_) | Ast::NoOp(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn as_ident(&self) -> Option<&Ident> {
         if let Self::Ident(v) = self {
             Some(v)
@@ -706,6 +727,7 @@ impl Ast {
         match self {
             Ast::Access(x) => x.span,
             Ast::AnyKeyword(x) => *x,
+            Ast::Assert(x) => x.span,
             Ast::ApplyGeneric(x) => x.span,
             Ast::Array(ast) => ast.as_span(),
             Ast::Builtin(x) => x.span,
@@ -1097,5 +1119,7 @@ pub(crate) mod let_expr;
 mod pretty;
 
 mod assignability;
+
+pub(crate) mod type_env;
 
 mod walk;

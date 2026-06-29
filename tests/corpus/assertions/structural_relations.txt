@@ -1,0 +1,15 @@
+structural assignability over literals, unions, intersections, and tuples
+
+=======
+
+unittest "structural" do
+  assert 1 <: number
+  assert "hi" <: string
+  assert (1 | 2) <: number
+  assert ({ a: 1 } & { b: 2 }) <: { a: number, b: number }
+  assert [1, 2] <: [number, number]
+  assert not (number <: string)
+end
+
+=======
+

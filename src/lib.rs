@@ -21,6 +21,7 @@ pub mod extends_result;
 pub mod parser;
 pub mod pretty;
 pub mod runtime;
+pub mod test_harness;
 pub mod typescript;
 
 #[cfg(test)]

@@ -1,0 +1,19 @@
+generic aliases are beta-reduced when applied in an assertion
+
+=======
+
+type Id(T) as T
+type Pair(A, B) as [A, B]
+
+unittest "generics" do
+  assert Id(1) <: number
+  assert Id(string) == string
+  assert Pair(1, string) <: [number, string]
+  assert not (Pair(1, string) <: [string, string])
+end
+
+=======
+
+type Id<T> = T;
+
+type Pair<A, B> = [A, B];

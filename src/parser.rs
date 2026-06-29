@@ -289,6 +289,7 @@ pub fn parse(pair: Pair) -> Ast {
         Rule::statement => parse_statement(pair),
         Rule::type_alias => parse_type_alias(pair),
         Rule::unittest => Ast::UnitTest(parse_unittest(pair)),
+        Rule::assert_stmt => parse_assert(pair),
         Rule::interface => parse_interface(pair),
         Rule::import_statement => parse_import_statement(pair),
         Rule::if_expr => parse_if_expr(pair),
@@ -644,6 +645,21 @@ fn parse_unittest(pair: Pair) -> UnitTest {
     let body = inner.map(parse).collect_vec();
 
     UnitTest { span, name, body }
+}
+
+fn parse_assert(pair: Pair) -> Ast {
+    let span: Span = (&pair).into();
+    let mut inner = pair.into_inner();
+
+    let claim = inner
+        .find(match_tag("claim"))
+        .map(|p| parse_extends_expr(p.into_inner()))
+        .unwrap();
+
+    Ast::Assert(Assert {
+        span,
+        claim: Rc::new(claim),
+    })
 }
 
 fn parse_type_alias(pair: Pair) -> Ast {

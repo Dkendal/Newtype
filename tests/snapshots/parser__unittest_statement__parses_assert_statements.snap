@@ -1,0 +1,7 @@
+---
+source: tests/parser.rs
+assertion_line: 114
+expression: actual.to_sexp().unwrap()
+snapshot_kind: text
+---
+(program (statements (statement unit-test (name . "\"assignability\"") (body (assert (claim extends-infix-op (lhs primitive string) (op . extends) (rhs . unknown-keyword))) (assert (claim extends-prefix-op (op . not) (value extends-infix-op (lhs primitive number) (op . extends) (rhs primitive string))))))))

@@ -192,26 +192,10 @@ mod macro_calls {
     }
 }
 
-/// The `unittest "name" do ... end` statement. The renderer maps
-/// `Ast::UnitTest` to `D::nil()` (src/ast/pretty.rs), so a unittest is meant to
-/// contribute *no* TypeScript output — it is a compile-time-only construct. But
-/// today a program containing a unittest emits a stray `;` line where the
-/// unittest used to be (alongside the otherwise-correct rendering of the real
-/// statements). The intended behaviour is that the unittest disappears entirely
-/// while the surrounding type alias still renders cleanly.
-mod unittest_statement {
-    use super::*;
-
-    #[ignore = "unittest emits a stray ';' instead of nothing (src/ast/pretty.rs Ast::UnitTest => D::nil)"]
-    #[test]
-    fn produces_no_output() {
-        assert_renders_like(
-            Rule::program,
-            "unittest \"sanity\" do A end\ntype Foo as 1",
-            "type Foo = 1;",
-        );
-    }
-}
+// NOTE: the `unittest_statement` pending module has been removed: a `unittest`
+// block now parses (`assert`-led body) and renders to nothing, with no stray
+// `;`. That behavior is locked in by the corpus fixture
+// `tests/corpus/typescript/program/unittest_emits_nothing.txt`.
 
 // NOTE: the `subtype_engine` pending module (Access / ApplyGeneric / Array /
 // Builtin / Path / non-empty TypeLiteral / Ident / Tuple LHS) has been removed:

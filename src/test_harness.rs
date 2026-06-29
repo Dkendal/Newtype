@@ -1,0 +1,477 @@
+//! Compile-time evaluation of `unittest` assertion blocks.
+//!
+//! The harness runs after [`Ast::simplify`](crate::ast::Ast::simplify) and
+//! before rendering. Each `assert <claim>` inside a `unittest` is evaluated with
+//! the same semantics as an `if` condition: the claim is lowered to a
+//! conditional and reduced by the runtime
+//! ([`runtime::builtin::unquote`](crate::runtime::builtin::unquote)). A claim
+//! that reduces to `true` passes; anything else (a definite `false`, an
+//! indeterminate result, or a non-relational claim) fails.
+//!
+//! Top-level `type` aliases and `interface`s are resolved via a [`TypeEnv`], so
+//! claims may reference them by name (`assert Foo <: number`), apply generics
+//! (`assert Id(1) <: number`), and rely on interface inheritance. References the
+//! environment can't resolve (e.g. imported types, or `any`) stay indeterminate.
+//!
+//! Results are written to a caller-supplied sink (stderr in the compiler). The
+//! caller inspects [`Report::has_failures`] to decide the process exit code —
+//! rendering still happens regardless, so the emitted TypeScript is always
+//! produced.
+
+use std::io::{self, Write};
+
+use crate::ast::type_env::{ResolveCtx, TypeEnv};
+use crate::ast::{Ast, ExtendsInfixOp, ExtendsPrefixOp, InfixOp, PrefixOp, Span};
+use crate::extends_result::ExtendsResult;
+
+/// Configuration for a harness run.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Config {
+    /// Stop at the first failing assertion instead of evaluating the rest.
+    pub fail_fast: bool,
+}
+
+/// Summary of a harness run.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Report {
+    pub passed: usize,
+    pub failed: usize,
+}
+
+impl Report {
+    /// Whether any assertion failed (used to pick the process exit code).
+    #[must_use]
+    pub fn has_failures(&self) -> bool {
+        self.failed > 0
+    }
+
+    fn total(&self) -> usize {
+        self.passed + self.failed
+    }
+}
+
+/// The result of evaluating a single `assert` claim.
+enum Outcome {
+    Pass,
+    /// The claim evaluated to something other than `true`: a definite `false`, a
+    /// collapsed `never`, or an indeterminate result (an unresolved reference,
+    /// which the assignability engine reports as `Both`).
+    Fail { result: ExtendsResult },
+    /// The claim couldn't be evaluated: it wasn't a relational proposition, or it
+    /// contained a generic application with the wrong arity. Each diagnostic
+    /// carries its own source span.
+    Errors(Vec<Diagnostic>),
+}
+
+/// A static error preventing evaluation, with the source span to point at.
+struct Diagnostic {
+    span: Span,
+    message: String,
+}
+
+/// Evaluate every `unittest` in `program`, writing a report to `out`.
+///
+/// Returns once all assertions are evaluated, or — when [`Config::fail_fast`] is
+/// set — as soon as one fails. Write errors on `out` are propagated.
+pub fn run(
+    program: &Ast,
+    source: &str,
+    config: Config,
+    out: &mut dyn Write,
+) -> io::Result<Report> {
+    let mut report = Report::default();
+
+    // Symbol table of the program's top-level `type`s and `interface`s, so a
+    // claim referencing them (`assert Foo <: number`) resolves to their shape.
+    let env = TypeEnv::from_program(program);
+
+    'outer: for unittest in collect_unittests(program) {
+        writeln!(out, "unittest {}", unittest.name)?;
+
+        for stmt in &unittest.body {
+            let Ast::Assert(assert) = stmt else { continue };
+
+            // Display from the `assert` statement's span (which includes any
+            // grouping parentheses) rather than the claim node's span, which
+            // excludes them — a parenthesized claim like `not (A <: B)` would
+            // otherwise render with the closing `)` missing.
+            let span = claim_span(source, assert.span);
+            let claim_src = slice_or(source, span, "<claim>");
+
+            match evaluate(&assert.claim, &env) {
+                Outcome::Pass => {
+                    report.passed += 1;
+                    writeln!(out, "  ok      {claim_src}")?;
+                }
+                Outcome::Fail { result } => {
+                    report.failed += 1;
+                    let message = format!(
+                        "assertion failed: expected the relation to hold (`true`), but it \
+                        evaluated to {}",
+                        describe(result)
+                    );
+                    writeln!(out, "  FAILED  {claim_src}")?;
+                    writeln!(out, "{}", span.as_custom_error(source, message))?;
+                    if config.fail_fast {
+                        break 'outer;
+                    }
+                }
+                Outcome::Errors(diagnostics) => {
+                    report.failed += 1;
+                    writeln!(out, "  FAILED  {claim_src}")?;
+                    for diagnostic in diagnostics {
+                        writeln!(
+                            out,
+                            "{}",
+                            diagnostic.span.as_custom_error(source, diagnostic.message)
+                        )?;
+                    }
+                    if config.fail_fast {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+    }
+
+    if report.total() > 0 {
+        writeln!(
+            out,
+            "\n{} assertion(s): {} passed, {} failed",
+            report.total(),
+            report.passed,
+            report.failed
+        )?;
+    }
+
+    Ok(report)
+}
+
+/// Evaluate one claim to a pass/fail/invalid outcome.
+///
+/// The claim is simplified (resolving `let`s, applications, etc. in its
+/// operands) and then reduced over the [`ExtendsResult`] algebra, matching the
+/// desugaring an `if` condition uses: `==`/`!=` become mutual assignability,
+/// `and`/`or` fold, and `not` swaps the relation. Only a definite `true` passes.
+fn evaluate(claim: &Ast, env: &TypeEnv) -> Outcome {
+    match claim {
+        Ast::TrueKeyword(_) => return Outcome::Pass,
+        Ast::FalseKeyword(_) => {
+            return Outcome::Fail {
+                result: ExtendsResult::False,
+            }
+        }
+        Ast::ExtendsInfixOp(_) | Ast::ExtendsPrefixOp(_) => {}
+        _ => {
+            return Outcome::Errors(vec![Diagnostic {
+                span: claim.as_span(),
+                message: "the claim must be a relational expression such as `A <: B`, \
+                    `A == B`, or `not (A <: B)`"
+                    .to_string(),
+            }])
+        }
+    }
+
+    // Reject generic applications with the wrong arity before evaluating, so a
+    // mismatch is a clear error rather than a silently-wrong result.
+    let arity_errors = env.arity_errors(claim);
+    if !arity_errors.is_empty() {
+        return Outcome::Errors(
+            arity_errors
+                .into_iter()
+                .map(|error| Diagnostic {
+                    span: error.span,
+                    message: error.message,
+                })
+                .collect(),
+        );
+    }
+
+    let ctx = ResolveCtx::new(env);
+    match eval_claim(&claim.simplify(), &ctx) {
+        ExtendsResult::True => Outcome::Pass,
+        result => Outcome::Fail { result },
+    }
+}
+
+/// Reduce a (simplified) relational claim to an [`ExtendsResult`], resolving
+/// named references on the leaves against `ctx`.
+fn eval_claim(claim: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
+    match claim {
+        Ast::ExtendsPrefixOp(ExtendsPrefixOp {
+            op: PrefixOp::Not,
+            value,
+            ..
+        }) => negate(eval_claim(value, ctx)),
+
+        Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => match op {
+            InfixOp::Extends => lhs.is_assignable_to_ctx(rhs, ctx),
+            InfixOp::NotExtends => negate(lhs.is_assignable_to_ctx(rhs, ctx)),
+            // `a == b` is `(a <: b) and (b <: a)`; strict and loose coincide here.
+            InfixOp::Equals | InfixOp::StrictEquals => {
+                lhs.is_assignable_to_ctx(rhs, ctx).and(rhs.is_assignable_to_ctx(lhs, ctx))
+            }
+            // `a != b` is `not (a <: b) or not (b <: a)`.
+            InfixOp::NotEquals | InfixOp::StrictNotEquals => {
+                negate(lhs.is_assignable_to_ctx(rhs, ctx))
+                    .or(negate(rhs.is_assignable_to_ctx(lhs, ctx)))
+            }
+            InfixOp::And => eval_claim(lhs, ctx).and(eval_claim(rhs, ctx)),
+            InfixOp::Or => eval_claim(lhs, ctx).or(eval_claim(rhs, ctx)),
+        },
+
+        // `evaluate` only forwards relational claims here, and the operands of
+        // `and`/`or` are relational by construction, so other nodes shouldn't
+        // appear. Treat them as a definite failure rather than panicking.
+        _ => ExtendsResult::False,
+    }
+}
+
+/// Logical negation over [`ExtendsResult`], mirroring how the `not` prefix swaps
+/// a conditional's branches: definite results flip, while `Never` (a collapsed
+/// conditional) and `Both` (indeterminate) are preserved.
+fn negate(result: ExtendsResult) -> ExtendsResult {
+    match result {
+        ExtendsResult::True => ExtendsResult::False,
+        ExtendsResult::False => ExtendsResult::True,
+        ExtendsResult::Never => ExtendsResult::Never,
+        ExtendsResult::Both => ExtendsResult::Both,
+    }
+}
+
+/// A human-readable description of a non-passing result, for the report.
+fn describe(result: ExtendsResult) -> &'static str {
+    match result {
+        ExtendsResult::True => "`true`",
+        ExtendsResult::False => "`false`",
+        ExtendsResult::Never => "`never` (the left-hand side is the bottom type)",
+        ExtendsResult::Both => {
+            "indeterminate (`true | false`) — the claim involves `any` or a type \
+            the environment can't resolve (e.g. an imported type)"
+        }
+    }
+}
+
+/// The span of a claim within an `assert <claim>` statement: the statement span
+/// with the leading `assert` keyword (and following whitespace) trimmed off.
+/// Unlike the claim node's own span, this keeps any grouping parentheses.
+fn claim_span(source: &str, assert_span: Span) -> Span {
+    let start = assert_span.start();
+    let end = assert_span.end().min(source.len());
+
+    let Some(text) = source.get(start..end) else {
+        return assert_span;
+    };
+
+    // Drop the leading `assert` keyword and trim surrounding whitespace, so the
+    // span is tight to the claim (the statement span can include a trailing
+    // newline, which would otherwise bleed the caret onto the next line).
+    let Some(rest) = text.strip_prefix("assert") else {
+        return assert_span;
+    };
+    let leading_ws = rest.len() - rest.trim_start().len();
+    let claim = rest.trim();
+
+    let claim_start = start + "assert".len() + leading_ws;
+    Span::new(claim_start, claim_start + claim.len())
+}
+
+/// The trimmed source slice for `span`, or `fallback` if it can't be sliced
+/// (e.g. a synthesized span) or is empty.
+fn slice_or<'a>(source: &'a str, span: Span, fallback: &'a str) -> &'a str {
+    source
+        .get(span.start()..span.end())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(fallback)
+}
+
+/// Collect the `unittest` statements of a (top-level) program. `unittest` is a
+/// top-level `statement`, so there is no need to recurse into nested scopes.
+fn collect_unittests(program: &Ast) -> Vec<&crate::ast::UnitTest> {
+    let statements = match program {
+        Ast::Program(program) => program.statements.as_slice(),
+        other => std::slice::from_ref(other),
+    };
+
+    statements
+        .iter()
+        .filter_map(|statement| match statement {
+            Ast::Statement(inner) => as_unittest(inner),
+            other => as_unittest(other),
+        })
+        .collect()
+}
+
+fn as_unittest(node: &Ast) -> Option<&crate::ast::UnitTest> {
+    match node {
+        Ast::UnitTest(unittest) => Some(unittest),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_newtype_program;
+
+    /// Parse + simplify `src`, run the harness, and return `(report, stderr)`.
+    fn run_src(src: &str, fail_fast: bool) -> (Report, String) {
+        let program = parse_newtype_program(src).unwrap().simplify();
+        let mut out = Vec::new();
+        let report = run(&program, src, Config { fail_fast }, &mut out).unwrap();
+        (report, String::from_utf8(out).unwrap())
+    }
+
+    #[test]
+    fn passing_assertions_report_no_failures() {
+        let (report, _) = run_src(
+            "unittest \"t\" do\n  assert string <: unknown\n  assert 1 <: number\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 2, failed: 0 });
+        assert!(!report.has_failures());
+    }
+
+    #[test]
+    fn failing_assertion_is_counted() {
+        let (report, stderr) = run_src(
+            "unittest \"t\" do\n  assert number <: string\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 0, failed: 1 });
+        assert!(report.has_failures());
+        assert!(stderr.contains("assertion failed"));
+    }
+
+    #[test]
+    fn not_operator_is_supported() {
+        let (report, _) = run_src(
+            "unittest \"t\" do\n  assert not (number <: string)\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 1, failed: 0 });
+    }
+
+    #[test]
+    fn equality_lowers_to_mutual_assignability() {
+        let (report, _) = run_src("unittest \"t\" do\n  assert 1 == 1\nend", false);
+        assert_eq!(report, Report { passed: 1, failed: 0 });
+    }
+
+    #[test]
+    fn fail_fast_stops_after_first_failure() {
+        let (report, _) = run_src(
+            "unittest \"t\" do\n  assert number <: string\n  assert number <: string\nend",
+            true,
+        );
+        assert_eq!(report, Report { passed: 0, failed: 1 });
+    }
+
+    #[test]
+    fn without_fail_fast_all_assertions_run() {
+        let (report, _) = run_src(
+            "unittest \"t\" do\n  assert number <: string\n  assert number <: string\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 0, failed: 2 });
+    }
+
+    #[test]
+    fn program_without_unittests_reports_nothing() {
+        let (report, stderr) = run_src("type Foo as 1", false);
+        assert_eq!(report, Report { passed: 0, failed: 0 });
+        assert!(stderr.is_empty());
+    }
+
+    #[test]
+    fn resolves_top_level_alias() {
+        let (report, _) = run_src(
+            "type Foo as 1\nunittest \"t\" do\n  assert Foo <: number\n  assert Foo == 1\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 2, failed: 0 });
+    }
+
+    #[test]
+    fn alias_that_does_not_hold_fails() {
+        let (report, _) = run_src(
+            "type Foo as 1\nunittest \"t\" do\n  assert Foo <: string\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 0, failed: 1 });
+    }
+
+    #[test]
+    fn resolves_generic_application() {
+        let (report, _) = run_src(
+            "type Id(T) as T\nunittest \"t\" do\n  assert Id(1) <: number\n  assert Id(string) == string\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 2, failed: 0 });
+    }
+
+    #[test]
+    fn resolves_interface_shape() {
+        let (report, _) = run_src(
+            "interface Point { x: number }\nunittest \"t\" do\n  assert { x: 1, y: 2 } <: Point\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 1, failed: 0 });
+    }
+
+    #[test]
+    fn resolves_interface_inheritance() {
+        let src = "interface Point { x: number }\n\
+            interface Point3 extends Point { z: number }\n\
+            unittest \"t\" do\n\
+            \x20 assert { x: 1, z: 3 } <: Point3\n\
+            \x20 assert { z: 3 } <: Point3\n\
+            end";
+        let (report, _) = run_src(src, false);
+        // The first holds; the second is missing the inherited `x`.
+        assert_eq!(report, Report { passed: 1, failed: 1 });
+    }
+
+    #[test]
+    fn generic_with_too_many_args_is_an_error() {
+        let (report, stderr) = run_src(
+            "type Id(T) as T\nunittest \"t\" do\n  assert Id(1, 2) <: number\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 0, failed: 1 });
+        assert!(stderr.contains("expects 1 type argument(s), but 2 were provided"));
+    }
+
+    #[test]
+    fn generic_with_too_few_args_is_an_error() {
+        let (report, stderr) = run_src(
+            "type Pair(A, B) as [A, B]\nunittest \"t\" do\n  assert Pair(1) <: [number, number]\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 0, failed: 1 });
+        assert!(stderr.contains("expects 2 type argument(s), but 1 was provided"));
+    }
+
+    #[test]
+    fn generic_default_fills_omitted_argument() {
+        let (report, _) = run_src(
+            "type WithDefault(A, B) defaults B = string as [A, B]\n\
+            unittest \"t\" do\n  assert WithDefault(number) == [number, string]\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 1, failed: 0 });
+    }
+
+    #[test]
+    fn recursive_alias_terminates() {
+        // A self-referential type must not loop forever: the coinductive guard
+        // takes `Rec <: Rec` as holding while it is being proven.
+        let (report, _) = run_src(
+            "type Rec as { next: Rec, value: number }\n\
+            unittest \"t\" do\n  assert Rec <: Rec\n  assert Rec == Rec\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 2, failed: 0 });
+    }
+}

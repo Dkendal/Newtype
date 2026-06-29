@@ -92,22 +92,27 @@ fn extends_expr_parser_not_and_both() {
 }
 
 mod unittest_statement {
-    const R: Rule = Rule::program;
     use super::*;
 
-    #[ignore = "whitespace issues"]
     #[test]
-    fn typescript_no_output() {
-        assert_typescript!(
-            R,
-            "",
+    fn parses_assert_statements() {
+        let pair = NewtypeParser::parse(
+            Rule::program,
             r#"
-            unittest "test" do
-                1
+            unittest "assignability" do
+                assert string <: unknown
+                assert not (number <: string)
             end
-            "#
-        );
+            "#,
+        )
+        .unwrap()
+        .next()
+        .unwrap();
+
+        let actual = parser::parse(pair);
+        insta::assert_snapshot!(actual.to_sexp().unwrap());
     }
+
 }
 
 mod unquote {

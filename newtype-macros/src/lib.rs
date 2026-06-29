@@ -445,3 +445,22 @@ pub fn typescript_tests(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn equivalent_tests(attr: TokenStream, item: TokenStream) -> TokenStream {
     corpus_tests_impl(attr, item, quote!(newtype::corpus::run_equivalence_case))
 }
+
+/// Generates one `#[test]` function per fixture file in `dir` for a corpus of
+/// *assertion* tests: each fixture's source must render to the expected
+/// TypeScript, and every `assert` in its `unittest` blocks must hold. Backed by
+/// [`newtype::corpus::run_assertion_case`](../newtype/corpus/fn.run_assertion_case.html).
+///
+/// Arguments are identical to [`macro@typescript_tests`].
+///
+/// # Example
+///
+/// ```ignore
+/// #[assertion_tests(newtype::parser::Rule, "program", dir = "tests/corpus/assertions")]
+/// #[cfg(test)]
+/// mod assertions {}
+/// ```
+#[proc_macro_attribute]
+pub fn assertion_tests(attr: TokenStream, item: TokenStream) -> TokenStream {
+    corpus_tests_impl(attr, item, quote!(newtype::corpus::run_assertion_case))
+}

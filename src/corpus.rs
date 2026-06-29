@@ -180,6 +180,54 @@ pub fn run_equivalence_case(rule: Rule, path: &Path) {
     );
 }
 
+/// Reads the fixture at `path` and runs it end-to-end: its source must render to
+/// the expected TypeScript (the `unittest` blocks emit nothing), *and* every
+/// `assert` in its `unittest`s must hold. This exercises the full pipeline —
+/// parsing, simplification, top-level type resolution, assignability, and
+/// rendering — so a fixture doubles as living documentation. Intended to be
+/// called from a generated `#[test]` function.
+///
+/// # Panics
+///
+/// Panics if the rendered output differs from the expected section, if the
+/// fixture declares no assertions, or if any assertion fails (the report is
+/// included in the message).
+pub fn run_assertion_case(rule: Rule, path: &Path) {
+    let contents = read_fixture(path);
+    let case = parse_fixture(&contents);
+
+    let program = parse_source(rule, &case.source).simplify();
+
+    // Rendering: the `unittest` blocks vanish; everything else renders normally.
+    let rendered = program.render_pretty_ts(RENDER_WIDTH);
+    pretty_assertions::assert_eq!(case.expected, rendered.trim());
+
+    // Assertions: every `assert` in the program must hold.
+    let mut log = Vec::new();
+    let report = crate::test_harness::run(
+        &program,
+        &case.source,
+        crate::test_harness::Config { fail_fast: false },
+        &mut log,
+    )
+    .expect("writing the assertion report to an in-memory buffer cannot fail");
+
+    let log = String::from_utf8_lossy(&log);
+    assert!(
+        report.passed > 0,
+        "fixture {} ran no assertions; an assertion fixture must contain at least one \
+         `assert` inside a `unittest`:\n{}",
+        path.display(),
+        log
+    );
+    assert!(
+        !report.has_failures(),
+        "fixture {} has failing assertions:\n{}",
+        path.display(),
+        log
+    );
+}
+
 fn read_fixture(path: &Path) -> String {
     std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("failed to read fixture {}: {}", path.display(), e))
