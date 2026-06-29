@@ -1,8 +1,8 @@
 use crate::{
     ast::{
         type_env::{fingerprint, ResolveCtx},
-        Access, Ast, Builtin, IntersectionType, ObjectProperty, ObjectPropertyKey, PrimitiveType,
-        Tuple, TypeLiteral, UnionType,
+        Access, Ast, Builtin, FunctionType, IntersectionType, ObjectProperty, ObjectPropertyKey,
+        PrimitiveType, Tuple, TypeLiteral, UnionType,
     },
     extends_result::ExtendsResult,
 };
@@ -150,6 +150,8 @@ impl Ast {
 
             (A::Tuple(tuple), rhs) => Self::tuple_assignable_to(tuple, rhs, ctx),
 
+            (A::FunctionType(lhs), rhs) => Self::function_assignable_to(lhs, rhs, ctx),
+
             (_, _) => T::False,
         }
     }
@@ -166,6 +168,55 @@ impl Ast {
             rhs if Self::accepts_any_object(rhs) => ExtendsResult::True,
             _ => ExtendsResult::False,
         }
+    }
+
+    /// `(p…) => R` assignable to `rhs`. A function value is also an object, so
+    /// it is assignable to the any-object targets. Against another function
+    /// type the relation mirrors the TypeScript checker's `compareSignatures`
+    /// (`internal/checker/relater.go`): the source may omit trailing
+    /// parameters but must not require more than the target supplies,
+    /// parameters relate contravariantly (strict function types), and the
+    /// return type relates covariantly — except a target return of `any` or
+    /// `void` accepts any source return.
+    fn function_assignable_to(lhs: &FunctionType, rhs: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
+        let Ast::FunctionType(target) = rhs else {
+            return if Self::accepts_any_object(rhs) {
+                ExtendsResult::True
+            } else {
+                ExtendsResult::False
+            };
+        };
+
+        // Arity. Parameters up to the first rest parameter are required; the
+        // source must not require more than the target accepts (a trailing
+        // rest parameter on the target absorbs any extra).
+        let source_required = lhs.params.iter().take_while(|p| !p.ellipsis).count();
+        let target_has_rest = target.params.last().is_some_and(|p| p.ellipsis);
+        if !target_has_rest && source_required > target.params.len() {
+            return ExtendsResult::False;
+        }
+
+        // Parameters are contravariant: each target parameter must be
+        // assignable to the source parameter in the same position.
+        let mut acc = ExtendsResult::True;
+        for (source_param, target_param) in lhs.params.iter().zip(target.params.iter()) {
+            acc = acc.and(target_param.kind.is_assignable_to_ctx(&source_param.kind, ctx));
+        }
+
+        // Return type. A target return of `any` or `void` is satisfied by any
+        // source return; otherwise the relation is covariant.
+        let target_return = target.return_type.as_ref();
+        let target_return_absorbs = matches!(
+            target_return,
+            Ast::AnyKeyword(_) | Ast::Primitive(PrimitiveType::Void, _)
+        );
+        let return_relation = if target_return_absorbs {
+            ExtendsResult::True
+        } else {
+            lhs.return_type.is_assignable_to_ctx(target_return, ctx)
+        };
+
+        acc.and(return_relation)
     }
 
     /// `[A, B, …]` tuple assignable to `rhs`.

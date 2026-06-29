@@ -1,4 +1,15 @@
+type F as string
+
 unittest "string is assignable" do
   assert string <: unknown
   assert not (number <: string)
+  assert () => any <: () => any
+  assert () => never <: () => any
+  assert () => unknown <: () => any
+  assert () => unknown <: () => any
+  assert () => any <: Function
+  assert () => any <: (any) => any
+  assert (any) => any <: (any, any) => any
+  assert (string) => any <: (any) => any
+  assert not((string) => any <: (unknown) => any)
 end
