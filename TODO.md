@@ -16,34 +16,34 @@ promote the case into `tests/corpus/`.
 
 ## Unimplemented language features
 
-- [ ] **`typeof` builtin** — `parse_builtin` only maps `Rule::keyof`; `typeof`
-  hits `unreachable!()` (`src/parser.rs:363`) and `BuiltinKeyword` only has
-  `Keyof` (`src/ast.rs:915`). Renderer would print `typeof <arg>` by analogy
-  with `keyof`. _Test:_ `pending::typeof_builtin`.
+- [x] **Interface `extends` clause** — `parse_interface` now reads the `#extends`
+  ident (`src/parser.rs`) instead of hardcoding `None`, so
+  `interface Foo extends Bar {}` renders correctly. _Test:_
+  `pending::interface_extends` (passing, un-ignored).
 
-- [ ] **Interface `extends` clause** — the grammar parses it, but
-  `parse_interface` hardcodes `extends = None` (`src/parser.rs`), so it is
-  silently dropped (`interface Foo extends Bar {}` renders as
-  `interface Foo {}`). The renderer already supports it (`src/ast/pretty.rs:64`).
-  Note: `extends_clause` allows only a single ident. _Test:_
-  `pending::interface_extends`.
+- [x] **Namespace imports** (`import * as Foo from :a`) — `parse_import_statement`
+  now lowers `namespace_import` to `ImportClause::Namespace` (`src/parser.rs`),
+  rendering `import type * as Foo from 'a';`. _Test:_
+  `pending::namespace_import` (passing, un-ignored).
 
-- [ ] **Namespace imports** (`import * as Foo from :a`) — parser lowering is
-  `todo!()` (`src/parser.rs:884`, "not yet implemented"). Renderer supports
-  `ImportClause::Namespace`. Expected: `import type * as Foo from 'a';`.
-  _Test:_ `pending::namespace_import`.
+- [x] **`map_expr` modifiers** (`readonly` / optional `?` / `as` remap) —
+  `parse_map_expr` now extracts the `readonly`/`optional` modifier tags and the
+  `remap_clause` (`src/parser.rs`). Also fixed a printer bug that dropped the
+  space after `readonly` (`src/ast/pretty.rs`). _Test:_
+  `pending::map_expr_modifiers` (passing, un-ignored).
 
-- [ ] **`map_expr` modifiers** (`readonly` / optional `?` / `as` remap) —
-  `parse_map_expr` hardcodes `readonly_mod`/`optional_mod`/`remapped_as` to
-  `None` (and panics on the `readonly` prefix), so modifiers are dropped. The
-  `MappedType` renderer already handles them (`src/ast/pretty.rs:333`). _Test:_
-  `pending::map_expr_modifiers`.
-
-- [ ] **Equality extends operators** `=`, `!=`, `==`, `!==` — `todo!()` in
-  `expand_to_extends` (`src/ast/if_expr.rs:103-106`), so any `if`/`cond` using
-  them panics during `simplify()`. **The lowering semantics are an open design
-  decision** — decide what each maps to, then tighten the tests from
-  "renders OK" to exact output. _Test:_ `pending::equality_operators`.
+- [x] **Equality extends operators** `=`, `!=`, `==`, `!==` — `expand_to_extends`
+  (`src/ast/if_expr.rs`) now lowers these via mutual assignability:
+  `a = b` → `(a <: b) and (b <: a)`; `a != b` → `(a </: b) or (b </: a)`. Strict
+  forms (`==`/`!==`) map identically to the loose forms for now. Also fixed a
+  grammar ordering bug where `=`/`!=` shadowed `==`/`!==` in the `extends_infix`
+  ordered choice (`src/grammar.pest`). _Test:_ `pending::equality_operators`
+  (passing with exact-output assertions, un-ignored).
+  - [ ] _Follow-up:_ make the **strict** forms (`==`/`!==`) compile to the
+    function-identity trick
+    `(<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2)` for
+    true type-identity (distinct from the loose mutual-assignability forms), and
+    tighten `pending::equality_operators::strict_*` to the new exact output.
 
 - [ ] **Macro calls** (`name!(...)`) — `Ast::MacroCall` is `todo!()`
   (`src/runtime.rs:28`) and `unreachable!()` in the renderer

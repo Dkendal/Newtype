@@ -12,7 +12,6 @@ type Extends<A, B> = A extends B ? true : false;
 type Pass = 1;
 type Fail = 0;
 
-
 declare function dbg<T>(x?: T): T;
 
 type a = {a: unknown};

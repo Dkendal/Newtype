@@ -461,32 +461,50 @@ fn parse_cond_expr(pair: Pair) -> CondExpr {
 
 fn parse_map_expr(pair: Pair) -> MappedType {
     let span: Span = (&pair).into();
+    let inner = pair.into_inner();
 
-    let mut inner = pair.into_inner();
+    let readonly_mod = inner
+        .clone()
+        .find(match_tag("readonly"))
+        .map(|_| MappingModifier::Add);
+    let optional_mod = inner
+        .clone()
+        .find(match_tag("optional"))
+        .map(|_| MappingModifier::Add);
 
-    let ipk = next_pair!(inner, Rule::index_property_key);
+    let body = inner.clone().find(match_tag("body")).map(parse).unwrap().into();
 
-    let body = inner.find(match_tag("body")).map(parse).unwrap().into();
+    let ipk = inner
+        .clone()
+        .find(match_rule(Rule::index_property_key))
+        .unwrap();
+    let ipk_inner = ipk.into_inner();
 
-    let mut inner = ipk.into_inner();
-
-    let index = inner
-        .next()
-        .and_then(filter_rule(Rule::ident))
+    let index = ipk_inner
+        .clone()
+        .find(match_tag("index"))
         .unwrap()
         .as_str()
         .to_string();
-
-    let iterable = inner.find(match_tag("iterable")).map(parse).unwrap().into();
+    let iterable = ipk_inner
+        .clone()
+        .find(match_tag("iterable"))
+        .map(parse)
+        .unwrap()
+        .into();
+    let remapped_as = ipk_inner
+        .clone()
+        .find(match_tag("remap_clause"))
+        .map(|p| parse(p).into());
 
     MappedType {
         span,
         index,
         iterable,
         body,
-        remapped_as: None,
-        readonly_mod: None,
-        optional_mod: None,
+        remapped_as,
+        readonly_mod,
+        optional_mod,
     }
 }
 
@@ -698,9 +716,12 @@ fn parse_interface(pair: Pair) -> Ast {
 
     let definition = body.properties;
 
-    let params = parse_definition_options(inner);
+    let extends = inner
+        .clone()
+        .find(match_tag("extends"))
+        .map(|p| p.into_inner().next().unwrap().as_str().to_string());
 
-    let extends = None;
+    let params = parse_definition_options(inner);
 
     Ast::Interface(Interface {
         span,
@@ -881,7 +902,12 @@ fn parse_import_statement(pair: Pair) -> Ast {
             ImportClause::Named(specs)
         }
         Rule::namespace_import => {
-            todo!()
+            let alias = import_clause
+                .into_inner()
+                .find(match_tag("alias"))
+                .map(parse_ident)
+                .unwrap();
+            ImportClause::Namespace { alias }
         }
         _ => parse_error!(pair),
     };

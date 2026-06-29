@@ -49,7 +49,7 @@ pub(crate) fn expand_to_extends(condition: &Ast, then: &Ast, else_arm: &Ast) -> 
                 }
             }
         }
-        Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => match op {
+        Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, span }) => match op {
             InfixOp::And => {
                 let then = expand_to_extends(rhs, then, else_arm);
                 Some(expand_to_extends(lhs, &then, else_arm))
@@ -57,6 +57,51 @@ pub(crate) fn expand_to_extends(condition: &Ast, then: &Ast, else_arm: &Ast) -> 
             InfixOp::Or => {
                 let else_arm = expand_to_extends(rhs, then, else_arm);
                 Some(expand_to_extends(lhs, then, &else_arm))
+            }
+            // DESIGN: equality lowers to mutual assignability; strict == loose for now
+            InfixOp::Equals | InfixOp::StrictEquals => {
+                // a == b  is  (a extends b) and (b extends a)
+                let l = Rc::new(Ast::ExtendsInfixOp(ExtendsInfixOp {
+                    span: *span,
+                    lhs: lhs.clone(),
+                    op: InfixOp::Extends,
+                    rhs: rhs.clone(),
+                }));
+                let r = Rc::new(Ast::ExtendsInfixOp(ExtendsInfixOp {
+                    span: *span,
+                    lhs: rhs.clone(),
+                    op: InfixOp::Extends,
+                    rhs: lhs.clone(),
+                }));
+                let cond = Ast::ExtendsInfixOp(ExtendsInfixOp {
+                    span: *span,
+                    lhs: l,
+                    op: InfixOp::And,
+                    rhs: r,
+                });
+                Some(expand_to_extends(&cond, then, else_arm))
+            }
+            InfixOp::NotEquals | InfixOp::StrictNotEquals => {
+                // a != b  is  (a not-extends b) or (b not-extends a)
+                let l = Rc::new(Ast::ExtendsInfixOp(ExtendsInfixOp {
+                    span: *span,
+                    lhs: lhs.clone(),
+                    op: InfixOp::NotExtends,
+                    rhs: rhs.clone(),
+                }));
+                let r = Rc::new(Ast::ExtendsInfixOp(ExtendsInfixOp {
+                    span: *span,
+                    lhs: rhs.clone(),
+                    op: InfixOp::NotExtends,
+                    rhs: lhs.clone(),
+                }));
+                let cond = Ast::ExtendsInfixOp(ExtendsInfixOp {
+                    span: *span,
+                    lhs: l,
+                    op: InfixOp::Or,
+                    rhs: r,
+                });
+                Some(expand_to_extends(&cond, then, else_arm))
             }
             _ => None,
         },
@@ -100,10 +145,6 @@ pub(crate) fn expand_to_extends(condition: &Ast, then: &Ast, else_arm: &Ast) -> 
                     Rc::new(else_arm.clone()),
                     Rc::new(then.clone()),
                 )),
-                InfixOp::Equals => todo!("equals"),
-                InfixOp::NotEquals => todo!("not equals"),
-                InfixOp::StrictEquals => todo!("strict equals"),
-                InfixOp::StrictNotEquals => todo!("strict not equals"),
                 _ => unreachable!(),
             }
         }

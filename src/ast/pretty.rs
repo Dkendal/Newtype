@@ -331,8 +331,8 @@ impl typescript::Pretty for Ast {
                 let rhs_doc = D::line().append(rhs_doc).nest(4).group();
 
                 let readonly_doc = match readonly_mod {
-                    Some(MappingModifier::Add) => D::text("readonly"),
-                    Some(MappingModifier::Remove) => D::text("-readonly"),
+                    Some(MappingModifier::Add) => D::text("readonly").append(D::space()),
+                    Some(MappingModifier::Remove) => D::text("-readonly").append(D::space()),
                     None => D::nil(),
                 };
 

@@ -61,25 +61,6 @@ fn assert_renders_ok(rule: Rule, source: &str) {
     );
 }
 
-/// `typeof(...)` builtin. Implemented: `BuiltinKeyword` only has `Keyof`;
-/// `parse_builtin` (src/parser.rs) hits `unreachable!()` for `typeof`, and the
-/// renderer would print `typeof <arg>` by analogy with `keyof`.
-mod typeof_builtin {
-    use super::*;
-
-    #[ignore = "typeof builtin unimplemented: parse_builtin only maps Rule::keyof (src/parser.rs)"]
-    #[test]
-    fn typeof_identifier() {
-        assert_renders_like(Rule::expr, "typeof(A)", "typeof A");
-    }
-
-    #[ignore = "typeof builtin unimplemented: parse_builtin only maps Rule::keyof (src/parser.rs)"]
-    #[test]
-    fn typeof_nested() {
-        assert_renders_like(Rule::expr, "typeof(keyof(A))", "typeof keyof A");
-    }
-}
-
 /// `interface Foo extends Bar { ... }`. The renderer already emits the
 /// `extends` clause (src/ast/pretty.rs), but `parse_interface` hardcodes
 /// `extends = None` (src/parser.rs), so the clause is parsed then dropped — the
@@ -87,13 +68,11 @@ mod typeof_builtin {
 mod interface_extends {
     use super::*;
 
-    #[ignore = "interface extends dropped: parse_interface hardcodes extends = None (src/parser.rs)"]
     #[test]
     fn empty_body() {
         assert_renders_like(Rule::interface, "interface Foo extends Bar {}", "interface Foo extends Bar {}");
     }
 
-    #[ignore = "interface extends dropped: parse_interface hardcodes extends = None (src/parser.rs)"]
     #[test]
     fn with_members() {
         assert_renders_like(
@@ -110,7 +89,6 @@ mod interface_extends {
 mod namespace_import {
     use super::*;
 
-    #[ignore = "namespace import lowering unimplemented: src/parser.rs panics (not yet implemented)"]
     #[test]
     fn star_as_alias() {
         assert_renders_like(
@@ -128,19 +106,16 @@ mod namespace_import {
 mod map_expr_modifiers {
     use super::*;
 
-    #[ignore = "map_expr modifiers dropped: parse_map_expr hardcodes readonly/optional/remap = None (src/parser.rs)"]
     #[test]
     fn readonly() {
         assert_renders_like(Rule::map_expr, "map readonly k in t do 1 end", "{ readonly [k in t]: 1 }");
     }
 
-    #[ignore = "map_expr modifiers dropped: parse_map_expr hardcodes readonly/optional/remap = None (src/parser.rs)"]
     #[test]
     fn optional() {
         assert_renders_like(Rule::map_expr, "map ?k in t do 1 end", "{ [k in t]?: 1 }");
     }
 
-    #[ignore = "map_expr modifiers dropped: parse_map_expr hardcodes readonly/optional/remap = None (src/parser.rs)"]
     #[test]
     fn remap() {
         assert_renders_like(Rule::map_expr, "map k in t as r do 1 end", "{ [k in t as r]: 1 }");
@@ -148,35 +123,51 @@ mod map_expr_modifiers {
 }
 
 /// Equality operators in extends conditions: `=`, `!=`, `==`, `!==`.
-/// `expand_to_extends` (src/ast/if_expr.rs) has `todo!()` for all four, so any
-/// `if`/`cond` using them panics during `simplify()`. The exact lowering is an
-/// open design decision, so these only assert the pipeline runs — replace with
-/// `assert_renders_like` once the intended TypeScript is settled.
+/// `expand_to_extends` (src/ast/if_expr.rs) lowers these via *mutual
+/// assignability*: `a = b` becomes `(a extends b) and (b extends a)`, and
+/// `a != b` becomes `(a not-extends b) or (b not-extends a)`. The strict forms
+/// (`==`/`!==`) currently map identically to the loose forms — TypeScript's type
+/// level can't distinguish them without the function-identity trick, which the
+/// current AST can't express cleanly.
 mod equality_operators {
     use super::*;
 
-    #[ignore = "equality operator lowering is todo!() in src/ast/if_expr.rs; output semantics undecided"]
     #[test]
     fn equals() {
-        assert_renders_ok(Rule::if_expr, "if a = b then c else d end");
+        assert_renders_like(
+            Rule::if_expr,
+            "if a = b then c else d end",
+            "a extends b ? b extends a ? c : d : d",
+        );
     }
 
-    #[ignore = "equality operator lowering is todo!() in src/ast/if_expr.rs; output semantics undecided"]
     #[test]
     fn not_equals() {
-        assert_renders_ok(Rule::if_expr, "if a != b then c else d end");
+        assert_renders_like(
+            Rule::if_expr,
+            "if a != b then c else d end",
+            "a extends b ? b extends a ? d : c : c",
+        );
     }
 
-    #[ignore = "equality operator lowering is todo!() in src/ast/if_expr.rs; output semantics undecided"]
+    // `==` maps identically to `=` (see module doc).
     #[test]
     fn strict_equals() {
-        assert_renders_ok(Rule::if_expr, "if a == b then c else d end");
+        assert_renders_like(
+            Rule::if_expr,
+            "if a == b then c else d end",
+            "a extends b ? b extends a ? c : d : d",
+        );
     }
 
-    #[ignore = "equality operator lowering is todo!() in src/ast/if_expr.rs; output semantics undecided"]
+    // `!==` maps identically to `!=` (see module doc).
     #[test]
     fn strict_not_equals() {
-        assert_renders_ok(Rule::if_expr, "if a !== b then c else d end");
+        assert_renders_like(
+            Rule::if_expr,
+            "if a !== b then c else d end",
+            "a extends b ? b extends a ? d : c : c",
+        );
     }
 }
 

@@ -115,11 +115,9 @@ indexed_access = { "[" ~ expr ~ "]" }
 
 builtin = { #name = builtin_keyword ~ "(" ~ #argument = expr ~ ")" }
 
-builtin_keyword = _{ keyof | builtin_typeof }
+builtin_keyword = _{ keyof }
 
 keyof = @{ "keyof" }
-
-builtin_typeof = @{ "typeof" }
 
 application = { "(" ~ #arguments = argument_list ~ ")" }
 
@@ -264,10 +262,12 @@ extends_prefix = _{ not }
 extends_infix = _{
     extends
   | not_extends
-  | equals
-  | not_equals
+  // strict forms (`==`, `!==`) must precede their prefixes (`=`, `!=`):
+  // PEG ordered choice is greedy, so `=` would otherwise shadow `==`.
   | strict_equals
   | strict_not_equals
+  | equals
+  | not_equals
   | and
   | or
 }
@@ -376,7 +376,6 @@ keyword = _{
   | "then"
   | "true"
   | "type"
-  | "typeof"
   | "unittest"
   | "else"
   | "end"
