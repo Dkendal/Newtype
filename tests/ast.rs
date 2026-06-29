@@ -3,7 +3,7 @@ use newtype::extends_result::ExtendsResult;
 #[macro_use]
 mod common;
 
-mod is_subtype_tests {
+mod assignability_tests {
     use super::*;
     use rstest::rstest;
 
@@ -126,8 +126,118 @@ mod is_subtype_tests {
     #[case("String", "undefined", FALSE)]
     #[case("String", "never", FALSE)]
     #[trace]
-    fn is_subtype(#[case] a: &str, #[case] b: &str, #[case] expected: ExtendsResult) {
-        assert_eq!(ast!(a).is_subtype(&ast!(b)), expected);
+    fn is_assignable_to(#[case] a: &str, #[case] b: &str, #[case] expected: ExtendsResult) {
+        assert_eq!(ast!(a).is_assignable_to(&ast!(b)), expected);
+    }
+
+    /// Structural assignability for the LHS variants that were previously
+    /// `todo!()`: arrays, tuples, non-empty object literals, the opaque/
+    /// unresolvable references (`Ident`, `Path`, `Access`, `ApplyGeneric`,
+    /// `keyof`), and set operations (unions & intersections). Expected values
+    /// mirror the TypeScript checker's assignable relation
+    /// (`internal/checker/relater.go`) and the `assignmentCompat*` baselines,
+    /// subject to this engine's existing conventions (e.g. primitives are not
+    /// assignable to `{}`, but object/array/tuple values are).
+    #[rstest]
+    // --- Array LHS ---
+    #[case("number[]", "number[]", TRUE)] // reflexive
+    #[case("1[]", "number[]", TRUE)] // covariant element: 1 <: number
+    #[case("number[]", "string[]", FALSE)]
+    #[case("string[]", "number[]", FALSE)]
+    #[case("never[]", "string[]", TRUE)] // never element is assignable
+    #[case("string[]", "never[]", FALSE)]
+    #[case("number[]", "object", TRUE)] // arrays are objects
+    #[case("number[]", "{}", TRUE)]
+    #[case("number[]", "Object", TRUE)]
+    #[case("number[]", "[number]", FALSE)] // array is not a fixed-arity tuple
+    #[case("number[]", "string", FALSE)]
+    #[case("number[]", "number", FALSE)]
+    #[case("number[][]", "number[][]", TRUE)] // nested arrays
+    #[case("number[][]", "string[][]", FALSE)]
+    // --- Tuple LHS ---
+    #[case("[number, string]", "[number, string]", TRUE)] // reflexive
+    #[case("[1, 'a']", "[number, string]", TRUE)] // element-wise widening
+    #[case("[number]", "[string]", FALSE)]
+    #[case("[number, string]", "[number]", FALSE)] // too long
+    #[case("[number]", "[number, string]", FALSE)] // too short
+    #[case("[number, string]", "[string, number]", FALSE)] // order matters
+    #[case("[number, number]", "number[]", TRUE)] // tuple to array
+    #[case("[1, 2]", "number[]", TRUE)]
+    #[case("[number, string]", "number[]", FALSE)] // string not <: number
+    #[case("[]", "number[]", TRUE)] // empty tuple to any array
+    #[case("[]", "[]", TRUE)]
+    #[case("[number]", "object", TRUE)]
+    #[case("[number]", "{}", TRUE)]
+    #[case("[number]", "Object", TRUE)]
+    #[case("[number]", "string", FALSE)]
+    // --- Non-empty TypeLiteral LHS ---
+    #[case("{ x: 1 }", "{ x: number }", TRUE)]
+    #[case("{ x: 1 }", "{ x: string }", FALSE)]
+    #[case("{ x: 1 }", "{}", TRUE)]
+    #[case("{ x: 1 }", "object", TRUE)]
+    #[case("{ x: 1 }", "Object", TRUE)]
+    #[case("{ x: 1 }", "{ x: 1, y: 2 }", FALSE)] // missing required property
+    #[case("{ x: 1, y: 2 }", "{ x: number }", TRUE)] // width subtyping: extras allowed
+    #[case("{ a: number }", "{ b: number }", FALSE)] // name mismatch
+    #[case("{ x: number }", "{ x: 1 }", FALSE)] // base not assignable to literal
+    #[case("{ x: { y: 1 } }", "{ x: { y: number } }", TRUE)] // depth
+    #[case("{ x: { y: 1 } }", "{ x: { y: string } }", FALSE)]
+    #[case("{ x: 1 }", "string", FALSE)]
+    #[case("{ x: 1 }", "[number]", FALSE)]
+    // optional target properties (newtype prefix `?` syntax)
+    #[case("{ one: number }", "{ one: number, ?two: string }", TRUE)] // optional missing ok
+    #[case("{ one: number, two: string }", "{ one: number, ?two: string }", TRUE)]
+    #[case("{ one: number, two: number }", "{ one: number, ?two: string }", FALSE)] // present but wrong
+    // optional source property may be absent → not assignable to a required target
+    #[case("{ ?two: string }", "{ two: string }", FALSE)]
+    #[case("{ ?two: string }", "{ ?two: string }", TRUE)] // optional → optional ok
+    // optional target widens with undefined
+    #[case("{ x: undefined }", "{ ?x: number }", TRUE)]
+    // empty source is assignable to an all-optional target
+    #[case("{}", "{ ?x: number }", TRUE)]
+    #[case("{}", "{ ?a: string, ?b: number }", TRUE)]
+    #[case("{}", "{ x: number }", FALSE)] // still false: required prop missing
+    // --- Opaque / unresolvable references → indeterminate (Both) ---
+    #[case("Foo", "Foo", TRUE)] // reflexive resolves first
+    #[case("Foo", "any", TRUE)]
+    #[case("Foo", "unknown", TRUE)]
+    #[case("Foo", "never", FALSE)]
+    #[case("Foo", "string", BOTH)]
+    #[case("Foo", "object", BOTH)]
+    #[case("Foo", "Object", BOTH)] // wrapper target does not preempt the free variable
+    #[case("Foo", "{ x: 1 }", BOTH)]
+    #[case("A::B", "A::B", TRUE)]
+    #[case("A::B", "string", BOTH)]
+    #[case("A[B]", "string", BOTH)] // indexed access
+    #[case("A(B)", "string", BOTH)] // generic application
+    #[case("keyof(A)", "string", BOTH)]
+    // --- Union LHS / RHS ---
+    #[case("1 | 2", "number", TRUE)] // every member <: number
+    #[case("1 | 2", "1", FALSE)] // 2 is not <: 1
+    #[case("'a' | 'b'", "string", TRUE)]
+    #[case("1", "1 | 2", TRUE)] // assignable to some member
+    #[case("3", "1 | 2", FALSE)]
+    #[case("string", "string | number", TRUE)]
+    #[case("string", "number | boolean", FALSE)]
+    #[case("string | number", "number | string", TRUE)]
+    #[case("1 | 2", "number | string", TRUE)]
+    #[case("boolean", "true | false", TRUE)] // boolean is true | false
+    // --- Intersection LHS / RHS ---
+    #[case("{ one: number } & { two: string }", "{ one: number }", TRUE)] // some member
+    #[case("{ one: number } & { two: string }", "{ two: string }", TRUE)]
+    #[case("{ one: number } & { two: string }", "{ one: number, two: string }", TRUE)] // merged shape
+    #[case("{ one: number } & { two: string }", "{ three: boolean }", FALSE)]
+    #[case("{ a: 1 } & { b: 2 }", "{ a: number, b: number } | string", TRUE)] // merged vs union
+    #[case("string", "string & Object", TRUE)] // assignable to every member
+    #[case("string", "string & number", FALSE)]
+    #[case("never & string", "number", NEVER)] // never & T == never
+    #[trace]
+    fn is_assignable_to_extended(
+        #[case] a: &str,
+        #[case] b: &str,
+        #[case] expected: ExtendsResult,
+    ) {
+        assert_eq!(ast!(a).is_assignable_to(&ast!(b)), expected);
     }
 }
 

@@ -1096,6 +1096,6 @@ pub(crate) mod let_expr;
 
 mod pretty;
 
-mod subtype;
+mod assignability;
 
 mod walk;

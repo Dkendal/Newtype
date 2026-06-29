@@ -55,21 +55,42 @@ promote the case into `tests/corpus/`.
   only be used with an extends expression"); `not` of `not` is unsupported.
   Decide whether to allow it (simplifying the double negation away).
 
-## Subtype engine (`is_subtype`)
+## Assignability engine (`is_assignable_to`)
 
-`src/ast/subtype.rs` has `todo!()` for several left-hand-side AST variants, so
-asking whether one is a subtype of anything panics. Existing coverage in
-`tests/ast.rs::is_subtype_tests` only exercises primitive/literal/top/bottom
-LHS types. _Tests:_ `pending::subtype_engine::*`.
-
-- [ ] `Access` LHS — `src/ast/subtype.rs:36`
-- [ ] `ApplyGeneric` LHS — `src/ast/subtype.rs:38`
-- [ ] `Array` LHS — `src/ast/subtype.rs:40`
-- [ ] `Builtin` LHS — `src/ast/subtype.rs:42`
-- [ ] `Path` LHS — `src/ast/subtype.rs:44`
-- [ ] `TypeLiteral` (non-empty) LHS — `src/ast/subtype.rs:54`
-- [ ] `Ident` LHS — `src/ast/subtype.rs:78`
-- [ ] `Tuple` LHS — `src/ast/subtype.rs:81`
+- [x] **Implemented the assignability engine** — renamed `is_subtype` →
+  `is_assignable_to` and the module `src/ast/subtype.rs` →
+  `src/ast/assignability.rs` (the relation is TypeScript *assignability*, not
+  strict subtyping). All previously-`todo!()` left-hand-side variants now have
+  real structural logic mirroring the TS checker
+  (`typescript-go/internal/checker/relater.go`) and the `assignmentCompat*`
+  baselines. _Tests:_ `assignability_tests::is_assignable_to_extended` in
+  `tests/ast.rs` (71 cases). The `pending::subtype_engine::*` totality stubs
+  were removed.
+  - [x] `Array` LHS — covariant element relation; arrays are objects (`<:`
+    `{}`/`object`/`Object`); not assignable to a fixed-arity tuple.
+  - [x] `Tuple` LHS — element-wise, same arity; tuple-to-array (`[A,B] <: T[]`);
+    empty tuple assignable to any array; tuples are objects.
+  - [x] `TypeLiteral` (non-empty) LHS — structural width/depth subtyping;
+    optional target properties may be absent; index/computed keys → `Both`.
+  - [x] Set operations — `UnionType` LHS (every member) / RHS (some member);
+    `IntersectionType` LHS (some member, or merged object shape) / RHS (every
+    member).
+  - [x] `Access`, `ApplyGeneric`, `Builtin` (`keyof`), `Path`, and bare `Ident`
+    LHS — these are unresolvable references (no type environment at this stage,
+    since `let`-bindings are substituted upstream), so they are treated as
+    **indeterminate** (`ExtendsResult::Both`), which `unquote` lowers to the
+    union of both conditional branches. _Design note:_ `Both` is the sound
+    over-approximation (it keeps both branches and matches the existing `any`
+    precedent); a follow-up could add an `Indeterminate`/deferred variant that
+    re-emits the conditional verbatim for `tsc` to resolve.
+  - _Known limitations (deferred, not yet handled):_
+    - [ ] **Implicit intersection reduction** — contradictory primitive
+      intersections are not reduced to `never`, so `string & number <: string`
+      returns `True` instead of `Never` (TS reduces `string & number` to
+      `never`). Explicit `never` members *are* handled (`never & T → never`).
+    - [ ] **Source index signatures** — a plain target key is not matched
+      against a source index signature; e.g. `{ [k in string]: number } <:
+      { a: number }` returns `Both` (conservative) rather than `True`.
 
 ## Bugs
 

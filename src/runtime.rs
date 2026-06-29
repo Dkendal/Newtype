@@ -33,7 +33,7 @@ pub mod builtin {
                     then_branch,
                     else_branch,
                     ..
-                }) => match lhs.is_subtype(&rhs) {
+                }) => match lhs.is_assignable_to(&rhs) {
                     ExtendsResult::True => (then_branch.into(), acc),
                     ExtendsResult::False => (else_branch.into(), acc),
                     ExtendsResult::Never => (Ast::NeverKeyword(span), acc),

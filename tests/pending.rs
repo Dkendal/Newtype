@@ -26,7 +26,6 @@
 //!   a non-empty result. Tighten this into an `assert_renders_like` once the
 //!   intended output is decided.
 
-use newtype::extends_result::ExtendsResult;
 use newtype::parser::Rule;
 
 #[macro_use]
@@ -214,75 +213,11 @@ mod unittest_statement {
     }
 }
 
-/// `is_subtype` (src/ast/subtype.rs) has `todo!()` arms for several
-/// left-hand-side AST variants: `Access`, `ApplyGeneric`, `Array`, `Builtin`,
-/// `Path`, a non-empty `TypeLiteral`, `Ident`, and `Tuple`. Each of these
-/// panics with "not yet implemented" the moment it is asked whether it is a
-/// subtype of anything. The intended subtyping result is undecided, so each
-/// test only asserts the call *returns* an `ExtendsResult` without panicking;
-/// the RHS (`string`) is chosen so no earlier match arm short-circuits the
-/// answer, forcing evaluation to reach the variant's `todo!()`.
-mod subtype_engine {
-    use super::*;
-
-    /// Assert `a.is_subtype(b)` returns *some* `ExtendsResult` (i.e. the engine
-    /// does not panic). Currently every case below panics on a `todo!()`.
-    fn assert_subtype_total(a: &str, b: &str) {
-        let result = ast!(a).is_subtype(&ast!(b));
-        assert!(matches!(
-            result,
-            ExtendsResult::True | ExtendsResult::False | ExtendsResult::Both | ExtendsResult::Never
-        ));
-    }
-
-    #[ignore = "is_subtype Access LHS is todo!() in src/ast/subtype.rs"]
-    #[test]
-    fn access_lhs() {
-        assert_subtype_total("A[B]", "string");
-    }
-
-    #[ignore = "is_subtype ApplyGeneric LHS is todo!() in src/ast/subtype.rs"]
-    #[test]
-    fn apply_generic_lhs() {
-        assert_subtype_total("A(B)", "string");
-    }
-
-    #[ignore = "is_subtype Array LHS is todo!() in src/ast/subtype.rs"]
-    #[test]
-    fn array_lhs() {
-        assert_subtype_total("A[]", "string");
-    }
-
-    #[ignore = "is_subtype Builtin LHS is todo!() in src/ast/subtype.rs"]
-    #[test]
-    fn builtin_lhs() {
-        assert_subtype_total("keyof(A)", "string");
-    }
-
-    #[ignore = "is_subtype Path LHS is todo!() in src/ast/subtype.rs"]
-    #[test]
-    fn path_lhs() {
-        assert_subtype_total("A::B", "string");
-    }
-
-    #[ignore = "is_subtype non-empty TypeLiteral LHS is todo!() in src/ast/subtype.rs"]
-    #[test]
-    fn type_literal_lhs() {
-        assert_subtype_total("{ x: 1 }", "string");
-    }
-
-    #[ignore = "is_subtype Ident LHS is todo!() in src/ast/subtype.rs"]
-    #[test]
-    fn ident_lhs() {
-        assert_subtype_total("Foo", "string");
-    }
-
-    #[ignore = "is_subtype Tuple LHS is todo!() in src/ast/subtype.rs"]
-    #[test]
-    fn tuple_lhs() {
-        assert_subtype_total("[A, B]", "string");
-    }
-}
+// NOTE: the `subtype_engine` pending module (Access / ApplyGeneric / Array /
+// Builtin / Path / non-empty TypeLiteral / Ident / Tuple LHS) has been removed:
+// the assignability engine (src/ast/assignability.rs, formerly subtype.rs) now
+// implements all of those arms. Their behavior is locked in by
+// `assignability_tests::is_assignable_to_extended` in tests/ast.rs.
 
 /// Known correctness bugs in *implemented* features (as opposed to the
 /// unimplemented features above). These render the wrong TypeScript today; each
