@@ -110,9 +110,9 @@ mod assignability_tests {
     // String
     #[case("String", "any", TRUE)]
     #[case("String", "unknown", TRUE)]
-    #[case("String", "{}", FALSE)]
+    #[case("String", "{}", TRUE)] // a wrapper is an object value
     #[case("String", "[]", FALSE)]
-    #[case("String", "string", TRUE)]
+    #[case("String", "string", FALSE)] // wrapper is NOT assignable to its bare primitive
     #[case("String", "number", FALSE)]
     #[case("String", "boolean", FALSE)]
     #[case("String", "Object", TRUE)]
@@ -125,6 +125,53 @@ mod assignability_tests {
     #[case("String", "null", FALSE)]
     #[case("String", "undefined", FALSE)]
     #[case("String", "never", FALSE)]
+    // primitive/literal <: its wrapper = TRUE
+    #[case("number", "Number", TRUE)]
+    #[case("boolean", "Boolean", TRUE)]
+    #[case("1", "Number", TRUE)]
+    #[case("'x'", "String", TRUE)]
+    #[case("true", "Boolean", TRUE)]
+    #[case("false", "Boolean", TRUE)]
+    // wrapper <: bare primitive = FALSE (unsound to allow)
+    #[case("Number", "number", FALSE)]
+    #[case("Boolean", "boolean", FALSE)]
+    // wrapper <: same wrapper = TRUE
+    #[case("Number", "Number", TRUE)]
+    #[case("Boolean", "Boolean", TRUE)]
+    // wrapper <: any-object target = TRUE (a wrapper is an object value)
+    #[case("Number", "{}", TRUE)]
+    #[case("Number", "object", TRUE)]
+    #[case("Number", "Object", TRUE)]
+    #[case("Boolean", "{}", TRUE)]
+    #[case("Boolean", "object", TRUE)]
+    #[case("Boolean", "Object", TRUE)]
+    // cross-primitive wrappers = FALSE
+    #[case("string", "Number", FALSE)]
+    #[case("number", "String", FALSE)]
+    #[case("boolean", "String", FALSE)]
+    #[case("String", "Number", FALSE)]
+    #[case("Number", "String", FALSE)]
+    #[case("Number", "string", FALSE)]
+    // nullish/void (--strict). `undefined` is assignable to `void`, but the
+    // relation is one-directional and `null` is assignable to neither.
+    #[case("undefined", "undefined", TRUE)]
+    #[case("undefined", "void", TRUE)]
+    #[case("undefined", "null", FALSE)]
+    #[case("undefined", "unknown", TRUE)]
+    #[case("undefined", "{}", FALSE)]
+    #[case("undefined", "object", FALSE)]
+    #[case("void", "void", TRUE)]
+    #[case("void", "undefined", FALSE)]
+    #[case("void", "null", FALSE)]
+    #[case("void", "unknown", TRUE)]
+    #[case("void", "{}", FALSE)]
+    #[case("void", "object", FALSE)]
+    #[case("null", "null", TRUE)]
+    #[case("null", "undefined", FALSE)]
+    #[case("null", "void", FALSE)]
+    #[case("null", "unknown", TRUE)]
+    #[case("null", "{}", FALSE)]
+    #[case("null", "object", FALSE)]
     #[trace]
     fn is_assignable_to(#[case] a: &str, #[case] b: &str, #[case] expected: ExtendsResult) {
         assert_eq!(ast!(a).is_assignable_to(&ast!(b)), expected);
@@ -197,6 +244,12 @@ mod assignability_tests {
     #[case("{}", "{ ?x: number }", TRUE)]
     #[case("{}", "{ ?a: string, ?b: number }", TRUE)]
     #[case("{}", "{ x: number }", FALSE)] // still false: required prop missing
+    // optional target/source via TypeScript postfix `?` syntax (`a?: T`)
+    #[case("{ a: 1 }", "{ a?: number }", TRUE)] // required source → optional target
+    #[case("{ a?: 1 }", "{ a: 1 }", FALSE)] // optional source → required target
+    #[case("{}", "{ a?: 1 }", TRUE)] // empty source → all-optional target
+    #[case("{ a?: 1 }", "{ a?: 1 }", TRUE)] // optional → optional ok
+    #[case("{ readonly a?: 1 }", "{ a?: number }", TRUE)] // readonly + postfix optional
     // --- Opaque / unresolvable references → indeterminate (Both) ---
     #[case("Foo", "Foo", TRUE)] // reflexive resolves first
     #[case("Foo", "any", TRUE)]
@@ -231,6 +284,47 @@ mod assignability_tests {
     #[case("string", "string & Object", TRUE)] // assignable to every member
     #[case("string", "string & number", FALSE)]
     #[case("never & string", "number", NEVER)] // never & T == never
+    // Contradictory intersections of disjoint primitives are uninhabited and
+    // reduce to `never` (the bottom type). TS treats `string & number`, etc.,
+    // as `never`, so the LHS collapses regardless of the target.
+    #[case("string & number", "never", NEVER)]
+    #[case("string & number", "string", NEVER)]
+    #[case("string & boolean", "string", NEVER)]
+    #[case("1 & 2", "number", NEVER)] // two distinct disjoint literals
+    #[case("true & false", "boolean", NEVER)]
+    // ...but a literal and its widened primitive share a common subtype (the
+    // literal), so the intersection is inhabited and must NOT reduce to never.
+    #[case("1 & number", "number", TRUE)] // 1 & number == 1
+    #[case("1 & number", "never", FALSE)]
+    #[case("string & 'a'", "string", TRUE)] // string & "a" == "a"
+    #[case("string & 'a'", "never", FALSE)]
+    // Object members never participate in primitive contradiction.
+    #[case("{ a: 1 } & { b: 2 }", "never", FALSE)]
+    #[case("string & {}", "never", FALSE)] // string & {} == string
+    // --- Function type LHS ---
+    #[case("() => any", "() => any", TRUE)] // reflexive
+    #[case("() => never", "() => any", TRUE)] // covariant return: never <: any
+    #[case("() => string", "() => unknown", TRUE)] // covariant return widening
+    #[case("() => unknown", "() => string", FALSE)] // return is not contravariant
+    #[case("(unknown) => void", "(string) => void", TRUE)] // params contravariant
+    #[case("(string) => void", "(unknown) => void", FALSE)]
+    #[case("() => void", "(string) => void", TRUE)] // source may omit trailing params
+    #[case("(string) => void", "() => void", FALSE)] // but not require more than target
+    #[case("(string) => any", "(any) => any", TRUE)] // `any` param is compatible
+    #[case("(string) => any", "(unknown) => any", FALSE)] // `unknown` param is not
+    #[case("() => any", "Function", TRUE)] // functions are assignable to Function
+    #[case("() => void", "{}", TRUE)] // functions are objects
+    #[case("5", "Function", FALSE)] // non-functions are not
+    // --- readonly arrays / tuples (one-directional: mutable <: readonly) ---
+    #[case("string[]", "readonly string[]", TRUE)] // mutable -> readonly
+    #[case("readonly string[]", "string[]", FALSE)] // readonly -> mutable
+    #[case("readonly string[]", "readonly string[]", TRUE)] // reflexive
+    #[case("readonly 1[]", "readonly number[]", TRUE)] // covariant element
+    #[case("readonly string[]", "readonly number[]", FALSE)]
+    #[case("[string, number]", "readonly [string, number]", TRUE)]
+    #[case("readonly [string, number]", "[string, number]", FALSE)]
+    #[case("readonly string[]", "object", TRUE)] // readonly arrays are objects
+    #[case("readonly string[]", "unknown", TRUE)]
     #[trace]
     fn is_assignable_to_extended(
         #[case] a: &str,

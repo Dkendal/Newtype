@@ -12,4 +12,10 @@ unittest "string is assignable" do
   assert (any) => any <: (any, any) => any
   assert (string) => any <: (any) => any
   assert not((string) => any <: (unknown) => any)
+  assert {} <: {}
+  assert {} <: any
+  assert {} <: unknown
+  assert {x: string} <: {}
+  assert {x: string} <: {x: string}
+  assert {x: ''} <: {x: string}
 end

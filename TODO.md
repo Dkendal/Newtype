@@ -16,6 +16,30 @@ promote the case into `tests/corpus/`.
 
 ## Unimplemented language features
 
+- [x] **Optional property modifier** `{ a?: T }` — grammar/parser/printer now
+  accept the postfix `?` on object-type properties (the assignability engine
+  already modelled `ObjectProperty.optional`). _Tests:_
+  `tests/corpus/typescript/object_literal/optional_modifier_postfix.txt`.
+
+- [x] **Bare `keyof` operand** — `keyof T` is now an `expr_prefix` (not only the
+  parenthesised `keyof(T)` builtin), so it parses anywhere an operand is
+  expected, e.g. `assert keyof X <: …`. Precedence sits just above `pipe`:
+  `keyof A[]` is `keyof (A[])`, `keyof A | B` is `(keyof A) | B`
+  (`src/grammar.pest`, `src/parser/pratt.rs`, `src/parser.rs`). _Test:_
+  `tests/corpus/typescript/expr/keyof_prefix.txt`.
+  - [ ] _Follow-up:_ `keyof`'s **assignability** is still the `Both` placeholder
+    (`assignability.rs`), so `keyof { a: 1, b: 2 } <: string` is indeterminate
+    rather than `true`. Needs a keyof evaluator (see the mapped-type plan).
+
+- [x] **`readonly` arrays/tuples** — `readonly T[]` / `readonly [A, B]` now parse
+  via a new `Ast::Readonly` wrapper (`expr_prefix`, rejected on non-array/tuple
+  operands as TypeScript does). Assignability is one-directional — a mutable
+  array/tuple is assignable to a `readonly` one but not the reverse
+  (`src/ast/assignability.rs`), verified against `tsgo --strict`. _Tests:_
+  `tests/corpus/typescript/expr/readonly_array.txt`, `readonly_tuple.txt`, and
+  `assignability_tests` readonly cases. (`readonly` on object properties was
+  already supported.)
+
 - [x] **Interface `extends` clause** — `parse_interface` now reads the `#extends`
   ident (`src/parser.rs`) instead of hardcoding `None`, so
   `interface Foo extends Bar {}` renders correctly. _Test:_

@@ -12,6 +12,11 @@ lazy_static::lazy_static! {
             .op(Op::infix(union, Left))
             .op(Op::infix(intersection, Left))
             .op(Op::infix(pipe, Left))
+            // `keyof` / `readonly` bind tighter than the set operators
+            // (`keyof A | B` is `(keyof A) | B`) but looser than the postfix
+            // `[]`/application (`readonly A[]` is `readonly (A[])`), so they
+            // sit just above `pipe`.
+            .op(Op::prefix(keyof) | Op::prefix(readonly_modifier))
             .op(Op::postfix(application))
             .op(Op::postfix(array_modifier))
             .op(Op::prefix(infer))

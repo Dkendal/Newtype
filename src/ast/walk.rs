@@ -16,6 +16,8 @@ impl Ast {
 
             Ast::Array(node) => Ast::Array(Rc::new(f(node))),
 
+            Ast::Readonly(node) => Ast::Readonly(Rc::new(f(node))),
+
             Ast::Builtin(expr) => Ast::Builtin(expr.map(f)),
 
             Ast::CondExpr(expr) => Ast::CondExpr(expr.map(f)),

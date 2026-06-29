@@ -1,0 +1,9 @@
+Bare keyof operator as a prefix (no parentheses)
+
+=======
+
+keyof X
+
+=======
+
+keyof X

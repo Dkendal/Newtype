@@ -43,8 +43,30 @@ pub fn parse_expr(pairs: Pairs) -> Ast {
         .map_primary(parse)
         .map_prefix(|op, child| match op.as_rule() {
             infer => Ast::Infer(child.into()),
+            keyof => {
+                let span: Span = Span::from(&op).merge(&child.as_span());
+                Ast::Builtin(Builtin {
+                    name: BuiltinKeyword::Keyof,
+                    argument: child.into(),
+                    span,
+                })
+            }
+            // `readonly` is only permitted on array and tuple literal types
+            // (the same restriction TypeScript enforces).
+            readonly_modifier => match child {
+                Ast::Array(_) | Ast::Tuple(_) => Ast::Readonly(child.into()),
+                other => {
+                    let error = other.as_span().as_custom_error(
+                        op.get_input(),
+                        "readonly type modifier is only permitted on array and tuple \
+                         literal types"
+                            .to_string(),
+                    );
+                    panic!("{error}");
+                }
+            },
             rule => {
-                parse_error!(op, vec![infer], vec![rule]);
+                parse_error!(op, vec![infer, keyof, readonly_modifier], vec![rule]);
             }
         })
         .map_postfix(|lhs, op| match op.as_rule() {
@@ -984,19 +1006,29 @@ fn parse_object_literal(pair: Pair) -> TypeLiteral {
 
         match prop_pair.as_rule() {
             Rule::object_property => {
-                let mut inner = prop_pair.into_inner();
+                let prop_inner = prop_pair.into_inner();
 
-                let key = next_pair!(inner, Rule::property_key);
+                let key = prop_inner
+                    .clone()
+                    .find(match_rule(Rule::property_key))
+                    .unwrap();
 
-                let value = inner
+                let value = prop_inner
+                    .clone()
                     .find(match_tag("value"))
                     .map(parse)
                     .expect("object property missing value");
 
+                // The postfix `?` (TypeScript style: `a?: T`) is a direct child
+                // of `object_property`; the legacy prefix `?` (`?a: T`) lives
+                // nested inside `property_key`. Either marks the property optional.
+                let postfix_optional = find_tag(prop_inner.clone(), "optional").is_some();
+
                 let inner = key.into_inner();
 
                 let readonly = find_tag(inner.clone(), "readonly").is_some();
-                let optional = find_tag(inner.clone(), "optional").is_some();
+                let prefix_optional = find_tag(inner.clone(), "optional").is_some();
+                let optional = prefix_optional || postfix_optional;
 
                 let key = find_tag(inner.clone(), "key").unwrap();
 

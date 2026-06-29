@@ -431,6 +431,8 @@ pub enum Ast {
     #[serde(rename(serialize = "apply"))]
     ApplyGeneric(ApplyGeneric),
     Array(Rc<Ast>),
+    #[serde(rename(serialize = "readonly"))]
+    Readonly(Rc<Ast>),
     #[serde(rename(serialize = "|"))]
     UnionType(UnionType),
     #[serde(rename(serialize = "&"))]
@@ -528,6 +530,11 @@ impl Ast {
 
     fn is_object_interface(&self) -> bool {
         self.has_identifier("Object")
+    }
+
+    /// The global `Function` interface — every function type is assignable to it.
+    fn is_function_interface(&self) -> bool {
+        self.has_identifier("Function")
     }
 
     fn has_identifier(&self, test: &str) -> bool {
@@ -659,6 +666,7 @@ impl Ast {
                 | Ast::AnyKeyword(_)
                 | Ast::ApplyGeneric(_)
                 | Ast::Array(_)
+                | Ast::Readonly(_)
                 | Ast::FunctionType(_)
                 | Ast::Builtin { .. }
         )
@@ -730,6 +738,7 @@ impl Ast {
             Ast::Assert(x) => x.span,
             Ast::ApplyGeneric(x) => x.span,
             Ast::Array(ast) => ast.as_span(),
+            Ast::Readonly(ast) => ast.as_span(),
             Ast::Builtin(x) => x.span,
             Ast::CondExpr(x) => x.span,
             Ast::ExtendsExpr(x) => x.span,

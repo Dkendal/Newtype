@@ -1,0 +1,9 @@
+readonly modifier on a tuple type
+
+=======
+
+readonly [string, number]
+
+=======
+
+readonly [string, number]

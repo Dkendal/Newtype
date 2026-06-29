@@ -1,0 +1,9 @@
+readonly modifier on an array type
+
+=======
+
+readonly string[]
+
+=======
+
+readonly string[]

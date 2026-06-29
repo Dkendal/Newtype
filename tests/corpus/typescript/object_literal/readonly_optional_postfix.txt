@@ -1,0 +1,5 @@
+Readonly and postfix optional modifier together
+=======
+{ readonly a?: 1 }
+=======
+{readonly a?: 1}

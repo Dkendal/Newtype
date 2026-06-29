@@ -1,0 +1,5 @@
+Optional property modifier in TypeScript postfix position
+=======
+{ a?: 1 }
+=======
+{a?: 1}

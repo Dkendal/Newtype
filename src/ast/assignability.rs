@@ -55,10 +55,16 @@ impl Ast {
             }
         }
 
+        // Literal/primitive source assignable to its own bare primitive target
+        // (e.g. `1 <: number`, `"x" <: string`, `{} <: object`). Object wrappers
+        // are excluded: a wrapper (`String`, `Number`, …) is an object value and
+        // is NOT assignable to its bare primitive, so it must not collapse here.
         if let Ast::Primitive(other, _) = other {
-            if let Some(value) = self.get_primitive_type() {
-                if value == *other {
-                    return T::True;
+            if !self.is_object_wrapper() {
+                if let Some(value) = self.get_primitive_type() {
+                    if value == *other {
+                        return T::True;
+                    }
                 }
             }
         }
@@ -78,13 +84,14 @@ impl Ast {
 
             (A::UnknownKeyword(_), _) => T::False,
 
-            (_, A::NeverKeyword(_)) => T::False,
-
             // Set operations. Source-union: every member must be assignable.
             // Source-intersection: some member (or the merged shape) must be.
             // Target-union: assignable to some member. Target-intersection:
             // assignable to every member. Source arms come first so that
-            // `(A | B) <: (C | D)` distributes correctly.
+            // `(A | B) <: (C | D)` distributes correctly, and — crucially — so a
+            // source intersection that reduces to `never` (e.g. `string & number`)
+            // collapses to `Never` even against a `never` target, instead of being
+            // caught by the `(_, never) => False` arm below.
             (A::UnionType(UnionType { types, .. }), rhs) => {
                 Self::union_source_assignable(types, rhs, ctx)
             }
@@ -93,6 +100,8 @@ impl Ast {
                 Self::intersection_source_assignable(types, rhs, ctx)
             }
 
+            (_, A::NeverKeyword(_)) => T::False,
+
             (lhs, A::UnionType(UnionType { types, .. })) => {
                 Self::assignable_to_union(lhs, types, ctx)
             }
@@ -100,6 +109,20 @@ impl Ast {
             (lhs, A::IntersectionType(IntersectionType { types, .. })) => {
                 Self::assignable_to_intersection(lhs, types, ctx)
             }
+
+            // `readonly` arrays/tuples. The relation is one-directional: a
+            // mutable array/tuple is assignable to a `readonly` one, but not
+            // the reverse. A readonly source is thus unassignable to a mutable
+            // array/tuple target; against any other target it behaves like the
+            // underlying array/tuple. These arms must precede the source-side
+            // `Array`/`Tuple` arms so a `readonly` operand is not mishandled.
+            (A::Readonly(src), rhs) => match rhs {
+                A::Readonly(tgt) => src.is_assignable_to_ctx(tgt, ctx),
+                A::Array(_) | A::Tuple(_) => T::False,
+                _ => src.is_assignable_to_ctx(rhs, ctx),
+            },
+
+            (lhs, A::Readonly(tgt)) => lhs.is_assignable_to_ctx(tgt, ctx),
 
             // Indexed-access / generic-application / qualified references cannot
             // be resolved without a type environment (bindings are substituted
@@ -127,6 +150,15 @@ impl Ast {
 
             (A::TypeLiteral(lhs), rhs) => Self::type_literal_assignable_to(lhs, rhs, ctx),
 
+            // `undefined` is assignable to `void` under --strict (the `void`
+            // domain includes `undefined`). The relation is one-directional:
+            // `void <: undefined` is false, and `null` is assignable to
+            // neither — those fall through to the identity check below.
+            (
+                A::Primitive(PrimitiveType::Undefined, _),
+                A::Primitive(PrimitiveType::Void, _),
+            ) => T::True,
+
             (A::Primitive(lhs, _), A::Primitive(rhs, _)) => Into::into(lhs == rhs),
 
             (A::TemplateString(_) | A::TypeString(_), A::Primitive(PrimitiveType::String, _)) => {
@@ -140,13 +172,30 @@ impl Ast {
 
             (A::TypeNumber(_), A::Primitive(PrimitiveType::Number, _)) => T::True,
 
-            // Object wrappers are equivalent to their primitive types in
-            // this context.
-            (lhs, rhs) if lhs.is_object_wrapper() => {
-                let primitive_type = lhs.get_primitive_type().unwrap();
-                let ast = Ast::Primitive(primitive_type, lhs.as_span());
-                ast.is_assignable_to_ctx(rhs, ctx)
+            // Object wrappers as TARGETS (`Number`, `Boolean`, `BigInt`,
+            // `Symbol` — `Object` is the any-object target handled above). A
+            // value is assignable to the wrapper iff its primitive type matches
+            // the wrapper's primitive: this admits the bare primitive
+            // (`number <: Number`), the matching literals (`1 <: Number`,
+            // `true <: Boolean`), and the same wrapper (`Number <: Number`),
+            // while rejecting cross-primitive and non-primitive sources.
+            (lhs, rhs) if rhs.is_object_wrapper() && !rhs.is_object_object_wrapper() => {
+                // `get_primitive_type` maps literals and wrapper idents to their
+                // primitive but not a bare `Primitive`, so match that directly.
+                let lhs_prim = match lhs {
+                    A::Primitive(p, _) => Some(p.clone()),
+                    _ => lhs.get_primitive_type(),
+                };
+                match (lhs_prim, rhs.get_primitive_type()) {
+                    (Some(l), Some(r)) if l == r => T::True,
+                    _ => T::False,
+                }
             }
+
+            // Object wrappers as SOURCES are object values: assignable to the
+            // any-object targets (`{}`, `object`, `Object` — `Object` is handled
+            // by the non-nullish arm above), but NOT to their bare primitive.
+            (lhs, rhs) if lhs.is_object_wrapper() => Into::into(Self::accepts_any_object(rhs)),
 
             (A::Tuple(tuple), rhs) => Self::tuple_assignable_to(tuple, rhs, ctx),
 
@@ -171,8 +220,9 @@ impl Ast {
     }
 
     /// `(p…) => R` assignable to `rhs`. A function value is also an object, so
-    /// it is assignable to the any-object targets. Against another function
-    /// type the relation mirrors the TypeScript checker's `compareSignatures`
+    /// it is assignable to the global `Function` interface and the any-object
+    /// targets. Against another function type the relation mirrors the
+    /// TypeScript checker's `compareSignatures`
     /// (`internal/checker/relater.go`): the source may omit trailing
     /// parameters but must not require more than the target supplies,
     /// parameters relate contravariantly (strict function types), and the
@@ -180,7 +230,7 @@ impl Ast {
     /// `void` accepts any source return.
     fn function_assignable_to(lhs: &FunctionType, rhs: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
         let Ast::FunctionType(target) = rhs else {
-            return if Self::accepts_any_object(rhs) {
+            return if rhs.is_function_interface() || Self::accepts_any_object(rhs) {
                 ExtendsResult::True
             } else {
                 ExtendsResult::False
@@ -197,10 +247,21 @@ impl Ast {
         }
 
         // Parameters are contravariant: each target parameter must be
-        // assignable to the source parameter in the same position.
+        // assignable to the source parameter in the same position. An `any` in
+        // either parameter position is bidirectionally compatible, so it
+        // satisfies the relation outright (matching the TypeScript checker,
+        // where `any` params are always related) rather than collapsing the
+        // whole signature to the indeterminate `Both`.
         let mut acc = ExtendsResult::True;
         for (source_param, target_param) in lhs.params.iter().zip(target.params.iter()) {
-            acc = acc.and(target_param.kind.is_assignable_to_ctx(&source_param.kind, ctx));
+            let related = if matches!(source_param.kind, Ast::AnyKeyword(_))
+                || matches!(target_param.kind, Ast::AnyKeyword(_))
+            {
+                ExtendsResult::True
+            } else {
+                target_param.kind.is_assignable_to_ctx(&source_param.kind, ctx)
+            };
+            acc = acc.and(related);
         }
 
         // Return type. A target return of `any` or `void` is satisfied by any
@@ -368,6 +429,32 @@ impl Ast {
             return ExtendsResult::Never;
         }
 
+        // A genuinely contradictory intersection is uninhabited, so it reduces
+        // to `never` (the bottom type), mirroring TS. Two members are
+        // contradictory when both are drawn from disjoint *unit* primitive/literal
+        // kinds (`string`/`number`/`boolean`/`bigint`/`symbol` and their literals)
+        // yet share no common subtype — neither is assignable to the other. This
+        // catches `string & number`, `string & boolean`, `1 & 2`, `true & false`,
+        // while leaving `1 & number` (→ `1`) and `string & "a"` (→ `"a"`) alone,
+        // since there one member is assignable to the other. Object members
+        // (`{a:1} & {b:2}`, `string & {}`) never participate here — disjoint object
+        // shapes intersect to a non-`never` type and are handled by the merge below.
+        for (i, a) in members.iter().enumerate() {
+            if Self::disjoint_primitive_family(a).is_none() {
+                continue;
+            }
+            for b in &members[i + 1..] {
+                if Self::disjoint_primitive_family(b).is_none() {
+                    continue;
+                }
+                let a_to_b = a.is_assignable_to_ctx(b, ctx);
+                let b_to_a = b.is_assignable_to_ctx(a, ctx);
+                if a_to_b != ExtendsResult::True && b_to_a != ExtendsResult::True {
+                    return ExtendsResult::Never;
+                }
+            }
+        }
+
         let some = members
             .iter()
             .fold(ExtendsResult::False, |acc, member| {
@@ -428,6 +515,40 @@ impl Ast {
         rhs.is_empty_object()
             || matches!(rhs, Ast::Primitive(PrimitiveType::Object, _))
             || rhs.is_object_interface()
+    }
+
+    /// The "unit" primitive family of an intersection member, used to detect a
+    /// contradictory (uninhabited) intersection. Returns the family for a bare
+    /// primitive keyword or a literal of `string`/`number`/`boolean`/`bigint`/
+    /// `symbol`. Object-ish kinds (object literals, the `object` primitive, the
+    /// wrapper objects like `String`/`Number`) and the nullish primitives
+    /// (`void`/`undefined`/`null`) are excluded — their intersections are not
+    /// contradictory in this disjoint-primitive sense.
+    fn disjoint_primitive_family(ast: &Ast) -> Option<PrimitiveType> {
+        // Object-wrapper idents (`String`, `Number`, …) are object values, not the
+        // bare primitive, so they do not participate in primitive contradiction.
+        if ast.is_object_wrapper() {
+            return None;
+        }
+
+        // `get_primitive_type` maps literals/wrappers to their primitive but not a
+        // bare `Primitive`, so match that directly.
+        let prim = match ast {
+            Ast::Primitive(p, _) => p.clone(),
+            _ => ast.get_primitive_type()?,
+        };
+
+        match prim {
+            PrimitiveType::String
+            | PrimitiveType::Number
+            | PrimitiveType::Boolean
+            | PrimitiveType::BigInt
+            | PrimitiveType::Symbol => Some(prim),
+            PrimitiveType::Object
+            | PrimitiveType::Void
+            | PrimitiveType::Undefined
+            | PrimitiveType::Null => None,
+        }
     }
 
     /// The static name of a plain property key, if it has one.

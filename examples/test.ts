@@ -28,8 +28,9 @@ type _24 = Assert<Extends<boolean, Object>>;
 type _30 = Assert<Extends<{}, unknown>>;
 type _31 = Assert<Extends<{}, any>>;
 type _32 = Assert<Extends<{}, {}>>;
-type _33 = Assert<Extends<{ x: 1 }, { x: 1 }>>;
+type _33 = Assert<Extends<{ x: string }, { x: string }>>;
 type _34 = Assert<Extends<{ x: 1, y: 2 }, { x: 1 }>>;
+type _35 = Assert<Extends<{ x: '' }, { x: string }>>;
 
 type _40 = Assert<Extends<() => any, () => any>>;
 type _41 = Assert<Extends<() => never, () => any>>;

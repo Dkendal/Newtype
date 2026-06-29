@@ -103,7 +103,7 @@ expr_primary = _{
   | "(" ~ expr ~ ")"
 }
 
-expr_prefix = _{ infer }
+expr_prefix = _{ infer | keyof | readonly_modifier }
 
 expr_infix = _{ union | intersection | pipe | dot_op | colon2 }
 
@@ -121,7 +121,7 @@ builtin = { #name = builtin_keyword ~ "(" ~ #argument = expr ~ ")" }
 
 builtin_keyword = _{ keyof }
 
-keyof = @{ "keyof" }
+keyof = @{ "keyof" ~ !ident_chars }
 
 application = { "(" ~ #arguments = argument_list ~ ")" }
 
@@ -194,7 +194,7 @@ object_literal = {
 }
 
 object_property = {
-    property_key ~ ":" ~ #value = expr
+    property_key ~ (#optional = optional_modifier)? ~ ":" ~ #value = expr
 }
 
 property_key = {
@@ -334,7 +334,7 @@ literal_true = @{ "true" }
 
 literal_false = @{ "false" }
 
-readonly_modifier = @{ "readonly" }
+readonly_modifier = @{ "readonly" ~ !ident_chars }
 
 export = @{ "export" }
 
