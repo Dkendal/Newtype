@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Acceptance-test runner: cross-check newtype against tsgo (tsc 7.0).
+"""Conformance-test runner: cross-check newtype against tsgo (tsc 7.0).
 
 For each `assert` inside a `unittest`, the newtype compiler is BOTH a runner
 (it prints an ok/FAILED report to stderr) and a code generator (with
@@ -27,10 +27,10 @@ Algorithm (matches the runner spec):
      test disagrees (or if either oracle could not be run).
 
 Usage:
-    python3 scripts/acceptance.py [FILE.nt ...]
+    python3 scripts/conformance.py [FILE.nt ...]
 
 With no arguments it runs a sensible default set (examples/test.nt and every
-`tests/acceptance/*.nt` fixture). The newtype binary is built first
+`tests/conformance/*.nt` fixture). The newtype binary is built first
 (`cargo build`) and invoked directly via stdin, so the binary never sees a
 filename -- source comments are line-only by design.
 """
@@ -187,7 +187,7 @@ def parse_tsgo_failures(ts_text, tsgo_stdout):
 
 def run_file(path, tsgo):
     print("=" * 72)
-    print(f"acceptance: {path}")
+    print(f"conformance: {path}")
     print("=" * 72)
 
     with open(path, "r") as f:
@@ -220,7 +220,7 @@ def run_file(path, tsgo):
 
     # Write the emitted TypeScript to a temp .ts file for tsgo (no stdin mode).
     tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".ts", prefix="newtype_acceptance_", delete=False
+        mode="w", suffix=".ts", prefix="newtype_conformance_", delete=False
     )
     try:
         tmp.write(ts_stdout)
@@ -278,7 +278,7 @@ def default_files():
     example = os.path.join(REPO_ROOT, "examples", "test.nt")
     if os.path.exists(example):
         files.append(example)
-    files.extend(sorted(glob.glob(os.path.join(REPO_ROOT, "tests", "acceptance", "*.nt"))))
+    files.extend(sorted(glob.glob(os.path.join(REPO_ROOT, "tests", "conformance", "*.nt"))))
     return files
 
 
@@ -289,7 +289,7 @@ def main():
     parser.add_argument(
         "files",
         nargs="*",
-        help="newtype source files to check (default: examples/test.nt and tests/acceptance/*.nt)",
+        help="newtype source files to check (default: examples/test.nt and tests/conformance/*.nt)",
     )
     args = parser.parse_args()
 

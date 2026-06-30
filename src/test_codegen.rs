@@ -220,7 +220,7 @@ fn generate_aliases(
             let name = format!("_newtype_test__{slug}_{index}");
             // 1-based line of the *claim*, not the `assert` keyword: the harness
             // reports failures at the claim position (test_harness::claim_span),
-            // so the acceptance runner can only line up newtype's `--> LINE` with
+            // so the conformance runner can only line up newtype's `--> LINE` with
             // tsgo's error if this comment points at the same line. `span.start()`
             // is a char boundary, so byte-counting '\n' before it is exact.
             let line = source[..assert.claim.as_span().start()]
@@ -477,7 +477,7 @@ mod tests {
     fn comment_line_tracks_claim_not_assert_keyword() {
         // The `assert` keyword is on line 2 but its claim is on line 3. The
         // comment must point at the claim (line 3) to match the harness `--> 3`,
-        // so the acceptance runner lines newtype's report up with tsgo's errors.
+        // so the conformance runner lines newtype's report up with tsgo's errors.
         let src = "unittest \"t\" do\n  assert\n    number <: string\nend";
         let program = parse_newtype_program(src).unwrap().simplify();
         let expansion = expand(&program, src);
