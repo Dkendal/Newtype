@@ -112,9 +112,19 @@ promote the case into `tests/corpus/`.
       intersections are not reduced to `never`, so `string & number <: string`
       returns `True` instead of `Never` (TS reduces `string & number` to
       `never`). Explicit `never` members *are* handled (`never & T → never`).
-    - [ ] **Source index signatures** — a plain target key is not matched
-      against a source index signature; e.g. `{ [k in string]: number } <:
-      { a: number }` returns `Both` (conservative) rather than `True`.
+    - [x] **Object index signatures** — `type_literal_assignable_to`
+      (`src/ast/assignability.rs`) now relates `string`/`number` index
+      signatures structurally via a key classifier
+      (`Named`/`StringIndex`/`NumberIndex`/`Other`), matching `tsgo --strict`.
+      Following TS, a source index signature does NOT supply named properties
+      (`{ [k in string]: number } <: { a: number }` is `False`, not `True` as a
+      stale TODO premise suggested); named props must satisfy a target string
+      index; a target number index constrains only numeric-named props; and a
+      `number` index relates to a `string` index (and vice versa) through the
+      shared value-type check. Any key over a non-`string`/`number` iterable, a
+      computed key, or a remapped index stays `Both` (conservative). _Tests:_
+      `assignability_tests::is_assignable_to_extended` index-signature rows in
+      `tests/ast.rs`.
 
 ## Bugs
 

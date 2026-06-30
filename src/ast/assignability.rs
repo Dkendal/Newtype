@@ -7,6 +7,20 @@ use crate::{
     extends_result::ExtendsResult,
 };
 
+/// Structural classification of an object-property key, used to relate object
+/// type literals that carry index signatures.
+enum KeyClass<'a> {
+    /// A plain named property, e.g. `a` in `{ a: T }`.
+    Named(&'a str),
+    /// A `string` index signature, `{ [k in string]: V }`.
+    StringIndex,
+    /// A `number` index signature, `{ [k in number]: V }`.
+    NumberIndex,
+    /// A key we cannot reason about structurally: a computed key, a remapped
+    /// index, or an index over a non-`string`/`number` iterable.
+    Other,
+}
+
 impl Ast {
     /// Assignability test mirroring the TypeScript checker's assignable
     /// relation (`internal/checker/relater.go`). Answers "is `self` assignable
@@ -340,39 +354,114 @@ impl Ast {
         match rhs {
             rhs if Self::accepts_any_object(rhs) => ExtendsResult::True,
             Ast::TypeLiteral(target) => {
-                // A source index/computed signature might cover a target key we
-                // can't see structurally, so a "missing" required property is
-                // indeterminate rather than a definite failure.
-                let source_has_complex_key = lhs
+                // Any key we can't reason about structurally — a computed key, a
+                // remapped index, or an index whose iterable is neither the
+                // `string` nor the `number` primitive (a union/keyof/mapped
+                // iterable) — leaves the whole relation indeterminate.
+                let any_other = lhs
                     .iter()
-                    .any(|p| Self::property_key_name(&p.key).is_none());
+                    .chain(target.iter())
+                    .any(|p| matches!(Self::classify_key(&p.key), KeyClass::Other));
+                if any_other {
+                    return ExtendsResult::Both;
+                }
+
+                // Index the source by kind: named properties (by name), and the
+                // optional string/number index-signature value types. A source
+                // index signature does NOT supply named properties.
+                let mut source_named: Vec<(&str, &ObjectProperty)> = vec![];
+                let mut source_string_index: Option<&Ast> = None;
+                let mut source_number_index: Option<&Ast> = None;
+                for p in lhs.iter() {
+                    match Self::classify_key(&p.key) {
+                        KeyClass::Named(name) => source_named.push((name, p)),
+                        KeyClass::StringIndex => source_string_index = Some(&p.value),
+                        KeyClass::NumberIndex => source_number_index = Some(&p.value),
+                        KeyClass::Other => unreachable!("filtered out above"),
+                    }
+                }
 
                 let mut acc = ExtendsResult::True;
                 for target_prop in target.iter() {
-                    // Index/computed target keys can't be compared structurally.
-                    let Some(target_key) = Self::property_key_name(&target_prop.key) else {
-                        return ExtendsResult::Both;
-                    };
-
-                    let source_prop = lhs.iter().find(|p| {
-                        Self::property_key_name(&p.key)
-                            .map(|k| k == target_key)
-                            .unwrap_or(false)
-                    });
-
-                    match source_prop {
-                        Some(source_prop) => {
-                            acc = acc.and(Self::property_relation(source_prop, target_prop, ctx));
+                    let relation = match Self::classify_key(&target_prop.key) {
+                        KeyClass::Named(name) => {
+                            match source_named.iter().find(|(n, _)| *n == name) {
+                                Some((_, source_prop)) => {
+                                    Self::property_relation(source_prop, target_prop, ctx)
+                                }
+                                // A source index signature does NOT satisfy a
+                                // required named target.
+                                None if target_prop.optional => ExtendsResult::True,
+                                None => ExtendsResult::False,
+                            }
                         }
-                        None if target_prop.optional => {}
-                        None if source_has_complex_key => return ExtendsResult::Both,
-                        None => return ExtendsResult::False,
-                    }
+                        // A target string index must accept every source member
+                        // (every named value, plus either index value type).
+                        KeyClass::StringIndex => {
+                            let vt = &target_prop.value;
+                            let mut r = ExtendsResult::True;
+                            for (_, source_prop) in &source_named {
+                                r = r.and(source_prop.value.is_assignable_to_ctx(vt, ctx));
+                            }
+                            if let Some(sv) = source_string_index {
+                                r = r.and(sv.is_assignable_to_ctx(vt, ctx));
+                            }
+                            if let Some(sv) = source_number_index {
+                                r = r.and(sv.is_assignable_to_ctx(vt, ctx));
+                            }
+                            r
+                        }
+                        // A target number index constrains only numeric-named
+                        // source members, plus either index value type.
+                        KeyClass::NumberIndex => {
+                            let vt = &target_prop.value;
+                            let mut r = ExtendsResult::True;
+                            for (name, source_prop) in &source_named {
+                                if Self::is_numeric_name(name) {
+                                    r = r.and(source_prop.value.is_assignable_to_ctx(vt, ctx));
+                                }
+                            }
+                            if let Some(sv) = source_number_index {
+                                r = r.and(sv.is_assignable_to_ctx(vt, ctx));
+                            }
+                            if let Some(sv) = source_string_index {
+                                r = r.and(sv.is_assignable_to_ctx(vt, ctx));
+                            }
+                            r
+                        }
+                        KeyClass::Other => unreachable!("filtered out above"),
+                    };
+                    acc = acc.and(relation);
                 }
                 acc
             }
             _ => ExtendsResult::False,
         }
+    }
+
+    /// Classify an object-property key for the structural index-signature
+    /// relation. A plain key is `Named`; a `[k in string]` / `[k in number]`
+    /// index signature is `StringIndex` / `NumberIndex`; everything else (a
+    /// computed key, a remapped index, or an index over a non-`string`/`number`
+    /// iterable such as a union, `keyof`, or mapped iterable) is `Other`.
+    fn classify_key(key: &ObjectPropertyKey) -> KeyClass<'_> {
+        match key {
+            ObjectPropertyKey::Key(name) => KeyClass::Named(name),
+            ObjectPropertyKey::Index(index) if index.remapped_as.is_none() => match &index.iterable
+            {
+                Ast::Primitive(PrimitiveType::String, _) => KeyClass::StringIndex,
+                Ast::Primitive(PrimitiveType::Number, _) => KeyClass::NumberIndex,
+                _ => KeyClass::Other,
+            },
+            _ => KeyClass::Other,
+        }
+    }
+
+    /// Whether a plain property name is a numeric key (constrained by a `number`
+    /// index signature). TypeScript treats a property whose name is a valid
+    /// number literal as a numeric key.
+    fn is_numeric_name(name: &str) -> bool {
+        name.parse::<f64>().is_ok()
     }
 
     /// Relation between a present source property and the target property it
@@ -610,13 +699,5 @@ impl Ast {
             1 => keys.into_iter().next().unwrap(),
             _ => Ast::UnionType(UnionType { types: keys, span }),
         })
-    }
-
-    /// The static name of a plain property key, if it has one.
-    fn property_key_name(key: &ObjectPropertyKey) -> Option<&str> {
-        match key {
-            ObjectPropertyKey::Key(name) => Some(name),
-            _ => None,
-        }
     }
 }

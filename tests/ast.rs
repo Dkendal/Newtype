@@ -250,6 +250,31 @@ mod assignability_tests {
     #[case("{}", "{ a?: 1 }", TRUE)] // empty source → all-optional target
     #[case("{ a?: 1 }", "{ a?: 1 }", TRUE)] // optional → optional ok
     #[case("{ readonly a?: 1 }", "{ a?: number }", TRUE)] // readonly + postfix optional
+    // --- Index signatures (verified against tsgo --strict) ---
+    // A source index signature does NOT supply named properties.
+    #[case("{ [k in string]: number }", "{ a: number }", FALSE)]
+    #[case("{ [k in number]: number }", "{ a: number }", FALSE)]
+    // Named props must satisfy a target string index signature.
+    #[case("{ a: number }", "{ [k in string]: number }", TRUE)]
+    #[case("{ a: number, b: string }", "{ [k in string]: number }", FALSE)]
+    #[case("{ a: 1 }", "{ [k in string]: number }", TRUE)] // covariant value
+    #[case("{ a: number }", "{ [k in string]: 1 }", FALSE)]
+    // Index-to-index value relation.
+    #[case("{ [k in string]: number }", "{ [k in string]: number }", TRUE)]
+    #[case("{ [k in string]: string }", "{ [k in string]: number }", FALSE)]
+    #[case("{ [k in number]: number }", "{ [k in string]: number }", TRUE)] // number idx <: string idx
+    #[case("{ [k in string]: number }", "{ [k in number]: number }", TRUE)] // string idx <: number idx
+    // A number index constrains only numeric-named props; string keys are free.
+    #[case("{ a: number, b: number }", "{ [k in number]: number }", TRUE)]
+    // Source index + named: the named prop satisfies a named target.
+    #[case("{ [k in string]: number, a: number }", "{ a: number }", TRUE)]
+    #[case("{ [k in string]: number, a: number }", "{ b: number }", FALSE)]
+    // An optional / any-object target is satisfied by an index signature.
+    #[case("{ [k in string]: number }", "{ a?: number }", TRUE)]
+    #[case("{ [k in string]: number }", "{}", TRUE)]
+    #[case("{}", "{ [k in string]: number }", TRUE)]
+    // A non-string/number index iterable stays indeterminate.
+    #[case("{ [k in K]: number }", "{ a: number }", BOTH)]
     // --- Opaque / unresolvable references → indeterminate (Both) ---
     #[case("Foo", "Foo", TRUE)] // reflexive resolves first
     #[case("Foo", "any", TRUE)]
