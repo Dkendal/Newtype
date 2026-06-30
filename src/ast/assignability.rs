@@ -1,8 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::{
     ast::{
-        type_env::{fingerprint, ResolveCtx},
-        Access, Ast, Builtin, BuiltinKeyword, FunctionType, IntersectionType, ObjectProperty,
-        ObjectPropertyKey, PrimitiveType, Tuple, TypeLiteral, TypeString, UnionType,
+        type_env::{fingerprint, substitute, ResolveCtx},
+        Access, Ast, Builtin, BuiltinKeyword, FunctionType, IntersectionType, MappedType,
+        MappingModifier, ObjectProperty, ObjectPropertyKey, PrimitiveType, Tuple, TypeLiteral,
+        TypeString, UnionType,
     },
     extends_result::ExtendsResult,
 };
@@ -119,6 +122,25 @@ impl Ast {
                     None => T::Both,
                 }
             }
+
+            // Mapped types `{ [K in T]: V }`. When the key set `T` is a
+            // statically-known set of literal keys (a union/singleton of string
+            // literals, `never`, or `keyof O` for an object literal `O`), expand
+            // the mapped type to the equivalent object literal and relate
+            // structurally. An unknown key set (a `string`/`number` primitive
+            // iterable, a template remap, an unresolved reference) leaves the
+            // relation indeterminate. The target arm must precede the structural
+            // `TypeLiteral`/`Tuple`/… source arms below, which would otherwise
+            // mishandle a mapped-type target.
+            (A::MappedType(mt), rhs) => match Self::expand_mapped_type(mt, ctx) {
+                Some(tl) => Ast::TypeLiteral(tl).is_assignable_to_ctx(rhs, ctx),
+                None => T::Both,
+            },
+
+            (lhs, A::MappedType(mt)) => match Self::expand_mapped_type(mt, ctx) {
+                Some(tl) => lhs.is_assignable_to_ctx(&Ast::TypeLiteral(tl), ctx),
+                None => T::Both,
+            },
 
             // Set operations. Source-union: every member must be assignable.
             // Source-intersection: some member (or the merged shape) must be.
@@ -699,5 +721,126 @@ impl Ast {
             1 => keys.into_iter().next().unwrap(),
             _ => Ast::UnionType(UnionType { types: keys, span }),
         })
+    }
+
+    /// Expand a mapped type `{ [K in T]: V }` to the equivalent object literal,
+    /// when its key set `T` is a statically-known set of literal string keys.
+    /// Returns `None` (so the caller stays indeterminate) when the key set isn't
+    /// enumerable, or when the mapped type carries an `as` key-remap clause
+    /// (deferred). For each key, the index variable `K` is substituted in the
+    /// body `V`, and a homomorphic indexed-access body `O[K]` is reduced one step
+    /// when it resolves; an irreducible body is left in place (relating as `Both`
+    /// later). The mapped type's `+optional`/`+readonly` modifiers carry onto the
+    /// generated properties.
+    fn expand_mapped_type(mt: &MappedType, ctx: &ResolveCtx) -> Option<TypeLiteral> {
+        // An `as` remap clause rewrites keys; defer that for now.
+        if mt.remapped_as.is_some() {
+            return None;
+        }
+
+        let keys = Self::mapped_key_set(&mt.iterable, ctx, &mut HashSet::new())?;
+
+        let optional = matches!(mt.optional_mod, Some(MappingModifier::Add));
+        let readonly = matches!(mt.readonly_mod, Some(MappingModifier::Add));
+
+        let mut properties = Vec::with_capacity(keys.len());
+        for key in keys {
+            // The key must be a plain string literal to name a property.
+            let Ast::TypeString(TypeString { ty: name, .. }) = &key else {
+                return None;
+            };
+
+            // Substitute the index variable with this key in the body, then try a
+            // one-step reduction of a homomorphic `O[K]` indexed access.
+            let mut bindings = HashMap::new();
+            bindings.insert(mt.index.clone(), key.clone());
+            let body = substitute(&mt.body, &bindings);
+            let value = Self::reduce_indexed_access(&body, ctx);
+
+            properties.push(ObjectProperty {
+                readonly,
+                optional,
+                key: ObjectPropertyKey::Key(name.clone()),
+                value,
+                span: mt.span,
+            });
+        }
+
+        Some(TypeLiteral {
+            properties,
+            span: mt.span,
+        })
+    }
+
+    /// Resolve the key set of a mapped type's iterable to a vector of literal key
+    /// nodes, or `None` when it isn't a statically-known set of string-literal
+    /// keys. A `never` iterable yields the empty set (`{}`); a single string
+    /// literal a singleton; a union of string literals those keys; `keyof O` the
+    /// keys of an object literal `O`; a reference is resolved one step and
+    /// recursed (guarded by `seen` so a cyclic alias terminates).
+    fn mapped_key_set(
+        iterable: &Ast,
+        ctx: &ResolveCtx,
+        seen: &mut HashSet<String>,
+    ) -> Option<Vec<Ast>> {
+        match iterable {
+            Ast::NeverKeyword(_) => Some(vec![]),
+            Ast::TypeString(_) => Some(vec![iterable.clone()]),
+            Ast::UnionType(UnionType { types, .. }) => {
+                let mut keys = Vec::with_capacity(types.len());
+                for ty in types {
+                    match ty {
+                        Ast::TypeString(_) => keys.push(ty.clone()),
+                        _ => return None,
+                    }
+                }
+                Some(keys)
+            }
+            Ast::Builtin(Builtin {
+                name: BuiltinKeyword::Keyof,
+                argument,
+                ..
+            }) => Self::keyof_string_keys(argument, ctx),
+            other => {
+                if !seen.insert(fingerprint(other)) {
+                    return None;
+                }
+                let resolved = ctx.env().and_then(|env| env.resolve_head(other))?;
+                Self::mapped_key_set(&resolved, ctx, seen)
+            }
+        }
+    }
+
+    /// One-step reduction of a homomorphic indexed-access body `O["k"]`: when `O`
+    /// resolves to an object literal and `"k"` is one of its plain string keys,
+    /// replace the access with that property's value. Any other body (a
+    /// non-access, an unresolved object, a non-literal key, a missing key) is
+    /// returned unchanged, to be related structurally (often `Both`) later.
+    fn reduce_indexed_access(body: &Ast, ctx: &ResolveCtx) -> Ast {
+        let Ast::Access(Access { lhs, rhs, .. }) = body else {
+            return body.clone();
+        };
+
+        let Ast::TypeString(TypeString { ty: key_name, .. }) = rhs.as_ref() else {
+            return body.clone();
+        };
+
+        let resolved = ctx
+            .env()
+            .and_then(|env| env.resolve_head(lhs))
+            .unwrap_or_else(|| (**lhs).clone());
+        let Ast::TypeLiteral(literal) = &resolved else {
+            return body.clone();
+        };
+
+        for prop in literal.iter() {
+            if let ObjectPropertyKey::Key(name) = &prop.key {
+                if name == key_name {
+                    return prop.value.clone();
+                }
+            }
+        }
+
+        body.clone()
     }
 }

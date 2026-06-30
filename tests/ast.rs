@@ -359,6 +359,17 @@ mod assignability_tests {
     #[case("'a' | 'b'", "keyof { a: 1, b: 2 }", TRUE)] // union into target keyof
     #[case("keyof { a: 1, b: 2 }", "'a'", FALSE)] // key union not assignable to one member
     #[case("keyof string[]", "string", BOTH)] // non-object arg stays indeterminate
+    // --- Mapped types expanded to object literals (verified vs tsgo --strict) ---
+    #[case("map K in \"a\" | \"b\" do number end", "{ a: number, b: number }", TRUE)]
+    #[case("{ a: number, b: number }", "map K in \"a\" | \"b\" do number end", TRUE)]
+    #[case("map K in \"a\" | \"b\" do number end", "{ a: number }", TRUE)] // width
+    #[case("map K in \"a\" do string end", "{ a: number }", FALSE)] // value mismatch
+    #[case("{}", "map K in never do number end", TRUE)] // empty key set -> {}
+    #[case("map K in never do number end", "{}", TRUE)]
+    #[case("map K in \"a\" do 1 end", "{ a: number }", TRUE)] // covariant value
+    // An unknown key set leaves the relation indeterminate (sound over-approx).
+    #[case("map K in string do number end", "{ a: number }", BOTH)] // primitive iterable
+    #[case("map K in Foo do number end", "{ a: number }", BOTH)] // unresolved ref iterable
     #[trace]
     fn is_assignable_to_extended(
         #[case] a: &str,

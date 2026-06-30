@@ -516,6 +516,23 @@ mod tests {
     }
 
     #[test]
+    fn mapped_type_expands_against_object_literals() {
+        // A mapped type over a statically-known key set expands to the equivalent
+        // object literal and relates structurally (verified against tsgo --strict).
+        let src = "type O as { a: number, b: string }\n\
+            unittest \"t\" do\n\
+            \x20 assert map K in \"a\" | \"b\" do number end <: { a: number, b: number }\n\
+            \x20 assert { a: number, b: number } <: map K in \"a\" | \"b\" do number end\n\
+            \x20 assert map K in keyof O do number end <: { a: number, b: number }\n\
+            \x20 assert map K in keyof O do O[K] end <: O\n\
+            \x20 assert O <: map K in keyof O do O[K] end\n\
+            \x20 assert not (map K in \"a\" do string end <: { a: number })\n\
+            end";
+        let (report, _) = run_src(src, false);
+        assert_eq!(report, Report { passed: 6, failed: 0 });
+    }
+
+    #[test]
     fn recursive_alias_terminates() {
         // A self-referential type must not loop forever: the coinductive guard
         // takes `Rec <: Rec` as holding while it is being proven.

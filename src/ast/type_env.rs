@@ -283,7 +283,7 @@ fn interface_def(interface: &Interface) -> Def {
 }
 
 /// Substitute bound type arguments for parameter names throughout `body`.
-fn substitute(body: &Ast, bindings: &HashMap<String, Ast>) -> Ast {
+pub(crate) fn substitute(body: &Ast, bindings: &HashMap<String, Ast>) -> Ast {
     let (tree, _) = body.prewalk(bindings.clone(), &|ast, bindings| match ast {
         Ast::Ident(ref id) => {
             let replacement = bindings.get(&id.name).cloned().unwrap_or(ast);
