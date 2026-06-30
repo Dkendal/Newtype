@@ -18,16 +18,34 @@ struct Args {
     /// with the helper types they need.
     #[clap(long)]
     generate_tests: bool,
-    /// With `--generate-tests`, annotate each generated `type` alias with a
-    /// `/** @newtype line:N */` comment giving the source line of its `assert`.
-    #[clap(long, requires = "generate_tests")]
-    source_comments: bool,
+    /// Read the source program from stdin. This is the default when neither
+    /// `--input` nor `--stdin` is given; the flag makes that choice explicit.
+    #[clap(long, conflicts_with = "input")]
+    stdin: bool,
+    /// The assumed filename for source read from stdin, used as the source map
+    /// `sources` entry. Ignored when reading from `--input`.
+    #[clap(long, value_name = "PATH")]
+    stdin_filename: Option<String>,
+    /// Write a Source Map v3 JSON file to this path relating the emitted
+    /// TypeScript back to the `.nt` source. Covers ordinary declarations and,
+    /// with `--generate-tests`, the generated test aliases too.
+    #[clap(long, value_name = "FILE")]
+    source_map: Option<String>,
 }
 
 fn main() {
     let args = Args::parse();
 
-    let input_source = if let Some(input_filename) = args.input {
+    // The name recorded as the source map's lone `sources` entry: the input
+    // file when reading from disk, the assumed stdin filename when given, else a
+    // placeholder. (`--stdin` is the explicit form of the stdin default.)
+    let source_name = match (&args.input, &args.stdin_filename) {
+        (Some(input_filename), _) => input_filename.clone(),
+        (None, Some(name)) => name.clone(),
+        (None, None) => "<stdin>".to_string(),
+    };
+
+    let input_source = if let Some(input_filename) = &args.input {
         std::fs::read_to_string(input_filename).unwrap()
     } else {
         let mut input = String::new();
@@ -56,21 +74,43 @@ fn main() {
             )
             .expect("writing the test report to stderr failed");
 
-            let out = if args.generate_tests {
+            // The emitted TypeScript plus the declaration->source-line table the
+            // source map is built from. With `--generate-tests` the table also
+            // carries the generated test aliases; ordinary declarations are
+            // always included so the map covers plain output too.
+            let (out, mappings) = if args.generate_tests {
                 let expansion = test_codegen::expand(&simplified, input);
                 let header = test_codegen::render_helpers(&expansion.helpers);
-                let mut body = expansion.ast.render_pretty_ts(120);
-                if args.source_comments {
-                    body = test_codegen::attach_comments(&body, &expansion.comments);
-                }
-                if header.is_empty() {
+                let body = expansion.ast.render_pretty_ts(120);
+                let out = if header.is_empty() {
                     body
                 } else {
                     format!("{header}\n{body}")
-                }
+                };
+                // Preserved statements keep their original spans, so collect their
+                // mappings from `simplified` (the expanded AST's generated aliases
+                // carry only placeholder spans).
+                let mut mappings = expansion.mappings;
+                mappings.extend(test_codegen::collect_declaration_mappings(&simplified, input));
+                (out, mappings)
             } else {
-                simplified.render_pretty_ts(120)
+                let out = simplified.render_pretty_ts(120);
+                let mappings = test_codegen::collect_declaration_mappings(&simplified, input);
+                (out, mappings)
             };
+
+            // When `--source-map PATH` is set, emit a Source Map v3 relating the
+            // rendered TypeScript back to the `.nt` source. The map's `file` field
+            // is the `--output` name if any (purely cosmetic).
+            if let Some(path) = &args.source_map {
+                let json = test_codegen::build_source_map(
+                    &out,
+                    &mappings,
+                    &source_name,
+                    args.output.as_deref(),
+                );
+                std::fs::write(path, json).unwrap();
+            }
 
             if let Some(output_filename) = args.output {
                 std::fs::write(output_filename, out).unwrap();

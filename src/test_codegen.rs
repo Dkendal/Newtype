@@ -27,8 +27,8 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use crate::ast::{
-    ApplyGeneric, Ast, ExtendsInfixOp, ExtendsPrefixOp, Ident, InfixOp, PrefixOp, Program, Span,
-    TypeAlias, UnitTest,
+    ApplyGeneric, Ast, ExtendsInfixOp, ExtendsPrefixOp, Ident, InfixOp, Interface, PrefixOp,
+    Program, Span, TypeAlias, UnitTest,
 };
 
 /// A TypeScript helper type the generated assertions may reference.
@@ -82,8 +82,8 @@ pub struct Expansion {
     pub ast: Ast,
     pub helpers: BTreeSet<Helper>,
     /// Generated type name -> 1-based source line of the originating `assert`,
-    /// in generation (body) order. Consumed by [`attach_comments`].
-    pub comments: Vec<(String, usize)>,
+    /// in generation (body) order. Consumed by [`build_source_map`].
+    pub mappings: Vec<(String, usize)>,
 }
 
 /// Rewrite `program`, replacing each `unittest` with the `type` aliases its
@@ -91,12 +91,12 @@ pub struct Expansion {
 /// order, so the generated aliases land where the `unittest` was.
 ///
 /// `source` is the original program text, used to compute the source line of
-/// each originating `assert` for [`Expansion::comments`].
+/// each originating `assert` for [`Expansion::mappings`].
 pub fn expand(program: &Ast, source: &str) -> Expansion {
     use std::collections::HashMap;
 
     let mut helpers = BTreeSet::new();
-    let mut comments = Vec::new();
+    let mut mappings = Vec::new();
     // Disambiguate unittests whose descriptions slugify to the same identifier so
     // generated type names stay globally unique (duplicate `type` aliases would
     // otherwise be invalid TypeScript). Slugs never contain `__` — `slugify`
@@ -120,7 +120,7 @@ pub fn expand(program: &Ast, source: &str) -> Expansion {
                     *count
                 };
                 let slug = if n == 1 { base } else { format!("{base}__{n}") };
-                for alias in generate_aliases(unittest, &slug, source, &mut helpers, &mut comments)
+                for alias in generate_aliases(unittest, &slug, source, &mut helpers, &mut mappings)
                 {
                     out.push(Ast::Statement(Rc::new(alias)));
                 }
@@ -139,44 +139,111 @@ pub fn expand(program: &Ast, source: &str) -> Expansion {
     Expansion {
         ast,
         helpers,
-        comments,
+        mappings,
     }
 }
 
-/// Insert a `/** @newtype line:N */` comment on its own line directly above each
-/// generated `type <name> = …` declaration, where `N` is the 1-based source line
-/// of the originating `assert`. `comments` maps generated type names to their
-/// source lines (as produced in [`Expansion::comments`]).
+/// Build a Source Map v3 (as JSON) relating the emitted TypeScript back to the
+/// originating `.nt` source. `mappings` maps each emitted declaration name to
+/// its 1-based source line — both the generated test aliases (from
+/// [`Expansion::mappings`]) and ordinary declarations (from
+/// [`collect_declaration_mappings`]). `source_name` is the lone `sources` entry
+/// and `output_name` (if any) fills the map's `file` field.
 ///
-/// Only lines that begin with `type ` whose identifier is a known generated
-/// name receive a comment; every other line (the helper fence, interfaces,
-/// preserved user aliases, wrapped continuation lines) passes through verbatim.
-/// Dependency-free: no `regex` crate.
-pub fn attach_comments(body: &str, comments: &[(String, usize)]) -> String {
+/// We walk the rendered TypeScript line by line. A line opening a named
+/// declaration — `type <name>` or `interface <name>`, optionally `export`-prefixed
+/// — whose `<name>` is in `mappings` starts a statement mapped to that source
+/// line; every subsequent line (the declaration itself and any wrapped
+/// continuation lines) maps to the same source line until a blank line closes the
+/// statement (mirroring the old upward comment scan that stopped at a blank line).
+/// All positions are 0-based per Source Map v3, so the 1-based source line is
+/// emitted as `src - 1`.
+pub fn build_source_map(
+    rendered_ts: &str,
+    mappings: &[(String, usize)],
+    source_name: &str,
+    output_name: Option<&str>,
+) -> String {
     use std::collections::HashMap;
 
-    let lookup: HashMap<&str, usize> = comments
+    let lookup: HashMap<&str, usize> = mappings
         .iter()
         .map(|(name, line)| (name.as_str(), *line))
         .collect();
 
-    // Preserve the original trailing newline: `split('\n')` on text ending in
-    // '\n' yields a final empty segment, which re-joining with '\n' restores.
-    let mut out: Vec<String> = Vec::new();
-    for line in body.split('\n') {
-        if let Some(rest) = line.strip_prefix("type ") {
-            let name: String = rest
-                .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                .collect();
-            if let Some(&n) = lookup.get(name.as_str()) {
-                out.push(format!("/** @newtype line:{n} */"));
+    let mut gen = srcmap_generator::SourceMapGenerator::new(output_name.map(|s| s.to_string()));
+    let src_id = gen.add_source(source_name);
+
+    let mut current_src: Option<usize> = None;
+    for (gen_line, raw) in rendered_ts.split('\n').enumerate() {
+        let trimmed = raw.trim_start();
+        if trimmed.is_empty() {
+            // Blank line: statement boundary. Stop mapping.
+            current_src = None;
+            continue;
+        }
+        if let Some(name) = declaration_name_of_line(trimmed) {
+            if let Some(&src) = lookup.get(name) {
+                current_src = Some(src);
             }
         }
-        out.push(line.to_string());
+        if let Some(src) = current_src {
+            gen.add_mapping(gen_line as u32, 0, src_id, (src - 1) as u32, 0);
+        }
     }
 
-    out.join("\n")
+    gen.to_json()
+}
+
+/// The declared name of an emitted `type`/`interface` line (after `trim_start`),
+/// or `None` if the line does not open a named declaration. Handles an optional
+/// `export ` prefix; the name is the run of identifier characters after the
+/// keyword.
+fn declaration_name_of_line(trimmed: &str) -> Option<&str> {
+    let decl = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+    let rest = decl
+        .strip_prefix("type ")
+        .or_else(|| decl.strip_prefix("interface "))?;
+    let len = rest
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .map(char::len_utf8)
+        .sum();
+    Some(&rest[..len])
+}
+
+/// Collect `(name, 1-based source line)` for each ordinary top-level declaration
+/// (`type` alias or `interface`) in `program`, so [`build_source_map`] can relate
+/// the plain compiled output — not just generated test aliases — back to source.
+/// `unittest`s, imports, and unnamed statements are skipped.
+pub fn collect_declaration_mappings(program: &Ast, source: &str) -> Vec<(String, usize)> {
+    let statements = match program {
+        Ast::Program(Program { statements, .. }) => statements.as_slice(),
+        other => std::slice::from_ref(other),
+    };
+
+    statements
+        .iter()
+        .filter_map(|statement| declaration_name_and_offset(statement))
+        .map(|(name, offset)| (name, line_at(source, offset)))
+        .collect()
+}
+
+/// The declared name and source byte offset of a top-level `type`/`interface`
+/// statement, peeling the `Statement` wrapper. `None` for any other node.
+fn declaration_name_and_offset(node: &Ast) -> Option<(String, usize)> {
+    match node {
+        Ast::Statement(inner) => declaration_name_and_offset(inner),
+        Ast::TypeAlias(TypeAlias { name, span, .. }) => Some((name.name.clone(), span.start())),
+        Ast::Interface(Interface { name, span, .. }) => Some((name.clone(), span.start())),
+        _ => None,
+    }
+}
+
+/// The 1-based source line containing byte `offset`. `offset` must be a char
+/// boundary (every span start is), so counting `'\n'` bytes before it is exact.
+fn line_at(source: &str, offset: usize) -> usize {
+    source[..offset].bytes().filter(|&b| b == b'\n').count() + 1
 }
 
 /// Render the needed helpers inside the `// START/END Newtype Test Helpers`
@@ -204,7 +271,7 @@ fn generate_aliases(
     slug: &str,
     source: &str,
     helpers: &mut BTreeSet<Helper>,
-    comments: &mut Vec<(String, usize)>,
+    mappings: &mut Vec<(String, usize)>,
 ) -> Vec<Ast> {
     unittest
         .body
@@ -220,15 +287,10 @@ fn generate_aliases(
             let name = format!("_newtype_test__{slug}_{index}");
             // 1-based line of the *claim*, not the `assert` keyword: the harness
             // reports failures at the claim position (test_harness::claim_span),
-            // so the conformance runner can only line up newtype's `--> LINE` with
-            // tsgo's error if this comment points at the same line. `span.start()`
-            // is a char boundary, so byte-counting '\n' before it is exact.
-            let line = source[..assert.claim.as_span().start()]
-                .bytes()
-                .filter(|&b| b == b'\n')
-                .count()
-                + 1;
-            comments.push((name.clone(), line));
+            // so the source-map segment lines newtype's `--> LINE` up with tsgo's
+            // error only if it points at the same line.
+            let line = line_at(source, assert.claim.as_span().start());
+            mappings.push((name.clone(), line));
 
             Ast::TypeAlias(TypeAlias {
                 export: false,
@@ -450,39 +512,15 @@ mod tests {
     }
 
     #[test]
-    fn attach_comments_annotates_generated_aliases_with_source_lines() {
-        // `assert`s sit on source lines 2 and 3 (1-based).
-        let src = "unittest \"a duck is a bird\" do\n\
-            \x20 assert string <: unknown\n\
-            \x20 assert number <: unknown\n\
-            end";
-
-        let program = parse_newtype_program(src).unwrap().simplify();
-        let expansion = expand(&program, src);
-        let body = expansion.ast.render_pretty_ts(120);
-        let annotated = attach_comments(&body, &expansion.comments);
-
-        // Each generated alias is immediately preceded by its source-line comment.
-        assert!(annotated.contains(
-            "/** @newtype line:2 */\ntype _newtype_test__a_duck_is_a_bird_0 = Assert<Extends<string, unknown>>;"
-        ));
-        assert!(annotated.contains(
-            "/** @newtype line:3 */\ntype _newtype_test__a_duck_is_a_bird_1 = Assert<Extends<number, unknown>>;"
-        ));
-        // Exactly one comment per generated alias.
-        assert_eq!(annotated.matches("/** @newtype line:").count(), 2);
-    }
-
-    #[test]
-    fn comment_line_tracks_claim_not_assert_keyword() {
+    fn mapping_line_tracks_claim_not_assert_keyword() {
         // The `assert` keyword is on line 2 but its claim is on line 3. The
-        // comment must point at the claim (line 3) to match the harness `--> 3`,
+        // mapping must point at the claim (line 3) to match the harness `--> 3`,
         // so the conformance runner lines newtype's report up with tsgo's errors.
         let src = "unittest \"t\" do\n  assert\n    number <: string\nend";
         let program = parse_newtype_program(src).unwrap().simplify();
         let expansion = expand(&program, src);
         assert_eq!(
-            expansion.comments,
+            expansion.mappings,
             vec![("_newtype_test__t_0".to_string(), 3)]
         );
     }
@@ -495,7 +533,7 @@ mod tests {
             unittest \"dup\" do\n  assert 2 <: number\nend";
         let program = parse_newtype_program(src).unwrap().simplify();
         let expansion = expand(&program, src);
-        let names: Vec<&str> = expansion.comments.iter().map(|(n, _)| n.as_str()).collect();
+        let names: Vec<&str> = expansion.mappings.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(
             names,
             vec!["_newtype_test__dup_0", "_newtype_test__dup__2_0"]
@@ -503,33 +541,66 @@ mod tests {
     }
 
     #[test]
-    fn attach_comments_leaves_helpers_interfaces_and_user_aliases_untouched() {
-        let comments = vec![("_newtype_test__t_0".to_string(), 7usize)];
-        let body = "// START Newtype Test Helpers\n\
-            type Assert<T extends true> = T;\n\
-            type Equals<A, B> =\n  \
-            (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2)\n  \
-            ? true : false;\n\
-            // END Newtype Test Helpers\n\
-            interface Bird { fly: () => void }\n\
-            type Foo = 1;\n\
-            type _newtype_test__t_0 = Assert<Extends<string, unknown>>;\n";
+    fn build_source_map_emits_v3_with_source_and_mappings() {
+        // A single generated alias on (rendered) gen line 0 should map back to
+        // its assert's 1-based source line.
+        let mappings = vec![("_newtype_test__t_0".to_string(), 5usize)];
+        let rendered = "type _newtype_test__t_0 = Assert<Extends<string, unknown>>;\n";
 
-        let out = attach_comments(body, &comments);
+        let json = build_source_map(rendered, &mappings, "example.nt", None);
 
-        // Helper fence and its multi-line defs are never annotated.
-        assert!(!out.contains("/** @newtype line:7 */\ntype Assert"));
-        assert!(!out.contains("/** @newtype line:7 */\ntype Equals"));
-        // Interfaces and preserved user aliases are untouched.
-        assert!(out.contains("interface Bird { fly: () => void }"));
-        assert!(!out.contains("/** @newtype */\ntype Foo"));
-        assert!(out.contains("type Foo = 1;"));
-        // Only the generated alias gets the comment.
-        assert!(out.contains(
-            "/** @newtype line:7 */\ntype _newtype_test__t_0 = Assert<Extends<string, unknown>>;"
-        ));
-        assert_eq!(out.matches("/** @newtype line:").count(), 1);
-        // Trailing newline preserved.
-        assert!(out.ends_with('\n'));
+        // A well-formed Source Map v3 with our source registered.
+        assert!(json.contains("\"version\":3"));
+        assert!(json.contains("example.nt"));
+        // `mappings` is present and non-empty (we emitted at least one segment).
+        let needle = "\"mappings\":\"";
+        let start = json.find(needle).expect("mappings field present") + needle.len();
+        let rest = &json[start..];
+        let end = rest.find('"').expect("mappings field terminated");
+        assert!(!rest[..end].is_empty(), "mappings should be non-empty");
+    }
+
+    #[test]
+    fn build_source_map_passes_output_name_as_file() {
+        let mappings = vec![("_newtype_test__t_0".to_string(), 1usize)];
+        let rendered = "type _newtype_test__t_0 = Assert<true>;\n";
+        let json = build_source_map(rendered, &mappings, "in.nt", Some("out.ts"));
+        assert!(json.contains("out.ts"));
+    }
+
+    #[test]
+    fn collect_declaration_mappings_covers_type_aliases_and_interfaces() {
+        // `type Foo` on line 1, `interface Bird` on line 3, `type Bar` on line 7.
+        let src = "type Foo as string\n\
+            \n\
+            interface Bird {\n  fly: () => void,\n}\n\
+            \n\
+            type Bar as number";
+        let program = parse_newtype_program(src).unwrap().simplify();
+        let mappings = collect_declaration_mappings(&program, src);
+        assert_eq!(
+            mappings,
+            vec![
+                ("Foo".to_string(), 1),
+                ("Bird".to_string(), 3),
+                ("Bar".to_string(), 7),
+            ]
+        );
+    }
+
+    #[test]
+    fn declaration_name_of_line_handles_export_and_interface() {
+        assert_eq!(declaration_name_of_line("type Foo = string;"), Some("Foo"));
+        assert_eq!(
+            declaration_name_of_line("export type Bar = number;"),
+            Some("Bar")
+        );
+        assert_eq!(declaration_name_of_line("interface Bird {"), Some("Bird"));
+        assert_eq!(
+            declaration_name_of_line("export interface Duck {"),
+            Some("Duck")
+        );
+        // A wrapped continuation line opens no declaration.
+        assert_eq!(declaration_name_of_line("fly: () => void;"), None);
     }
 }

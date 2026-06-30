@@ -3,26 +3,30 @@
 
 For each `assert` inside a `unittest`, the newtype compiler is BOTH a runner
 (it prints an ok/FAILED report to stderr) and a code generator (with
-`--generate-tests --source-comments` it emits a TypeScript file in which every
-assert becomes a `type _newtype_test__… = Assert<…>` alias, tagged with a
-`/** @newtype line:N */` comment pointing back at the originating source line).
+`--generate-tests` it emits a TypeScript file in which every assert becomes a
+`type _newtype_test__… = Assert<…>` alias). With `--source-map FILE` the
+compiler additionally writes a Source Map v3 JSON file relating each emitted
+line back to the originating `.nt` source line -- so attribution no longer
+relies on `/** @newtype line:N */` comments embedded in the TypeScript.
 
 This script feeds the same `.nt` source to both oracles and checks that they
 AGREE per assertion -- i.e. newtype reports an assertion as passing iff tsgo
 type-checks the corresponding alias without error. A "both fail" result is
 still agreement; only a PASS/FAIL split is a disagreement.
 
-Algorithm (matches the runner spec):
-  1. Run `./target/debug/newtype --generate-tests --source-comments < FILE`,
-     capturing stdout (the TypeScript) and stderr (the ok/FAILED report).
-  2. Parse stdout for `/** @newtype line:N */` followed by `type NAME = …` to
-     build the test universe (NAME -> source line N).
+Algorithm:
+  1. Run `newtype --generate-tests --stdin --stdin-filename FILE
+     --source-map MAP < FILE`, capturing stdout (the TypeScript), stderr (the
+     ok/FAILED report), and reading the emitted Source Map v3 from MAP.
+  2. Decode the source map (base64 VLQ) into a gen-line -> src-line table, then
+     scan stdout for `type NAME = …` aliases to build the test universe (NAME ->
+     source line), recording each statement's emitted gen-line RANGE.
   3. Parse stderr for `--> LINE:COL` pointers -> the set of source lines newtype
      reports as FAILED.
   4. Write the TypeScript to a temp `.ts` file and run `tsgo --noEmit --strict`.
-  5. For each tsgo error `…:TSLINE:COL - error TS…`, scan UPWARD in the temp
-     file from TSLINE to the nearest `/** @newtype line:N */` comment -> the set
-     of source lines tsgo reports as FAILED.
+  5. For each tsgo error at TSLINE, find the test whose gen-line range contains
+     that line -> that test's source line is a tsgo FAILURE. Errors landing in
+     no test's range are unattributed setup problems.
   6. Compare PASS-agreement per test, print a trace, and exit nonzero if any
      test disagrees (or if either oracle could not be run).
 
@@ -31,8 +35,9 @@ Usage:
 
 With no arguments it runs a sensible default set (examples/test.nt and every
 `tests/conformance/*.nt` fixture). The newtype binary is built first
-(`cargo build`) and invoked directly via stdin, so the binary never sees a
-filename -- source comments are line-only by design.
+(`cargo build`). The `.nt` path is passed as `--stdin-filename` so it appears
+as the source map's lone `sources` entry, but the source text is still piped on
+stdin.
 """
 
 import argparse
@@ -49,8 +54,6 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BINARY = os.path.join(REPO_ROOT, "target", "debug", "newtype")
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-# A generated alias comment, e.g. `/** @newtype line:35 */`.
-COMMENT_RE = re.compile(r"/\*\*\s*@newtype\s+line:(\d+)\s*\*/")
 # A generated alias declaration, e.g. `type _newtype_test__foo_0 = …`.
 TYPE_RE = re.compile(r"^type\s+(_newtype_test__\w+)\s*=")
 # newtype's failure pointer in the stderr report, e.g. `  --> 35:10`.
@@ -58,9 +61,63 @@ NT_FAIL_RE = re.compile(r"-->\s+(\d+):\d+")
 # A tsgo diagnostic line, e.g. `/abs/psub.ts:84:49 - error TS2344: …`.
 TSGO_ERR_RE = re.compile(r":(\d+):(\d+)\s+-\s+error\s+TS\d+")
 
+# Base64 alphabet used by Source Map v3 VLQ encoding.
+_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+_B64_INDEX = {ch: i for i, ch in enumerate(_B64)}
+
 
 def strip_ansi(text):
     return ANSI_RE.sub("", text)
+
+
+def decode_source_map(map_json):
+    """Decode a Source Map v3 `mappings` string (base64 VLQ) into a dict
+    {gen_line(1-based): src_line(1-based)}. The map has exactly one source, so
+    the source-index and source-column fields are ignored; only the cumulative
+    source-line field is tracked. Newtype maps every line of a statement to its
+    source line, so each gen line carries at most one segment.
+
+    1-based keys/values match newtype's `--> LINE` pointers and tsgo's display."""
+    import json as _json
+
+    mappings = _json.loads(map_json)["mappings"]
+    result = {}
+    src_line = 0  # cumulative, 0-based per the spec
+    for gen_line0, group in enumerate(mappings.split(";")):
+        if not group:
+            continue
+        # Take the first segment on this line; decode its VLQ fields.
+        segment = group.split(",")[0]
+        fields = _decode_vlq(segment)
+        if len(fields) < 4:
+            continue
+        # fields = [gen_col, src_idx_delta, src_line_delta, src_col_delta]
+        src_line += fields[2]
+        result[gen_line0 + 1] = src_line + 1
+    return result
+
+
+def _decode_vlq(segment):
+    """Decode a base64 VLQ segment string into a list of signed integers."""
+    values = []
+    shift = 0
+    acc = 0
+    for ch in segment:
+        digit = _B64_INDEX[ch]
+        continuation = digit & 0x20
+        digit &= 0x1F
+        acc += digit << shift
+        if continuation:
+            shift += 5
+        else:
+            # Lowest bit of the assembled value is the sign.
+            value = acc >> 1
+            if acc & 1:
+                value = -value
+            values.append(value)
+            shift = 0
+            acc = 0
+    return values
 
 
 def find_tsgo():
@@ -108,37 +165,70 @@ def build_binary():
         raise SystemExit("cargo build failed")
 
 
-def run_newtype(source):
-    """Return (stdout_ts, stderr_report, returncode). A nonzero exit can simply
-    mean an assertion failed (which is what we inspect), but with no generated
-    output it signals a parse/compile error — the caller distinguishes the two."""
-    proc = subprocess.run(
-        [BINARY, "--generate-tests", "--source-comments"],
-        input=source,
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
+def run_newtype(source, path):
+    """Run newtype with source piped on stdin, `path` used only as the source
+    map's `sources` entry, and a temp `.map` file for the Source Map v3 output.
+
+    Returns (stdout_ts, stderr_report, returncode, map_json). A nonzero exit can
+    simply mean an assertion failed (which is what we inspect), but with no
+    generated output it signals a parse/compile error — the caller distinguishes
+    the two. `map_json` is the source map JSON read back from disk (or None if
+    the compiler produced no map, e.g. a parse error)."""
+    tmp_map = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".map", prefix="newtype_conformance_", delete=False
     )
-    return proc.stdout, proc.stderr, proc.returncode
+    tmp_map.close()
+    try:
+        proc = subprocess.run(
+            [
+                BINARY,
+                "--generate-tests",
+                "--stdin",
+                "--stdin-filename",
+                path,
+                "--source-map",
+                tmp_map.name,
+            ],
+            input=source,
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        with open(tmp_map.name, "r") as f:
+            map_json = f.read()
+        if not map_json.strip():
+            map_json = None
+    finally:
+        os.unlink(tmp_map.name)
+    return proc.stdout, proc.stderr, proc.returncode, map_json
 
 
-def parse_test_universe(ts_stdout):
-    """Walk the emitted TypeScript, pairing each `/** @newtype line:N */` comment
-    with the `type NAME = …` line that immediately follows it.
+def parse_test_universe(ts_text, srcmap):
+    """Walk the emitted TypeScript, recording each `type NAME = …` alias, its
+    originating source line (via the source map), and the emitted gen-line RANGE
+    [gen_start, gen_end) of its statement — where gen_end is the next blank line
+    at/after the declaration (a statement boundary).
 
-    Returns a list of dicts {name, src_line} in emission order."""
+    `srcmap` maps 1-based gen line -> 1-based source line. Returns a list of
+    dicts {name, src_line, gen_start, gen_end} in emission order."""
+    lines = ts_text.split("\n")
     tests = []
-    pending_line = None
-    for raw in ts_stdout.splitlines():
-        line = raw.strip()
-        m = COMMENT_RE.search(line)
-        if m:
-            pending_line = int(m.group(1))
+    for idx, raw in enumerate(lines):
+        t = TYPE_RE.match(raw.strip())
+        if not t:
             continue
-        t = TYPE_RE.match(line)
-        if t and pending_line is not None:
-            tests.append({"name": t.group(1), "src_line": pending_line})
-            pending_line = None
+        gen_start = idx  # 0-based
+        # The statement runs until the next blank (trimmed-empty) line.
+        gen_end = gen_start + 1
+        while gen_end < len(lines) and lines[gen_end].strip() != "":
+            gen_end += 1
+        src_line = srcmap.get(gen_start + 1)  # srcmap keys are 1-based
+        tests.append({
+            "name": t.group(1),
+            "src_line": src_line,
+            "gen_start": gen_start,
+            "gen_end": gen_end,
+        })
     return tests
 
 
@@ -147,39 +237,30 @@ def parse_newtype_failures(stderr_report):
     return {int(m.group(1)) for m in NT_FAIL_RE.finditer(strip_ansi(stderr_report))}
 
 
-def parse_tsgo_failures(ts_text, tsgo_stdout):
-    """Map each tsgo error to the source line of the nearest preceding
-    `/** @newtype line:N */` comment in the emitted TypeScript.
+def parse_tsgo_failures(tests, tsgo_stdout):
+    """Attribute each tsgo error to the test whose emitted gen-line range
+    contains it, yielding that test's source line as a tsgo FAILURE.
 
-    `ts_text` is the exact content written to the temp file; `tsgo_stdout` is
-    tsgo's (ANSI-stripped) diagnostic output. Returns (failures, unattributed):
-    a set of source lines, and a list of any error lines that could NOT be tied
-    to a generated test (e.g. an error in a preserved interface or the helper
-    fence) — those are setup problems the caller must surface, not assertion
-    failures."""
-    ts_lines = ts_text.split("\n")
+    `tests` is the universe from `parse_test_universe` (each with a
+    [gen_start, gen_end) range, 0-based); `tsgo_stdout` is tsgo's (ANSI-stripped)
+    diagnostic output. Returns (failures, unattributed): a set of source lines,
+    and a list of any error lines that fell outside every test's range (e.g. an
+    error in a preserved interface or the helper fence) — those are setup
+    problems the caller must surface, not assertion failures."""
     failures = set()
     unattributed = []
     for raw in strip_ansi(tsgo_stdout).splitlines():
         m = TSGO_ERR_RE.search(raw)
         if not m:
             continue
-        ts_line = int(m.group(1))  # 1-based line in the temp file
-        # Scan upward (inclusive of the error line) for the generated test's
-        # comment, stopping at a blank line — a statement boundary — so an error
-        # in a non-generated declaration isn't misattributed to an earlier test.
-        idx = min(ts_line - 1, len(ts_lines) - 1)
-        src = None
-        while idx >= 0:
-            c = COMMENT_RE.search(ts_lines[idx])
-            if c:
-                src = int(c.group(1))
+        gen_line0 = int(m.group(1)) - 1  # 1-based -> 0-based
+        matched = None
+        for test in tests:
+            if test["gen_start"] <= gen_line0 < test["gen_end"]:
+                matched = test
                 break
-            if ts_lines[idx].strip() == "":
-                break
-            idx -= 1
-        if src is not None:
-            failures.add(src)
+        if matched is not None and matched["src_line"] is not None:
+            failures.add(matched["src_line"])
         else:
             unattributed.append(raw.strip())
     return failures, unattributed
@@ -193,8 +274,9 @@ def run_file(path, tsgo):
     with open(path, "r") as f:
         source = f.read()
 
-    ts_stdout, nt_stderr, nt_rc = run_newtype(source)
-    tests = parse_test_universe(ts_stdout)
+    ts_stdout, nt_stderr, nt_rc, map_json = run_newtype(source, path)
+    srcmap = decode_source_map(map_json) if map_json else {}
+    tests = parse_test_universe(ts_stdout, srcmap)
     nt_failures = parse_newtype_failures(nt_stderr)
 
     if not tests:
@@ -207,6 +289,14 @@ def run_file(path, tsgo):
             return False
         print("  (no unittest assertions found)")
         return True
+
+    # Every generated alias must resolve to a source line via the map; a missing
+    # mapping means the source map and the emitted TypeScript drifted out of sync.
+    unmapped = [t["name"] for t in tests if t["src_line"] is None]
+    if unmapped:
+        print(f"  ERROR: no source-map entry for generated alias(es) {unmapped}; "
+              f"the source map and emitted TypeScript are out of sync.")
+        return False
 
     # Verdicts are keyed by source line, so two asserts sharing one physical line
     # would collapse and could mask a genuine PASS/FAIL split. Require one assert
@@ -233,7 +323,7 @@ def run_file(path, tsgo):
         )
         tsgo_out = tsgo_proc.stdout + "\n" + tsgo_proc.stderr
         tsgo_rc = tsgo_proc.returncode
-        tsgo_failures, tsgo_unattributed = parse_tsgo_failures(ts_stdout, tsgo_out)
+        tsgo_failures, tsgo_unattributed = parse_tsgo_failures(tests, tsgo_out)
     finally:
         os.unlink(tmp.name)
 

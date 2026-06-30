@@ -1,6 +1,18 @@
 [tasks.test]
 run = "cargo nextest run"
 
+[tasks.test-conformance]
+alias = 'tc'
+run = '''
+python3 scripts/conformance.py
+'''
+
+[tasks.gen-test]
+alias = 'gt'
+run = '''
+cargo run -- --generate-tests
+'''
+
 [tasks.build]
 run = "cargo build"
 
