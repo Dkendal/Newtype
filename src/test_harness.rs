@@ -205,16 +205,15 @@ fn eval_claim(claim: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
         }) => negate(eval_claim(value, ctx)),
 
         Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => match op {
-            InfixOp::Extends => lhs.is_assignable_to_ctx(rhs, ctx),
-            InfixOp::NotExtends => negate(lhs.is_assignable_to_ctx(rhs, ctx)),
+            InfixOp::Extends => relation(lhs, rhs, ctx),
+            InfixOp::NotExtends => negate(relation(lhs, rhs, ctx)),
             // `a == b` is `(a <: b) and (b <: a)`; strict and loose coincide here.
             InfixOp::Equals | InfixOp::StrictEquals => {
-                lhs.is_assignable_to_ctx(rhs, ctx).and(rhs.is_assignable_to_ctx(lhs, ctx))
+                relation(lhs, rhs, ctx).and(relation(rhs, lhs, ctx))
             }
             // `a != b` is `not (a <: b) or not (b <: a)`.
             InfixOp::NotEquals | InfixOp::StrictNotEquals => {
-                negate(lhs.is_assignable_to_ctx(rhs, ctx))
-                    .or(negate(rhs.is_assignable_to_ctx(lhs, ctx)))
+                negate(relation(lhs, rhs, ctx)).or(negate(relation(rhs, lhs, ctx)))
             }
             InfixOp::And => eval_claim(lhs, ctx).and(eval_claim(rhs, ctx)),
             InfixOp::Or => eval_claim(lhs, ctx).or(eval_claim(rhs, ctx)),
@@ -224,6 +223,24 @@ fn eval_claim(claim: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
         // `and`/`or` are relational by construction, so other nodes shouldn't
         // appear. Treat them as a definite failure rather than panicking.
         _ => ExtendsResult::False,
+    }
+}
+
+/// Evaluate a single `lhs <: rhs` relation leaf for the assert harness.
+///
+/// A `Never` result means the left-hand side is (or reduces to) the bottom type
+/// `never`, which is assignable to *everything* — so as an assertion the relation
+/// **holds**. We map `Never -> True` here, at the relation leaf and *before* any
+/// `not` is applied, so negation composes correctly (`negate(True) = False`):
+/// `assert never <: string` passes while `assert not (never <: string)` fails.
+///
+/// This interpretation is specific to assert/claim evaluation. The conditional-
+/// type path ([`runtime::builtin::unquote`](crate::runtime::builtin::unquote))
+/// keeps `Never -> never` and is unaffected.
+fn relation(lhs: &Ast, rhs: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
+    match lhs.is_assignable_to_ctx(rhs, ctx) {
+        ExtendsResult::Never => ExtendsResult::True,
+        other => other,
     }
 }
 
@@ -461,6 +478,41 @@ mod tests {
             false,
         );
         assert_eq!(report, Report { passed: 1, failed: 0 });
+    }
+
+    #[test]
+    fn never_lhs_makes_assertion_hold() {
+        // `never` is the bottom type: assignable to everything, so as an
+        // assertion `never <: T` holds. `string & number` reduces to `never`.
+        let src = "unittest \"t\" do\n\
+            \x20 assert never <: string\n\
+            \x20 assert string & number <: never\n\
+            \x20 assert string & number <: string\n\
+            \x20 assert never <: never\n\
+            end";
+        let (report, _) = run_src(src, false);
+        assert_eq!(report, Report { passed: 4, failed: 0 });
+    }
+
+    #[test]
+    fn negated_never_relation_fails() {
+        // `never <: string` holds, so its negation must fail — the `Never -> True`
+        // interpretation happens at the leaf, before `not` is applied.
+        let (report, _) = run_src(
+            "unittest \"t\" do\n  assert not (never <: string)\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 0, failed: 1 });
+    }
+
+    #[test]
+    fn string_is_not_never() {
+        // `string <: never` is genuinely false (string is not the bottom type).
+        let (report, _) = run_src(
+            "unittest \"t\" do\n  assert string <: never\nend",
+            false,
+        );
+        assert_eq!(report, Report { passed: 0, failed: 1 });
     }
 
     #[test]
