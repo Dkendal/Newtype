@@ -1,3 +1,5 @@
 /target
 */target
 .task
+__pycache__/
+*.pyc

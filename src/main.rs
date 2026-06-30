@@ -1,4 +1,5 @@
 use clap::Parser;
+use newtype::test_codegen;
 use newtype::test_harness;
 use newtype::typescript::Pretty;
 use std::io::Read;
@@ -13,6 +14,14 @@ struct Args {
     /// Stop evaluating `unittest` assertions at the first failure.
     #[clap(long)]
     fail_fast: bool,
+    /// Emit TypeScript type-level assertions for each `unittest` assert, prefixed
+    /// with the helper types they need.
+    #[clap(long)]
+    generate_tests: bool,
+    /// With `--generate-tests`, annotate each generated `type` alias with a
+    /// `/** @newtype line:N */` comment giving the source line of its `assert`.
+    #[clap(long, requires = "generate_tests")]
+    source_comments: bool,
 }
 
 fn main() {
@@ -47,7 +56,21 @@ fn main() {
             )
             .expect("writing the test report to stderr failed");
 
-            let out = simplified.render_pretty_ts(120);
+            let out = if args.generate_tests {
+                let expansion = test_codegen::expand(&simplified, input);
+                let header = test_codegen::render_helpers(&expansion.helpers);
+                let mut body = expansion.ast.render_pretty_ts(120);
+                if args.source_comments {
+                    body = test_codegen::attach_comments(&body, &expansion.comments);
+                }
+                if header.is_empty() {
+                    body
+                } else {
+                    format!("{header}\n{body}")
+                }
+            } else {
+                simplified.render_pretty_ts(120)
+            };
 
             if let Some(output_filename) = args.output {
                 std::fs::write(output_filename, out).unwrap();

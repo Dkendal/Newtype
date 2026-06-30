@@ -1,15 +1,13 @@
-type F as string
+// Acceptance fixture: every assertion below must hold in BOTH newtype and tsgo.
+// (Subset of examples/test.nt, restricted to claims both systems accept.)
 
-unittest "string is assignable" do
+unittest "structural assignability holds" do
   assert string <: unknown
   assert not (number <: string)
   assert () => any <: () => any
   assert () => never <: () => any
   assert () => unknown <: () => any
-  assert () => unknown <: () => any
   assert () => any <: Function
-  assert () => any <: (any) => any
-  assert (any) => any <: (any, any) => any
   assert (string) => any <: (any) => any
   assert not((string) => any <: (unknown) => any)
   assert {} <: {}
@@ -33,4 +31,3 @@ unittest "a duck is a bird" do
   assert Duck <: Bird
   assert not(Bird <: Duck)
 end
-
