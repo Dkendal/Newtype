@@ -5,10 +5,20 @@ use crate::{
         type_env::{fingerprint, substitute, ResolveCtx},
         Access, ApplyGeneric, Ast, Builtin, BuiltinKeyword, ExtendsExpr, FunctionType, Ident,
         IntersectionType, MappedType, MappingModifier, ObjectProperty, ObjectPropertyKey,
-        PrimitiveType, Span, Tuple, TypeLiteral, TypeString, UnionType,
+        PrimitiveType, Span, Tuple, TypeLiteral, TypeNumber, TypeString, UnionType,
     },
     extends_result::ExtendsResult,
 };
+
+/// One piece of a parsed template-literal type: a fixed literal run, or a
+/// `${…}` placeholder constrained to a primitive domain.
+enum TemplateSeg {
+    Lit(String),
+    Str,
+    Num,
+    Bool,
+    Big,
+}
 
 /// Structural classification of an object-property key, used to relate object
 /// type literals that carry index signatures.
@@ -112,6 +122,18 @@ impl Ast {
             (_, rhs) if rhs.is_top_type() => T::True,
 
             (A::AnyKeyword(_), _) => T::Both,
+
+            // `unknown` is assignable only to a top type (handled above) — except
+            // a union/intersection target may *contain* a top type. Defer those to
+            // the set-membership folds so `unknown <: number | unknown` holds and
+            // `unknown <: string | number` still fails.
+            (A::UnknownKeyword(_), A::UnionType(UnionType { types, .. })) => {
+                Self::assignable_to_union(self, types, ctx)
+            }
+
+            (A::UnknownKeyword(_), A::IntersectionType(IntersectionType { types, .. })) => {
+                Self::assignable_to_intersection(self, types, ctx)
+            }
 
             (A::UnknownKeyword(_), _) => T::False,
 
@@ -240,7 +262,18 @@ impl Ast {
 
             (lhs @ A::Ident(_), _) if lhs.get_primitive_type().is_none() => T::Both,
 
-            (lhs, rhs) if lhs.is_non_nullish() && rhs.is_object_object_wrapper() => T::True,
+            // Every non-nullish value is assignable to the empty object type `{}`
+            // and to the global `Object` interface (both denote "any non-nullish
+            // value"). This admits bare primitives (`string <: {}`, `1 <: {}`) and
+            // `object` itself. The `object` *primitive* is intentionally NOT
+            // included here — it rejects primitives (`string <: object` is false)
+            // and is handled structurally below.
+            (lhs, rhs)
+                if lhs.is_non_nullish()
+                    && (rhs.is_object_object_wrapper() || rhs.is_empty_object()) =>
+            {
+                T::True
+            }
 
             (A::TypeLiteral(lhs), rhs) => Self::type_literal_assignable_to(lhs, rhs, ctx),
 
@@ -258,12 +291,32 @@ impl Ast {
                 T::True
             }
 
+            // A concrete string literal against a template-literal *pattern*
+            // (`"abc" <: \`a${string}\``): match the literal text against the
+            // pattern's fixed runs and `${…}` placeholders. An unrecognised
+            // placeholder domain leaves the relation indeterminate.
+            (A::TypeString(s), A::TemplateString(t)) => match Self::parse_template(&t.ty) {
+                Some(segs) => Into::into(Self::template_matches(&segs, &s.ty)),
+                None => T::Both,
+            },
+
             (
                 A::Primitive(PrimitiveType::String, _) | A::TemplateString(_) | A::TypeString(_),
                 rhs,
             ) if rhs.is_string_object_wrapper() => T::True,
 
             (A::TypeNumber(_), A::Primitive(PrimitiveType::Number, _)) => T::True,
+
+            // Two numeric literal types are the same type iff they denote the same
+            // numeric *value*, regardless of surface spelling (`1.0`/`1`,
+            // `1.50`/`1.5`, `1_000`/`1000`, `0`/`-0`). The identity arm above
+            // handles textually-equal cases; this compares parsed values.
+            (A::TypeNumber(a), A::TypeNumber(b)) => {
+                match (Self::number_value(&a.ty), Self::number_value(&b.ty)) {
+                    (Some(x), Some(y)) => Into::into(x == y),
+                    _ => Into::into(a.ty == b.ty),
+                }
+            }
 
             // Object wrappers as TARGETS (`Number`, `Boolean`, `BigInt`,
             // `Symbol` — `Object` is the any-object target handled above). A
@@ -308,7 +361,43 @@ impl Ast {
             // A variable-length array is not assignable to a fixed-arity tuple.
             Ast::Tuple(_) => ExtendsResult::False,
             rhs if Self::accepts_any_object(rhs) => ExtendsResult::True,
+            // An array `T[]` has the apparent members `length: number` and a
+            // numeric index signature `[k in number]: T`, so it can satisfy an
+            // object type that asks for those (`number[] <: { length: number }`).
+            Ast::TypeLiteral(_) => {
+                let shape = Self::array_object_shape(element, element.as_span());
+                Ast::TypeLiteral(shape).is_assignable_to_ctx(rhs, ctx)
+            }
             _ => ExtendsResult::False,
+        }
+    }
+
+    /// The apparent object shape of an array `element[]`: a required
+    /// `length: number` plus a numeric index signature carrying the element type.
+    fn array_object_shape(element: &Ast, span: Span) -> TypeLiteral {
+        TypeLiteral {
+            properties: vec![
+                ObjectProperty {
+                    readonly: false,
+                    optional: false,
+                    key: ObjectPropertyKey::Key("length".to_string()),
+                    value: Ast::Primitive(PrimitiveType::Number, span),
+                    span,
+                },
+                ObjectProperty {
+                    readonly: false,
+                    optional: false,
+                    key: ObjectPropertyKey::Index(crate::ast::PropertyKeyIndex {
+                        key: "k".to_string(),
+                        iterable: Ast::Primitive(PrimitiveType::Number, span),
+                        remapped_as: None,
+                        span,
+                    }),
+                    value: element.clone(),
+                    span,
+                },
+            ],
+            span,
         }
     }
 
@@ -373,6 +462,22 @@ impl Ast {
             acc = acc.and(related);
         }
 
+        // Rest-element contravariance. Two rest parameters (`...a: S[]` vs
+        // `...b: T[]`) relate the rest *elements* contravariantly, just like a
+        // fixed position. The per-position loop above only covers indices up to
+        // the larger fixed-parameter count, so when both signatures are
+        // pure-rest (no fixed params) the elements are otherwise never compared.
+        if let (Some(source_ty), Some(target_ty)) = (source_rest, target_rest) {
+            let related = if matches!(source_ty, Ast::AnyKeyword(_))
+                || matches!(target_ty, Ast::AnyKeyword(_))
+            {
+                ExtendsResult::True
+            } else {
+                target_ty.is_assignable_to_ctx(source_ty, ctx)
+            };
+            acc = acc.and(related);
+        }
+
         // Return type. A target return of `any` or `void` is satisfied by any
         // source return; otherwise the relation is covariant. A source return of
         // `any` is assignable to every target return except `never` (`any` is not
@@ -401,6 +506,11 @@ impl Ast {
         let mut fixed = Vec::new();
         let mut rest = None;
         for param in params {
+            // A `this` parameter is a typing annotation, not a real argument
+            // position — TypeScript erases it from the signature's arity.
+            if param.name == "this" {
+                continue;
+            }
             if param.ellipsis {
                 rest = Some(match &param.kind {
                     Ast::Array(element) => element.as_ref(),
@@ -435,8 +545,41 @@ impl Ast {
                 acc.and(item.is_assignable_to_ctx(rhs_element, ctx))
             }),
             rhs if Self::accepts_any_object(rhs) => ExtendsResult::True,
+            // A tuple `[A, B]` has the apparent members `length: <literal arity>`
+            // and numeric-named element properties (`0: A`, `1: B`), so it can
+            // satisfy an object type that asks for those.
+            Ast::TypeLiteral(_) => {
+                let shape = Self::tuple_object_shape(tuple);
+                Ast::TypeLiteral(shape).is_assignable_to_ctx(rhs, ctx)
+            }
             _ => ExtendsResult::False,
         }
+    }
+
+    /// The apparent object shape of a tuple `[A, B, …]`: a required `length`
+    /// whose type is the literal arity, plus a numeric-named property per element.
+    fn tuple_object_shape(tuple: &Tuple) -> TypeLiteral {
+        let span = tuple.span;
+        let mut properties = vec![ObjectProperty {
+            readonly: false,
+            optional: false,
+            key: ObjectPropertyKey::Key("length".to_string()),
+            value: Ast::TypeNumber(TypeNumber {
+                ty: tuple.items.len().to_string(),
+                span,
+            }),
+            span,
+        }];
+        for (i, item) in tuple.items.iter().enumerate() {
+            properties.push(ObjectProperty {
+                readonly: false,
+                optional: false,
+                key: ObjectPropertyKey::Key(i.to_string()),
+                value: item.clone(),
+                span,
+            });
+        }
+        TypeLiteral { properties, span }
     }
 
     /// Object type literal assignable to `rhs`. Structural width and depth
@@ -458,6 +601,47 @@ impl Ast {
                     .any(|p| matches!(Self::classify_key(&p.key), KeyClass::Other));
                 if any_other {
                     return ExtendsResult::Both;
+                }
+
+                // Weak-type rule. A "weak" target is a non-empty object whose
+                // members are ALL optional plain properties (no required member
+                // and no index/call/construct signature). TypeScript rejects a
+                // source that has at least one property of its own yet shares no
+                // property name with such a target ("has no properties in
+                // common"). An empty source `{}` is exempt, and a source carrying
+                // an index signature is treated as compatible.
+                let target_named: Vec<&str> = target
+                    .iter()
+                    .filter_map(|p| match Self::classify_key(&p.key) {
+                        KeyClass::Named(name) => Some(name),
+                        _ => None,
+                    })
+                    .collect();
+                let target_weak = !target_named.is_empty()
+                    && target.iter().all(|p| {
+                        matches!(Self::classify_key(&p.key), KeyClass::Named(_)) && p.optional
+                    });
+                if target_weak {
+                    let mut source_has_named = false;
+                    let mut source_has_index = false;
+                    let mut shares = false;
+                    for p in lhs.iter() {
+                        match Self::classify_key(&p.key) {
+                            KeyClass::Named(name) => {
+                                source_has_named = true;
+                                if target_named.contains(&name) {
+                                    shares = true;
+                                }
+                            }
+                            KeyClass::StringIndex | KeyClass::NumberIndex => {
+                                source_has_index = true
+                            }
+                            KeyClass::Other => {}
+                        }
+                    }
+                    if source_has_named && !source_has_index && !shares {
+                        return ExtendsResult::False;
+                    }
                 }
 
                 // Index the source by kind: named properties (by name), and the
@@ -558,6 +742,91 @@ impl Ast {
         name.parse::<f64>().is_ok()
     }
 
+    /// Parse a numeric-literal type's surface text to its value, stripping the
+    /// `_` digit separators TypeScript allows. `None` if it isn't a plain decimal
+    /// literal (the caller then falls back to textual identity).
+    fn number_value(text: &str) -> Option<f64> {
+        text.replace('_', "").parse::<f64>().ok()
+    }
+
+    /// Parse a template-literal type's raw text (with surrounding backticks) into
+    /// fixed runs and `${…}` placeholders. Returns `None` if a placeholder names
+    /// a domain we don't match here (a literal, union, or reference), so the
+    /// caller stays indeterminate rather than guessing.
+    fn parse_template(raw: &str) -> Option<Vec<TemplateSeg>> {
+        let inner = raw.strip_prefix('`')?.strip_suffix('`')?;
+        let mut segs = vec![];
+        let mut literal = String::new();
+        let mut rest = inner;
+        while let Some(start) = rest.find("${") {
+            literal.push_str(&rest[..start]);
+            let after = &rest[start + 2..];
+            let end = after.find('}')?;
+            let placeholder = after[..end].trim();
+            if !literal.is_empty() {
+                segs.push(TemplateSeg::Lit(std::mem::take(&mut literal)));
+            }
+            segs.push(match placeholder {
+                "string" | "any" => TemplateSeg::Str,
+                "number" => TemplateSeg::Num,
+                "boolean" => TemplateSeg::Bool,
+                "bigint" => TemplateSeg::Big,
+                _ => return None,
+            });
+            rest = &after[end + 1..];
+        }
+        literal.push_str(rest);
+        if !literal.is_empty() {
+            segs.push(TemplateSeg::Lit(literal));
+        }
+        Some(segs)
+    }
+
+    /// Whether `text` matches a parsed template pattern, with backtracking over
+    /// the open-ended placeholders.
+    fn template_matches(segs: &[TemplateSeg], text: &str) -> bool {
+        match segs.split_first() {
+            None => text.is_empty(),
+            Some((TemplateSeg::Lit(lit), tail)) => match text.strip_prefix(lit.as_str()) {
+                Some(remainder) => Self::template_matches(tail, remainder),
+                None => false,
+            },
+            Some((placeholder, tail)) => {
+                // Try every prefix of `text` that is valid for this placeholder's
+                // domain, then match the remainder against the rest of the
+                // pattern. `string`/`any` admit the empty prefix too.
+                let valid = |prefix: &str| match placeholder {
+                    TemplateSeg::Str => true,
+                    TemplateSeg::Num => Self::number_value(prefix).is_some(),
+                    TemplateSeg::Bool => prefix == "true" || prefix == "false",
+                    TemplateSeg::Big => {
+                        !prefix.is_empty()
+                            && prefix
+                                .strip_prefix('-')
+                                .unwrap_or(prefix)
+                                .bytes()
+                                .all(|b| b.is_ascii_digit())
+                    }
+                    TemplateSeg::Lit(_) => unreachable!(),
+                };
+                let start = if matches!(placeholder, TemplateSeg::Str) {
+                    0
+                } else {
+                    1
+                };
+                for end in start..=text.len() {
+                    if !text.is_char_boundary(end) {
+                        continue;
+                    }
+                    if valid(&text[..end]) && Self::template_matches(tail, &text[end..]) {
+                        return true;
+                    }
+                }
+                false
+            }
+        }
+    }
+
     /// Relation between a present source property and the target property it
     /// matches by name.
     fn property_relation(
@@ -571,16 +840,20 @@ impl Ast {
             return ExtendsResult::False;
         }
 
-        let mut value = source.value.is_assignable_to_ctx(&target.value, ctx);
-
-        // An optional target property has type `T | undefined`, so an
-        // `undefined`-typed source value still satisfies it.
+        // An optional target property `x?: T` has effective type `T | undefined`
+        // under --strict (no `exactOptionalPropertyTypes`), so the source value
+        // need only be assignable to `T | undefined`. This admits a present-but-
+        // `undefined` value and a `T | undefined`-typed source alike.
         if target.optional {
-            let undefined = Ast::Primitive(PrimitiveType::Undefined, source.value.as_span());
-            value = value.or(source.value.is_assignable_to_ctx(&undefined, ctx));
+            let undefined = Ast::Primitive(PrimitiveType::Undefined, target.value.as_span());
+            let widened = Ast::UnionType(UnionType {
+                types: vec![target.value.clone(), undefined],
+                span: target.value.as_span(),
+            });
+            return source.value.is_assignable_to_ctx(&widened, ctx);
         }
 
-        value
+        source.value.is_assignable_to_ctx(&target.value, ctx)
     }
 
     /// Source union: assignable iff *every* member is assignable to `rhs`.
@@ -621,6 +894,25 @@ impl Ast {
         rhs: &Ast,
         ctx: &ResolveCtx,
     ) -> ExtendsResult {
+        // Treat a left-associated `A & B & C` as the flat set `{A, B, C}` so the
+        // disjointness, merge, and membership logic sees every member.
+        let flat = Self::flatten_intersection_members(members);
+        let members = &flat[..];
+
+        // Distribute an intersection containing a union: `(A | B) & C` ≡
+        // `(A & C) | (B & C)`. Relate every product-combination (a union-free
+        // intersection) to `rhs`; the whole relation holds iff each surviving
+        // combination does — a contradictory combination reduces to `never` and
+        // is vacuously satisfied, which is exactly how the empty members of the
+        // distributed union drop out (`(1|2|3) & (2|3|4)` ≡ `2 | 3`).
+        if members.iter().any(|m| matches!(m, Ast::UnionType(_))) {
+            return Self::distribute_intersection(members)
+                .iter()
+                .fold(ExtendsResult::True, |acc, combo| {
+                    acc.and(Self::intersection_source_assignable(combo, rhs, ctx))
+                });
+        }
+
         // `never & T` reduces to `never`, which collapses the conditional.
         if members.iter().any(|m| matches!(m, Ast::NeverKeyword(_))) {
             return ExtendsResult::Never;
@@ -642,6 +934,29 @@ impl Ast {
             }
             for b in &members[i + 1..] {
                 if Self::disjoint_primitive_family(b).is_none() {
+                    continue;
+                }
+                let a_to_b = a.is_assignable_to_ctx(b, ctx);
+                let b_to_a = b.is_assignable_to_ctx(a, ctx);
+                if a_to_b != ExtendsResult::True && b_to_a != ExtendsResult::True {
+                    return ExtendsResult::Never;
+                }
+            }
+        }
+
+        // `null`/`undefined`/`void` are disjoint from every non-top type they are
+        // not mutually assignable to (under --strict), so an intersection pairing
+        // a nullish member with such a member is uninhabited and reduces to
+        // `never` (`null & string`, `undefined & {a:1}`, `null & undefined`). Top
+        // types (`unknown`/`any`) are skipped — they are identity/collapse for
+        // intersection — and `void & undefined` survives because `undefined <:
+        // void`.
+        for (i, a) in members.iter().enumerate() {
+            for b in &members[i + 1..] {
+                if !(a.is_nullish() || b.is_nullish()) {
+                    continue;
+                }
+                if a.is_top_type() || b.is_top_type() {
                     continue;
                 }
                 let a_to_b = a.is_assignable_to_ctx(b, ctx);
@@ -687,9 +1002,13 @@ impl Ast {
             .unwrap_or_else(|| member.clone())
     }
 
-    /// Collect the properties of every object-literal member into one shape.
+    /// Collect the properties of every object-literal member into one shape. A
+    /// plain key carried by more than one member has its value types
+    /// *intersected* (`{a: T} & {a: U}` → `{a: T & U}`), mirroring how TypeScript
+    /// merges an intersection of object types; non-plain keys (index signatures)
+    /// are carried through as-is.
     fn merge_object_members(members: &[Ast]) -> Option<TypeLiteral> {
-        let mut properties = vec![];
+        let mut properties: Vec<ObjectProperty> = vec![];
         let mut span = None;
 
         for member in members {
@@ -697,11 +1016,68 @@ impl Ast {
                 if span.is_none() {
                     span = Some(tl.span);
                 }
-                properties.extend(tl.properties.clone());
+                for prop in tl.properties.iter() {
+                    if let ObjectPropertyKey::Key(name) = &prop.key {
+                        if let Some(existing) = properties
+                            .iter_mut()
+                            .find(|p| matches!(&p.key, ObjectPropertyKey::Key(n) if n == name))
+                        {
+                            existing.value = Ast::IntersectionType(IntersectionType {
+                                types: vec![existing.value.clone(), prop.value.clone()],
+                                span: prop.span,
+                            });
+                            // A merged key is optional only if optional in every
+                            // member, and readonly if readonly in any.
+                            existing.optional = existing.optional && prop.optional;
+                            existing.readonly = existing.readonly || prop.readonly;
+                            continue;
+                        }
+                    }
+                    properties.push(prop.clone());
+                }
             }
         }
 
         span.map(|span| TypeLiteral { properties, span })
+    }
+
+    /// Cartesian product of an intersection's members, expanding each union
+    /// member into its alternatives: `[(A|B), C]` → `[[A, C], [B, C]]`. Each
+    /// returned combination is a union-free member list.
+    fn distribute_intersection(members: &[Ast]) -> Vec<Vec<Ast>> {
+        let mut result: Vec<Vec<Ast>> = vec![vec![]];
+        for member in members {
+            let options: Vec<Ast> = match member {
+                Ast::UnionType(UnionType { types, .. }) => types.clone(),
+                other => vec![other.clone()],
+            };
+            let mut next = Vec::with_capacity(result.len() * options.len());
+            for combo in &result {
+                for option in &options {
+                    let mut extended = combo.clone();
+                    extended.push(option.clone());
+                    next.push(extended);
+                }
+            }
+            result = next;
+        }
+        result
+    }
+
+    /// Flatten nested intersection members into a single level so a
+    /// left-associated `A & B & C` is treated as the set `{A, B, C}` for the
+    /// disjointness, merge, and membership checks below.
+    fn flatten_intersection_members(members: &[Ast]) -> Vec<Ast> {
+        let mut out = vec![];
+        for member in members {
+            match member {
+                Ast::IntersectionType(IntersectionType { types, .. }) => {
+                    out.extend(Self::flatten_intersection_members(types));
+                }
+                _ => out.push(member.clone()),
+            }
+        }
+        out
     }
 
     /// Targets that accept any object value: the empty object `{}`, the
@@ -804,8 +1180,14 @@ impl Ast {
 
         let keys = Self::mapped_key_set(&mt.iterable, ctx, &mut HashSet::new())?;
 
-        let optional = matches!(mt.optional_mod, Some(MappingModifier::Add));
-        let readonly = matches!(mt.readonly_mod, Some(MappingModifier::Add));
+        let add_optional = matches!(mt.optional_mod, Some(MappingModifier::Add));
+        let add_readonly = matches!(mt.readonly_mod, Some(MappingModifier::Add));
+
+        // For a homomorphic mapped type `[k in keyof O]`, the source object's
+        // per-property `readonly`/`optional` modifiers carry onto the generated
+        // properties; the mapped type's own `+readonly`/`+optional` only *add* to
+        // them. (Modifier *removal* `-readonly`/`-?` is not modelled yet.)
+        let source_mods = Self::homomorphic_source_mods(&mt.iterable, ctx);
 
         let mut properties = Vec::with_capacity(keys.len());
         for key in keys {
@@ -813,6 +1195,9 @@ impl Ast {
             let Ast::TypeString(TypeString { ty: name, .. }) = &key else {
                 return None;
             };
+
+            let (src_optional, src_readonly) =
+                source_mods.get(name).copied().unwrap_or((false, false));
 
             // Substitute the index variable with this key in the body, then try a
             // one-step reduction of a homomorphic `O[K]` indexed access.
@@ -822,8 +1207,8 @@ impl Ast {
             let value = Self::reduce_indexed_access(&body, ctx);
 
             properties.push(ObjectProperty {
-                readonly,
-                optional,
+                readonly: add_readonly || src_readonly,
+                optional: add_optional || src_optional,
                 key: ObjectPropertyKey::Key(name.clone()),
                 value,
                 span: mt.span,
@@ -834,6 +1219,31 @@ impl Ast {
             properties,
             span: mt.span,
         })
+    }
+
+    /// For a homomorphic mapped iterable `keyof O` where `O` resolves to an
+    /// object literal, return each plain key's `(optional, readonly)` modifiers so
+    /// they can be preserved on the mapped result. Empty for any non-homomorphic
+    /// iterable (a literal key union, a primitive, …).
+    fn homomorphic_source_mods(iterable: &Ast, ctx: &ResolveCtx) -> HashMap<String, (bool, bool)> {
+        let mut out = HashMap::new();
+        if let Ast::Builtin(Builtin {
+            name: BuiltinKeyword::Keyof,
+            argument,
+            ..
+        }) = iterable
+        {
+            let resolved = ctx.env().and_then(|env| env.resolve_head(argument));
+            let target = resolved.as_ref().unwrap_or(argument);
+            if let Ast::TypeLiteral(tl) = target {
+                for p in tl.iter() {
+                    if let ObjectPropertyKey::Key(name) = &p.key {
+                        out.insert(name.clone(), (p.optional, p.readonly));
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Resolve the key set of a mapped type's iterable to a vector of literal key

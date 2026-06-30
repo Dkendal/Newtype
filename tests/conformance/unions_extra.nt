@@ -1,0 +1,100 @@
+// Conformance edge cases added by the 2026-06-30 audit (unions).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "objects as union members" do
+  assert {a: 1} <: {a: 1} | {a: 2}
+  assert {a: 1, b: 2} <: {a: 1} | {a: 2}
+  assert not({a: 1} | {a: 2} <: {a: 1})
+  assert {a: number} <: {a: number} | {b: string}
+  assert {a: 1} | {a: 2} <: {a: number}
+  assert not({a: 1} | {b: 2} <: {a: number})
+end
+
+unittest "objects with union-typed properties" do
+  assert {a: 1 | 2} <: {a: number}
+  assert {a: 1} <: {a: 1 | 2}
+  assert not({a: 1 | 2} <: {a: 1})
+  assert {a: 1 | 2, b: 3} <: {a: number}
+  assert {a: 1} | {a: 2} <: {a: 1 | 2}
+end
+
+unittest "tuples and arrays as union members" do
+  assert [1, 2] <: [1, 2] | [3, 4]
+  assert not([1, 2] | [3, 4] <: [1, 2])
+  assert [number, number] <: [number, number] | [string, string]
+  assert [1, 2] | [3, 4] <: number[]
+  assert not(number[] <: [1, 2] | [3, 4])
+  assert (string[] | number[]) <: (string | number)[]
+end
+
+unittest "boolean literal absorption in unions" do
+  assert true | false | boolean == boolean
+  assert boolean | true == boolean
+  assert true | boolean == boolean
+  assert false | boolean == boolean
+  assert true | 1 | false == boolean | 1
+end
+
+unittest "a wider union member absorbs narrower ones" do
+  assert 1 | number == number
+  assert 'x' | string == string
+  assert 1 | 2 | number == number
+  assert 'a' | string | 'b' == string
+end
+
+unittest "never members are dropped from unions" do
+  assert 1 | 2 | never == 1 | 2
+  assert never | 1 == 1
+  assert string | never | number == string | number
+  assert never <: 1 | 2
+  assert not(1 | 2 <: never)
+end
+
+unittest "nested unions flatten and are associative" do
+  assert (1 | 2) | (3 | 4) == 1 | 2 | 3 | 4
+  assert string | (number | boolean) == (string | number) | boolean
+  assert ((1 | 2) | 3) | (4 | (5 | 6)) == 1 | 2 | 3 | 4 | 5 | 6
+  assert string | (number | (boolean | bigint)) == string | number | boolean | bigint
+end
+
+unittest "optional and width with object unions" do
+  assert {a?: number} <: {a?: number} | {b: string}
+  assert {a: 1} <: {a?: number} | {b: string}
+  assert {} <: {a?: number} | {b: string}
+  assert {a: 1, b: 2} <: {a: number} | {b: number}
+  assert not({c: 1} <: {a: number} | {b: number})
+end
+
+unittest "discriminated-union style assignability" do
+  assert {tag: 'a', v: 1} <: {tag: 'a', v: number} | {tag: 'b', v: string}
+  assert not({tag: 'c', v: 1} <: {tag: 'a', v: number} | {tag: 'b', v: string})
+  assert {a: 1, c: 9} | {a: 2, d: 8} <: {a: 1 | 2}
+end
+
+unittest "unions through function params and returns" do
+  assert (x: string | number) => void <: (x: string) => void
+  assert (x: string | number) => void <: (x: number) => void
+  assert not((x: string) => void <: (x: string | number) => void)
+  assert (() => 1) <: () => 1 | 2
+  assert not((() => 1 | 2) <: () => 1)
+end
+
+unittest "unions of intersections" do
+  assert ({a: 1} & {b: 2}) | ({a: 3} & {b: 4}) <: {a: number, b: number}
+  assert {a: 1, b: 2} <: ({a: 1} & {b: 2}) | ({a: 3} & {b: 4})
+  assert not({a: 1, b: 4} <: ({a: 1} & {b: 2}) | ({a: 3} & {b: 4}))
+end
+
+unittest "unions across bigint and symbol" do
+  assert 1 <: number | bigint
+  assert not(1 <: bigint)
+  assert symbol <: symbol | string
+  assert not(number <: bigint | symbol)
+end
+
+unittest "any and never tail members in unions" do
+  assert string | number <: string | number | never
+  assert string | number | never <: string | number
+  assert never <: string | number | never
+  assert string | number <: any
+end

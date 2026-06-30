@@ -185,6 +185,23 @@ fn evaluate(claim: &Ast, env: &TypeEnv) -> Outcome {
     }
 
     let ctx = ResolveCtx::new(env);
+
+    // A generic application whose argument violates a `where` constraint is an
+    // ill-typed program (TypeScript TS2344), not a relation that evaluates to a
+    // boolean — surface it as an error rather than silently computing a result.
+    let constraint_errors = env.constraint_errors(claim, &ctx);
+    if !constraint_errors.is_empty() {
+        return Outcome::Errors(
+            constraint_errors
+                .into_iter()
+                .map(|error| Diagnostic {
+                    span: error.span,
+                    message: error.message,
+                })
+                .collect(),
+        );
+    }
+
     match eval_claim(&claim.simplify(), &ctx) {
         ExtendsResult::True => Outcome::Pass,
         result => Outcome::Fail { result },

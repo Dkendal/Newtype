@@ -92,7 +92,7 @@ mod assignability_tests {
     // string
     #[case("string", "any", TRUE)]
     #[case("string", "unknown", TRUE)]
-    #[case("string", "{}", FALSE)]
+    #[case("string", "{}", TRUE)] // every non-nullish value is assignable to `{}`
     #[case("string", "[]", FALSE)]
     #[case("string", "string", TRUE)]
     #[case("string", "number", FALSE)]

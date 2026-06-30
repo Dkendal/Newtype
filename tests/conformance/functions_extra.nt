@@ -1,0 +1,72 @@
+// Conformance edge cases added by the 2026-06-30 audit (functions).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "rest parameters tolerate zero and extra arity" do
+  assert (...a: number[]) => void <: () => void
+  assert () => void <: (...a: number[]) => void
+  assert (a: number, ...b: number[]) => void <: (a: number) => void
+  assert (a: number) => void <: (a: number, ...b: number[]) => void
+  assert (a: string, ...b: number[]) => void <: (a: string, b: number, c: number) => void
+end
+
+unittest "never parameters are the contravariant top" do
+  assert (x: string) => void <: (x: never) => void
+  assert not((x: never) => void <: (x: string) => void)
+end
+
+unittest "void and undefined returns differ" do
+  assert () => undefined <: () => void
+  assert not(() => void <: () => undefined)
+  assert () => number <: () => (number | void)
+  assert () => void <: () => (number | void)
+  assert not(() => (number | void) <: () => number)
+end
+
+unittest "any return is covariant and not bottom" do
+  assert () => any <: () => string
+  assert () => string <: () => any
+  assert not(() => any <: () => never)
+end
+
+unittest "unknown and any parameters relate to each other" do
+  assert (x: unknown) => void <: (x: any) => void
+  assert (x: any) => void <: (x: unknown) => void
+end
+
+unittest "callbacks compose contravariantly then covariantly" do
+  assert (f: (x: 1) => void) => void <: (f: (x: number) => void) => void
+  assert not((f: (x: number) => void) => void <: (f: (x: 1) => void) => void)
+  assert not((cb: (x: number) => number) => void <: (cb: (x: number) => void) => void)
+end
+
+unittest "higher order return stays covariant" do
+  assert () => (() => 1) <: () => (() => number)
+  assert not(() => (() => number) <: () => (() => 1))
+  assert (f: () => number) => void <: (f: () => 1) => void
+end
+
+unittest "any rest parameters are bivariant" do
+  assert (...a: any[]) => void <: (a: string, b: number) => void
+  assert (a: string, b: number) => void <: (...a: any[]) => void
+  assert (...a: any[]) => any <: (x: number) => string
+  assert (x: number) => string <: (...a: any[]) => any
+end
+
+unittest "functions sit under the object and unknown ceilings" do
+  assert (() => void) <: Object
+  assert (() => void) <: {}
+  assert not({} <: () => void)
+  assert () => string <: () => unknown
+  assert not(() => unknown <: () => string)
+end
+
+unittest "never is below every function type" do
+  assert never <: () => void
+  assert not((() => void) <: never)
+end
+
+unittest "rest element types accept narrower targets" do
+  assert (...a: number[]) => void <: (...a: 1[]) => void
+  assert (...a: number[]) => void <: (a: 1, b: 2) => void
+  assert (a: number) => void <: (...a: 1[]) => void
+end

@@ -1,0 +1,29 @@
+// Conformance edge cases added by the 2026-06-30 audit (soundness-variance).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "param contravariance over object width" do
+  assert (x: {a: number}) => void <: (x: {a: number, b: number}) => void
+  assert not((x: {a: number, b: number}) => void <: (x: {a: number}) => void)
+end
+
+unittest "param contravariance with never and literal unions" do
+  assert (x: number) => void <: (x: never) => void
+  assert not((x: never) => void <: (x: number) => void)
+  assert (x: 1 | 2 | 3) => void <: (x: 1 | 2) => void
+  assert not((x: 1 | 2) => void <: (x: 1 | 2 | 3) => void)
+end
+
+unittest "nested function return double flip variance" do
+  assert () => (x: number) => void <: () => (x: 1) => void
+  assert not(() => (x: 1) => void <: () => (x: number) => void)
+end
+
+unittest "tuple element holds contravariant function" do
+  assert [(x: number) => void] <: [(x: 1) => void]
+  assert not([(x: 1) => void] <: [(x: number) => void])
+end
+
+unittest "readonly object property is bivariant" do
+  assert {a: number} <: {readonly a: number}
+  assert {readonly a: number} <: {a: number}
+end

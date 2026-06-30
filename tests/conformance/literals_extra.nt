@@ -1,0 +1,102 @@
+// Conformance edge cases added by the 2026-06-30 audit (literals).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "negative numeric literals" do
+  assert -1 <: number
+  assert -0 <: number
+  assert not(-1 <: 1)
+  assert -1 == -1
+  assert -1 != 1
+  assert not(-1 <: -2)
+end
+
+unittest "literal unions widen and don't reverse-widen" do
+  assert 1 | 2 | 3 <: number
+  assert not(number <: 1 | 2 | 3)
+  assert 2 <: 1 | 2 | 3
+  assert not(4 <: 1 | 2 | 3)
+end
+
+unittest "mixed-primitive literal unions" do
+  assert 1 | 'a' <: number | string
+  assert 1 <: 1 | 'a'
+  assert 'a' <: 1 | 'a'
+  assert not('b' <: 1 | 'a')
+end
+
+unittest "literal under union containing its primitive" do
+  assert 1 <: number | 1
+  assert 'a' | 'b' <: 'a' | 'b' | 'c'
+  assert not('a' | 'b' | 'c' <: 'a' | 'b')
+  assert 1 | 2 == 2 | 1
+end
+
+unittest "literal intersected with its primitive is the literal" do
+  assert 1 & number == 1
+  assert 'a' & string == 'a'
+  assert true & boolean == true
+end
+
+unittest "intersection of disjoint literals is never" do
+  assert 1 & 2 == never
+  assert 'a' & 'b' == never
+  assert true & false == never
+end
+
+unittest "literal unioned with never is the literal" do
+  assert 1 | never == 1
+  assert 'a' | never == 'a'
+  assert never <: 1
+end
+
+unittest "literals against any and unknown" do
+  assert 1 <: any
+  assert 1 <: unknown
+  assert not(unknown <: 1)
+end
+
+unittest "number template literal relates to string" do
+  assert `${number}` <: string
+  assert not(string <: `${number}`)
+  assert not('abc' <: `${number}`)
+  assert not('1a' <: `${number}`)
+end
+
+unittest "boolean template rejects non-boolean strings" do
+  assert not('maybe' <: `${boolean}`)
+end
+
+unittest "template literals never match non-string primitives" do
+  assert not(1 <: `${string}`)
+  assert not(true <: `${string}`)
+end
+
+unittest "universal template is a subtype of string" do
+  assert `${string}` <: string
+end
+
+unittest "prefix template does not contain the general template" do
+  assert not(`${string}` <: `a${string}`)
+  assert not(`a${string}` <: `ab${string}`)
+end
+
+unittest "disjoint template prefixes are unrelated" do
+  assert not(`a${string}` <: `b${string}`)
+  assert not(`b${string}` <: `a${string}`)
+  assert not(`${string}` <: `${number}`)
+end
+
+unittest "string literals not matching a template prefix are rejected" do
+  assert not('bcd' <: `a${string}`)
+  assert not('za' <: `${string}z`)
+end
+
+unittest "multi-placeholder templates relate to string" do
+  assert `${string}${string}` <: string
+  assert `${string}-${string}` <: string
+end
+
+unittest "string literals not matching a delimited template are rejected" do
+  assert not('aX' <: `a${string}b`)
+  assert not('Xb' <: `a${string}b`)
+end

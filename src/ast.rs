@@ -267,6 +267,28 @@ pub struct Parameter {
     pub kind: Ast,
 }
 
+impl FunctionType {
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Ast) -> Ast,
+    {
+        Self {
+            params: self
+                .params
+                .iter()
+                .map(|p| Parameter {
+                    ellipsis: p.ellipsis,
+                    name: p.name.clone(),
+                    kind: f(&p.kind),
+                    span: p.span,
+                })
+                .collect(),
+            return_type: f(&self.return_type).into(),
+            span: self.span,
+        }
+    }
+}
+
 #[ast_node]
 pub struct Access {
     pub lhs: Rc<Ast>,

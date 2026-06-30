@@ -1,0 +1,114 @@
+// Conformance edge cases added by the 2026-06-30 audit (primitives).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "unknown and never algebra in unions and intersections" do
+  assert (unknown & string) <: string
+  assert string <: (unknown & string)
+  assert (unknown & string) == string
+  assert (never & string) <: never
+  assert (string & never) == never
+  assert (string | never) == string
+  assert (never | number) == number
+  assert (any & never) <: never
+end
+
+unittest "disjoint primitive and literal intersections are never" do
+  assert (string & number) == never
+  assert (string & boolean) == never
+  assert (number & bigint) == never
+  assert (symbol & string) == never
+  assert (boolean & number) == never
+  assert (1 & 2) == never
+  assert ('a' & 'b') == never
+  assert (true & false) == never
+end
+
+unittest "intersection narrows literal with primitive" do
+  assert (string & 'x') == 'x'
+  assert (number & 1) == 1
+  assert (boolean & true) == true
+  assert (boolean & false) == false
+  assert (unknown & number) == number
+  assert (unknown & boolean) == boolean
+end
+
+unittest "primitive wrapper objects vs primitives" do
+  assert number <: Number
+  assert not (Number <: number)
+  assert string <: String
+  assert not (String <: string)
+  assert boolean <: Boolean
+  assert 1 <: Number
+  assert 'x' <: String
+  assert true <: Boolean
+end
+
+unittest "wrappers are object types" do
+  assert Number <: object
+  assert String <: object
+  assert Boolean <: object
+  assert Number <: {}
+  assert String <: {}
+  assert Number <: Object
+  assert not (Number <: String)
+  assert not (String <: Number)
+end
+
+unittest "primitives are assignable to the Object interface" do
+  assert string <: Object
+  assert number <: Object
+  assert boolean <: Object
+  assert symbol <: Object
+  assert bigint <: Object
+end
+
+unittest "Function interface relations" do
+  assert Function <: object
+  assert Function <: Object
+  assert Function <: {}
+  assert not (object <: Function)
+  assert not ({} <: Function)
+  assert not (Object <: Function)
+  assert (() => void) <: Function
+  assert ((x: string) => number) <: Function
+  assert not (Function <: (() => void))
+end
+
+unittest "template literal subtyping" do
+  assert `a${string}` <: string
+  assert `${number}` <: string
+  assert not (string <: `a${string}`)
+  assert not (`a${string}` <: 'abc')
+  assert `hello${string}` <: `hello${string}`
+end
+
+unittest "never source and unknown target boundaries" do
+  assert never <: Function
+  assert never <: Object
+  assert never <: (() => void)
+  assert not (unknown <: {})
+  assert not (unknown <: Object)
+  assert not (unknown <: Function)
+end
+
+unittest "empty object and Object are not primitives" do
+  assert not ({} <: string)
+  assert not ({} <: number)
+  assert not (Object <: string)
+  assert not (Object <: number)
+end
+
+unittest "boolean decomposition and literal number identity" do
+  assert false <: boolean
+  assert not (boolean <: true)
+  assert not (boolean <: false)
+  assert true != false
+  assert 1 <: 1
+  assert 1 == 1
+  assert not (1 <: 2)
+  assert (1 | 2) <: number
+end
+
+unittest "void intersect undefined is undefined" do
+  assert (void & undefined) == undefined
+end

@@ -1,0 +1,55 @@
+// Conformance edge cases added by the 2026-06-30 audit (mapped).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "keyof ignores optional and readonly modifiers" do
+  assert keyof {a?: number, readonly b: string} == 'a' | 'b'
+  assert keyof {readonly a: number} == 'a'
+  assert keyof {a?: number} == 'a'
+  assert 'b' <: keyof {a?: number, readonly b: string}
+end
+
+type Obj as {a: number, b: string, c: boolean}
+
+unittest "mapped value to literal and union" do
+  assert map k in 'a' | 'b' do 1 end == {a: 1, b: 1}
+  assert map k in keyof(Obj) do string | number end == {a: string | number, b: string | number, c: string | number}
+  assert map k in 'a' | 'b' do 1 end <: {a: number}
+  assert map k in keyof(Obj) do string | number end <: {a: string | number}
+end
+
+unittest "mapped over union dedups overlapping keys" do
+  assert map k in 'a' | 'a' do number end == {a: number}
+  assert map k in 'a' | 'b' | 'a' do number end == {a: number, b: number}
+end
+
+unittest "mapped width subtyping" do
+  assert map k in 'a' | 'b' | 'c' do number end <: map k in 'a' | 'b' do number end
+  assert not(map k in 'a' | 'b' do number end <: map k in 'a' | 'b' | 'c' do number end)
+end
+
+type R as {readonly a: number, b: string}
+
+unittest "homomorphic preserves readonly" do
+  assert map k in keyof(R) do R[k] end == R
+  assert R <: map k in keyof(R) do R[k] end
+  assert map k in keyof(R) do R[k] end <: R
+end
+
+
+unittest "mapped identity nested object value" do
+  assert map k in 'x' do Obj end == {x: {a: number, b: string, c: boolean}}
+  assert map k in 'x' do Obj end <: {x: {a: number}}
+end
+
+unittest "mapped never key yields empty object" do
+  assert map k in never do number end == {}
+  assert {a: number} <: map k in never do number end
+end
+
+type Q as {a: number, b: string}
+
+unittest "homomorphic identity over required-only source" do
+  assert map k in keyof(Q) do Q[k] end == Q
+  assert map k in keyof(Q) do Q[k] end <: {a: number}
+  assert Q <: map k in keyof(Q) do Q[k] end
+end

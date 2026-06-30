@@ -1,0 +1,167 @@
+// Conformance edge cases added by the 2026-06-30 audit (tuples).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "tuple length and array bidirectional" do
+  assert not(number[] <: readonly [number])
+  assert not(readonly number[] <: [number])
+  assert [] <: readonly number[]
+  assert [] <: never[]
+  assert not(never[] <: [])
+  assert not([never] <: [])
+  assert [1, 2] <: readonly number[]
+  assert not(readonly [number] <: number[])
+end
+
+unittest "tuple vs unknown and never" do
+  assert [1, 2] <: unknown
+  assert [1, 2] <: any
+  assert never <: [number, number]
+  assert not([number, number] <: never)
+  assert [never, never] <: [number, number]
+  assert [number] <: any[]
+end
+
+unittest "nested readonly covariance both directions" do
+  assert [[1], [2]] <: readonly [readonly [number], readonly [number]]
+  assert not(readonly [readonly [number]] <: [[number]])
+  assert [readonly [1]] <: [readonly [number]]
+  assert not([[1]] <: [readonly [number], readonly [number]])
+end
+
+unittest "array element covariance with objects and unions" do
+  assert {a: 1, b: 2}[] <: {a: number}[]
+  assert not({a: number}[] <: {a: 1}[])
+  assert string[] <: (string | number | boolean)[]
+  assert [1, 'a', true] <: (number | string | boolean)[]
+  assert not([1, 'a', true] <: (number | string)[])
+end
+
+unittest "empty tuple identity and relations" do
+  assert [] == []
+  assert [] <: readonly []
+  assert not(readonly [] <: [])
+  assert [] <: object
+  assert not([] <: [unknown])
+  assert [] <: unknown[]
+end
+
+type RN as readonly number[]
+type MN as number[]
+
+unittest "nested readonly arrays via alias" do
+  assert number[][] <: readonly RN[]
+  assert not(readonly RN[] <: number[][])
+  assert not(RN[] <: number[][])
+  assert MN[] <: readonly RN[]
+  assert RN[] <: readonly RN[]
+  assert not(readonly RN[] <: RN[])
+end
+
+
+unittest "readonly tuple element variance via alias" do
+  assert not(readonly [RN] <: readonly [MN])
+  assert readonly [MN] <: readonly [RN]
+  assert [MN] <: [RN]
+  assert not([RN] <: [MN])
+end
+
+unittest "array of union vs union of arrays" do
+  assert string[] <: string[] | number[]
+  assert not((string | number)[] <: string[] | number[])
+  assert [string, number] <: (string | number)[]
+  assert string[] | number[] <: (string | number)[]
+end
+
+unittest "union tuple targets and arity" do
+  assert [1, 2] <: [number, number] | [number]
+  assert [1] <: [number, number] | [number]
+  assert not([1, 2, 3] <: [number, number] | [number])
+  assert [number] <: number[] | string[]
+end
+
+unittest "literal tuples widen to literal-element arrays" do
+  assert [1, 2] <: (1 | 2)[]
+  assert not([1, 2, 3] <: (1 | 2)[])
+  assert ['a', 'b'] <: ('a' | 'b')[]
+  assert [true, false] <: boolean[]
+end
+
+unittest "tuple intersection and never element" do
+  assert [never] <: [number]
+  assert not([number] <: [never])
+  assert [string & number] == [never]
+  assert [1, never] <: [number, string]
+end
+
+unittest "nested arrays of arrays" do
+  assert [[1, 2], [3, 4]] <: number[][]
+  assert not([[1, 2], [3]] <: [number, number][])
+  assert number[][] <: unknown[][]
+  assert not(unknown[][] <: number[][])
+  assert [number[], string[]] <: (number[] | string[])[]
+end
+
+unittest "readonly unknown targets" do
+  assert [1, 2] <: readonly unknown[]
+  assert readonly [1, 2] <: readonly unknown[]
+  assert number[] <: readonly unknown[]
+  assert readonly number[] <: readonly unknown[]
+  assert [] <: readonly unknown[]
+end
+
+unittest "array and tuple to plain object types" do
+  assert string[] <: {}
+  assert string[] <: object
+  assert [] <: {}
+  assert [1] <: {}
+  assert not({} <: string[])
+end
+
+unittest "tuple width with readonly source" do
+  assert not(readonly [1, 2] <: readonly [number, number, number])
+  assert not(readonly [1, 2, 3] <: readonly [number, number])
+  assert readonly [1, 2] <: readonly [number, number]
+  assert not(readonly [1, 2] <: [number, number])
+end
+
+unittest "deeply nested tuple readonly mix" do
+  assert [readonly [1], readonly [2]] <: readonly [readonly [number], readonly [number]]
+  assert not([readonly [1]] <: [[number]])
+  assert [[1]] <: readonly [readonly [number]]
+  assert not(readonly [[1]] <: [[number]])
+end
+
+unittest "readonly array covariance preserved" do
+  assert readonly string[] <: readonly (string | number)[]
+  assert readonly number[] <: readonly unknown[]
+  assert readonly never[] <: readonly number[]
+  assert not(readonly (string | number)[] <: readonly string[])
+end
+
+unittest "tuple element union widening" do
+  assert [1, 2] <: [1 | 2, 1 | 2]
+  assert [1, 'a'] <: [number | string, number | string]
+  assert not([1, 2, 3] <: [1 | 2, 1 | 2])
+  assert [1] <: [1 | 2 | 3]
+end
+
+unittest "bigint symbol element tuples" do
+  assert [bigint, bigint] <: bigint[]
+  assert [bigint] <: [bigint]
+  assert not([bigint] <: [number])
+  assert [symbol, bigint] <: [symbol, bigint]
+end
+
+unittest "tuple exact literal identity" do
+  assert [1, 2] <: [1, 2]
+  assert [1, 2] == [1, 2]
+  assert not([1, 2] <: [2, 1])
+  assert ['a', 'b'] == ['a', 'b']
+end
+
+unittest "never array and empty relationships" do
+  assert never[] <: readonly never[]
+  assert [] <: never[]
+  assert never[] <: number[]
+  assert [never] <: never[]
+end

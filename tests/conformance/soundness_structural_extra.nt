@@ -1,0 +1,55 @@
+// Conformance edge cases added by the 2026-06-30 audit (soundness-structural).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "function-property contravariance under strict" do
+  assert not({f: (x: number) => void} <: {f: (x: 1) => void})
+  assert {f: (x: 1) => void} <: {f: (x: number) => void}
+  assert not({f: (x: string) => void} <: {f: (x: unknown) => void})
+end
+
+unittest "index signature value soundness" do
+  assert not({a: number, b: string} <: {[k in string]: number})
+  assert not({[k in string]: number | undefined} <: {[k in string]: number})
+  assert {[k in string]: 1} <: {[k in string]: number}
+end
+
+unittest "deep mismatch hidden in nest" do
+  assert not({a: {b: {c: number}}} <: {a: {b: {c: string}}})
+  assert not({a: {b: {c: number}}} <: {a: {b: {c: number, d: number}}})
+  assert not({a: [number, string]} <: {a: [number, number]})
+end
+
+unittest "intersection makes optional required" do
+  assert not({} <: {a?: number} & {a: number})
+  assert not({b: string} <: {a?: number} & {a: number})
+  assert {a: number} <: {a?: number} & {a: number}
+end
+
+unittest "union source object soundness" do
+  assert {a: 1, b: 2} <: {a: 1} | {a: 2}
+  assert not(({a: 1} | {b: 2}) <: {a: 1})
+  assert ({a: 1, b: 2} | {a: 1, c: 3}) <: {a: 1}
+end
+
+unittest "weak type boundary cases that hold" do
+  assert {[k in string]: number} <: {a?: number}
+  assert {a: number} <: {a?: number, b?: string}
+  assert not({b: string} <: {a?: number, r: string})
+  assert {b: string, r: string} <: {a?: number, r: string}
+  assert not({b: string} <: {a?: number, m: () => void})
+end
+
+unittest "optional propagates undefined into index value" do
+  assert not({x?: number} <: {[k in string]: number})
+  assert not({a?: number, b?: number} <: {[k in string]: number})
+end
+
+unittest "deep optional required mismatch" do
+  assert not({a: {b?: number}} <: {a: {b: number}})
+  assert {a: {b: number}} <: {a: {b?: number}}
+end
+
+unittest "readonly index signature variance" do
+  assert {[k in string]: number} <: {readonly [k in string]: number}
+  assert {readonly [k in string]: number} <: {[k in string]: number}
+end

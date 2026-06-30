@@ -1,0 +1,76 @@
+// Conformance edge cases added by the 2026-06-30 audit (objects).
+// Every assertion below agrees with tsgo --strict.
+
+type Animal as {legs: number}
+type Dog as {legs: number, bark: string}
+
+unittest "index value covariance" do
+  assert {[k in string]: Dog} <: {[k in string]: Animal}
+  assert not({[k in string]: Animal} <: {[k in string]: Dog})
+  assert {[k in string]: number} <: {[k in string]: number | undefined}
+  assert not({[k in string]: number | undefined} <: {[k in string]: number})
+end
+
+unittest "readonly and optional combined" do
+  assert {readonly x?: number} <: {x?: number}
+  assert {x?: number} <: {readonly x?: number}
+  assert {readonly x: number} <: {x?: number}
+  assert not({readonly x?: number} <: {x: number})
+end
+
+unittest "keyof object" do
+  assert keyof {x: number, y: string} == 'x' | 'y'
+  assert keyof {} == never
+  assert 'x' <: keyof {x: number, y: string}
+  assert not('z' <: keyof {x: number, y: string})
+end
+
+unittest "intersection of object members" do
+  assert {a: number} & {b: string} <: {a: number, b: string}
+  assert {a: number, b: string} <: {a: number} & {b: string}
+end
+
+unittest "never valued props" do
+  assert {x: never} <: {x: number}
+  assert not({x: number} <: {x: never})
+  assert {x: never} <: {x: string}
+end
+
+unittest "optional covariance" do
+  assert {a?: number} <: {a?: number | string}
+  assert not({a?: number | string} <: {a?: number})
+  assert {a: number} <: {a?: number | string}
+end
+
+
+unittest "nested index signatures" do
+  assert {[k in string]: {[j in string]: number}} <: {[k in string]: {[j in string]: number}}
+  assert {[k in string]: Dog} <: {[k in string]: {legs: number}}
+  assert not({[k in string]: {legs: number}} <: {[k in string]: Dog})
+end
+
+
+unittest "function-valued property variance" do
+  assert {f: (x: Animal) => void} <: {f: (x: Dog) => void}
+  assert not({f: (x: Dog) => void} <: {f: (x: Animal) => void})
+  assert {f: () => Dog} <: {f: () => Animal}
+  assert not({f: () => Animal} <: {f: () => Dog})
+end
+
+unittest "optional depth subtyping" do
+  assert {a: {b?: number}} <: {a: {b?: number}}
+  assert {a: {b: number}} <: {a: {b?: number}}
+  assert not({a: {b?: number}} <: {a: {b: number}})
+end
+
+unittest "index signature union value" do
+  assert {[k in string]: number} <: {[k in string]: number | string}
+  assert {[k in string]: number | string} <: {[k in string]: number | string}
+  assert not({[k in string]: number | string} <: {[k in string]: number})
+end
+
+unittest "object subtype of union member" do
+  assert {x: number} <: {x: number} | {y: string}
+  assert {x: number, y: string} <: {x: number} | {y: string}
+  assert not({z: boolean} <: {x: number} | {y: string})
+end

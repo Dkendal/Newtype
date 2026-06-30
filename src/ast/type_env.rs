@@ -25,6 +25,7 @@ use crate::ast::{
     ApplyGeneric, Ast, ExtendsExpr, Ident, Interface, IntersectionType, Span, Tuple, TypeAlias,
     TypeLiteral, TypeParameter, UnionType,
 };
+use crate::extends_result::ExtendsResult;
 
 new_key_type! {
     /// Handle for an interned, resolved type instantiation.
@@ -38,6 +39,8 @@ struct Param {
     name: String,
     default: Option<Ast>,
     rest: bool,
+    /// The `where T <: BOUND` constraint's bound type, if any.
+    constraint: Option<Ast>,
 }
 
 impl Param {
@@ -46,6 +49,7 @@ impl Param {
             name: param.name.clone(),
             default: param.default.clone(),
             rest: param.rest,
+            constraint: param.constraint.clone(),
         }
     }
 }
@@ -154,6 +158,49 @@ impl TypeEnv {
         claim.prewalk((), &|node, ()| {
             if let Some(error) = self.check_application(&node) {
                 errors.borrow_mut().push(error);
+            }
+            (node, ())
+        });
+
+        errors.into_inner()
+    }
+
+    /// Report generic applications in `claim` whose type arguments violate a
+    /// `where` constraint on the referenced definition (TypeScript TS2344). The
+    /// argument bound to each constrained parameter must be assignable to the
+    /// constraint's bound (with earlier parameters substituted in, so `where B <:
+    /// A` is checked against the actual `A`). Only a *definite* failure is
+    /// reported — an indeterminate relation (a free variable, `any`) is allowed.
+    pub fn constraint_errors(&self, claim: &Ast, ctx: &ResolveCtx) -> Vec<ArityError> {
+        let errors = RefCell::new(Vec::new());
+
+        claim.prewalk((), &|node, ()| {
+            if let Ast::ApplyGeneric(ApplyGeneric { receiver, args, .. }) = &node {
+                if let Ast::Ident(Ident { name, .. }) = receiver.as_ref() {
+                    if let Some(def) = self.defs.get(name) {
+                        if def.params.iter().any(|p| p.constraint.is_some()) {
+                            let bindings = bind_params(&def.params, args);
+                            for param in &def.params {
+                                let (Some(constraint), Some(value)) =
+                                    (&param.constraint, bindings.get(&param.name))
+                                else {
+                                    continue;
+                                };
+                                let bound = substitute(constraint, &bindings);
+                                if value.is_assignable_to_ctx(&bound, ctx) == ExtendsResult::False {
+                                    errors.borrow_mut().push(ArityError {
+                                        span: node.as_span(),
+                                        message: format!(
+                                            "type argument for `{}` does not satisfy its \
+                                            constraint in generic `{name}`",
+                                            param.name
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
             }
             (node, ())
         });
@@ -292,8 +339,18 @@ fn interface_def(interface: &Interface) -> Def {
 fn distribute_or_substitute(body: &Ast, bindings: &HashMap<String, Ast>) -> Ast {
     if let Ast::ExtendsExpr(ExtendsExpr { lhs, span, .. }) = body {
         if let Ast::Ident(Ident { name, .. }) = lhs.as_ref() {
-            if let Some(Ast::UnionType(UnionType { types, .. })) = bindings.get(name) {
-                let variants = types
+            // The naked parameter distributes over the union members it is bound
+            // to. `boolean` is the union `true | false`, so it distributes too
+            // (`if T <: true …` over `boolean` yields both branches).
+            let members: Option<Vec<Ast>> = match bindings.get(name) {
+                Some(Ast::UnionType(UnionType { types, .. })) => Some(types.clone()),
+                Some(Ast::Primitive(crate::ast::PrimitiveType::Boolean, s)) => {
+                    Some(vec![Ast::TrueKeyword(*s), Ast::FalseKeyword(*s)])
+                }
+                _ => None,
+            };
+            if let Some(members) = members {
+                let variants = members
                     .iter()
                     .map(|member| {
                         let mut member_bindings = bindings.clone();

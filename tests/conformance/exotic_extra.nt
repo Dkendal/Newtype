@@ -1,0 +1,129 @@
+// Conformance edge cases added by the 2026-06-30 audit (exotic-syntax).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "template literal numeric interpolation relates to string" do
+  assert `${number}` <: string
+  assert `${bigint}` <: string
+  assert `${boolean}` <: string
+  assert `${null}` <: string
+  assert `${undefined}` <: string
+  assert `a${string}b` <: string
+  assert `${string}${string}` <: string
+  assert `${1}${2}` <: string
+end
+
+unittest "never in exotic structural positions" do
+  assert never[] <: never[]
+  assert [never] <: [never]
+  assert (x: never) => void <: (x: never) => void
+  assert {a: never} <: {a: never}
+  assert string | never == string
+  assert never[] == never[]
+  assert not(never[] == never)
+  assert [never] != never
+end
+
+unittest "any infects in shallow array and tuple element" do
+  assert string[] <: any[]
+  assert (x: string) => any <: (x: string) => string
+end
+
+unittest "unknown in nested positions does not infect" do
+  assert {a: string} <: {a: unknown}
+  assert not({a: unknown} <: {a: string})
+  assert string[] <: unknown[]
+  assert not(unknown[] <: string[])
+  assert [string] <: [unknown]
+end
+
+unittest "empty constructs self and top relations" do
+  assert {} <: {}
+  assert [] <: []
+  assert () => never <: () => never
+  assert {} <: object
+  assert [] <: object
+  assert never <: {}
+  assert not({} <: never)
+  assert [] <: readonly []
+end
+
+type Tree as {value: number, children: Tree[]}
+type LL as {head: number, tail: LL | null}
+
+unittest "recursive alias self and width relations" do
+  assert Tree <: Tree
+  assert Tree <: {value: number}
+  assert {value: 1, children: []} <: Tree
+  assert LL <: {head: number}
+  assert null <: LL | null
+end
+
+type Json as null | boolean | number | string | Json[] | {[k in string]: Json}
+
+unittest "recursive json union membership" do
+  assert 1 <: Json
+  assert 'x' <: Json
+  assert null <: Json
+  assert true <: Json
+  assert [1, 'x'] <: Json
+  assert {a: 1} <: Json
+end
+
+unittest "Object builtin relations" do
+  assert {} <: Object
+  assert string <: Object
+  assert {a: 1} <: Object
+  assert Object <: {}
+  assert not(null <: Object)
+  assert not(undefined <: Object)
+end
+
+unittest "intersection of object unions and merge" do
+  assert ({a: 1} | {b: 2}) & {c: 3} <: {c: 3}
+  assert {a: 1, b: 2} <: {a: 1} & {b: 2}
+end
+
+unittest "large union membership and dedup" do
+  assert 5 <: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+  assert not(9 <: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8)
+  assert 1 | 2 | 3 | 4 | 5 == 5 | 4 | 3 | 2 | 1
+  assert 1 | 1 | 2 | 2 | 3 | 3 == 1 | 2 | 3
+end
+
+unittest "deeply nested structural application" do
+  assert [[[1]]] <: [[[number]]]
+  assert {a: {b: {c: {d: 1}}}} <: {a: {b: {c: {d: number}}}}
+  assert [[1, 2], [3, 4]] <: [[number, number], [number, number]]
+end
+
+unittest "member assignable to intersection of overlapping unions" do
+  assert 'b' <: ('a' | 'b') & ('b' | 'c')
+  assert 2 | 3 <: (1 | 2 | 3) & (2 | 3 | 4)
+  assert ('a' | 'b') & ('b' | 'c') <: string
+end
+
+unittest "optional and readonly combined modifiers" do
+  assert {readonly a?: number} <: {a?: number}
+  assert {a?: number} <: {readonly a?: number}
+  assert {readonly a?: number} <: {}
+  assert {a: 1} <: {readonly a?: number}
+  assert {readonly a?: number} <: {readonly a?: number}
+end
+
+unittest "void and undefined exotic relations" do
+  assert undefined <: void
+  assert not(void <: undefined)
+  assert void <: unknown
+  assert () => undefined <: () => void
+end
+
+unittest "weak type with a common property is assignable" do
+  assert {a: number} <: {a?: number}
+  assert {} <: {a?: number}
+  assert {} <: {}
+end
+
+unittest "curried function variance is contravariant in first param" do
+  assert ((x: number) => (y: string) => void) <: ((x: 1) => (y: string) => void)
+  assert not(((x: 1) => (y: string) => void) <: ((x: number) => (y: string) => void))
+end

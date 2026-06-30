@@ -20,6 +20,8 @@ impl Ast {
 
             Ast::Builtin(expr) => Ast::Builtin(expr.map(f)),
 
+            Ast::FunctionType(expr) => Ast::FunctionType(expr.map(f)),
+
             Ast::CondExpr(expr) => Ast::CondExpr(expr.map(f)),
 
             Ast::ExtendsInfixOp(expr) => Ast::ExtendsInfixOp(expr.map(f)),

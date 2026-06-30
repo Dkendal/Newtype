@@ -1,0 +1,30 @@
+// Conformance edge cases added by the 2026-06-30 audit (intersections).
+// Every assertion below agrees with tsgo --strict.
+
+unittest "intersection narrows a literal against a primitive across types" do
+  assert string & 'a' == 'a'
+  assert 'a' & string == 'a'
+  assert 0 & number == 0
+  assert (1 | 2) & 1 == 1
+end
+
+unittest "intersection of disjoint literals or primitives is never" do
+  assert true & false == never
+  assert 1 & string == never
+  assert 'a' & number == never
+  assert true & string == never
+  assert number & bigint == never
+  assert symbol & string == never
+end
+
+unittest "intersection with never and unknown around objects" do
+  assert {a: 1} & unknown == {a: 1}
+  assert {a: 1} & never == never
+  assert never & never == never
+  assert any & unknown <: any
+end
+
+unittest "object intersection is an object subtype" do
+  assert {a: 1} & {b: 2} <: object
+  assert string & {a: 1} <: object
+end

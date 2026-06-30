@@ -14,6 +14,103 @@ promote the case into `tests/corpus/`.
 
 ---
 
+## Conformance audit (2026-06-30): newtype vs tsgo disagreements
+
+Cross-checked every type-system domain against `tsgo --strict` via
+`scripts/conformance.py`. Found 7 soundness bugs (newtype wrongly *accepts* an
+unsound relation), 12 wrong-rejects (newtype returns a definite `false` on an
+in-scope relation tsgo accepts), and a set of feature/parser gaps (newtype
+returns *indeterminate*). Each repro below is what tsgo reports as **true**.
+`[x]` = fixed and verified against the harness; `[ ]` = deferred.
+
+### Soundness bugs (newtype wrongly accepts)
+
+- [x] **B1. Generic-alias substitution skips function types.** `Ast::map`
+  (`src/ast/walk.rs`) had no `FunctionType` arm, so `substitute` never replaced a
+  type parameter inside a function type in an alias body. `type Fn(T) as (x: T)
+  => void` made `Fn(string) <: Fn(number)` wrongly hold (free `T` on both
+  sides). Affects param/return/nested-in-object/nested-in-tuple positions.
+- [x] **B2. Weak-type rule unmodeled.** An all-optional target with no required
+  member, index, or call signature must reject a source sharing *no* property
+  (`{b: string} <: {a?: number}` is false in TS). newtype accepts it, and the
+  hole propagates through array/tuple/return/param/interface positions.
+- [x] **B3. `where` constraints parsed but never enforced.** `type Num(T) where
+  T <: number as T` accepts `Num('x')` and evaluates the body; tsgo emits
+  TS2344. (Manifests as both-fail in the harness since the bad application also
+  fails to type-check on the TS side.)
+- [x] **B4. Rest-vs-rest param element compared covariantly.** `(...a: 1[]) =>
+  void <: (...a: number[]) => void` wrongly holds — two pure-rest signatures have
+  no fixed params, so the contravariant per-position loop never runs and the rest
+  elements are never related.
+- [x] **B5. Homomorphic mapped type drops the source optional modifier.** `map k
+  in keyof(P) do P[k] end` over `P = {a?: number, b: string}` rebuilds `a` as
+  *required*, so it wrongly satisfies `{a: number}`. (readonly is preserved;
+  optional is not.)
+- [x] **B6. `boolean` not distributed as `true | false`.** A naked type
+  parameter conditional over `boolean` should distribute; `type BoolDist(T) as
+  if T <: true then 1 else 2 end` gives `1 | 2`, but newtype returns just `2`.
+- [ ] **B7. Contravariant `infer` candidates unioned, not intersected.** Two
+  `infer A` in parameter positions should combine by intersection. `if T <: (?A,
+  ?A) => any then A` over `(string, number) => any` should give `string &
+  number`; newtype gives `string | number`.
+
+### Wrong-rejects (newtype returns a definite `false`)
+
+- [x] **B8. `{}` / `Object` reject bare primitives.** `string <: {}` is true in
+  TS (`{}` = any non-nullish value), as is `object <: {}`. newtype returns false.
+  Also blocks `string <: string & {}` and makes `not(string <: {})` pass
+  unsoundly. (`object` primitive must still reject primitives.)
+- [x] **B9. Intersections of 3+ members not flattened.** `{a:1} & {b:2} & {c:3}
+  <: {a:1, c:3}` fails — the nested intersection is merged per-group, not over the
+  flattened member set. Same cause: `string & number & boolean <: never` fails.
+- [x] **B10. null/undefined/void not disjoint in intersections.** `null & string
+  <: never`, `undefined & string`, `null & undefined` all fail (TS reduces them
+  to `never` under strict). `void & undefined == undefined` must stay.
+- [~] **B11. Template-literal pattern matching (concrete literal vs pattern done; template-to-template and all-concrete collapse deferred).** `'abc' <:
+  \`a${string}\`` and `'42' <: \`${number}\`` return false; newtype only relates
+  templates *to* `string`, not concrete literals *to* a template pattern.
+- [x] **B12. `unknown` not absorbed into a union.** `unknown <: number |
+  unknown` and `string | unknown == unknown` return false.
+- [x] **B13. Numeric literals compared by surface text.** `1.0 == 1`, `1.50 ==
+  1.5`, `0 == -0`, `1_000 == 1000` fail because `TypeNumber.ty` is the raw string.
+- [x] **B14. Intersection of two unions not distributed/reduced.** `(1|2|3) &
+  (2|3|4) <: 2|3` fails (no `&`-over-`|` distribution with `never` elimination).
+- [ ] **B15. Object with union-typed property not assignable to a union of
+  objects.** `{a: 1 | 2} <: {a: 1} | {a: 2}` is true in TS; newtype only tries
+  each member as-is and rejects.
+- [x] **B16. Required `T | undefined` property not assignable to optional
+  property.** `{x: number | undefined} <: {x?: number}` is true under strict
+  (no `exactOptionalPropertyTypes`); newtype rejects.
+- [x] **B17. Shared-key object values not intersected on merge.** `{a: number} &
+  {a: string} <: {a: never}` fails — the merge keeps the first `a` instead of
+  intersecting the values (and does not recurse).
+- [x] **B18. `this` parameters counted toward arity.** `(this: object) => void
+  <: () => void` fails — `this` is parsed as a positional param. Needs grammar +
+  arity erasure.
+- [x] **B19. Arrays/tuples don't expose `length` / numeric index to object
+  targets.** `number[] <: { length: number }` fails.
+
+### Feature / parser gaps (newtype returns *indeterminate*; not wrong answers)
+
+- [ ] **G1.** Any relation involving `any` is intentionally indeterminate.
+- [ ] **G2.** Top-level indexed access `T['k']` / `T[number]` / `T['length']`
+  not reduced (only inside a homomorphic mapped body).
+- [ ] **G3.** `keyof` of primitives/arrays/tuples/unions/intersections/`any` not
+  reduced (only `keyof` of a single object literal).
+- [ ] **G4.** Builtin `Array(T)` / `ReadonlyArray(T)` not equated with `T[]`.
+- [ ] **G5.** The `Array(?U)` infer pattern does not match tuple types.
+- [ ] **G6.** Tuple-typed rest parameter `(...a: [A, B]) => …` not expanded.
+- [ ] **G7.** Primitives' boxed/apparent member set not modeled (`true <:
+  {valueOf: () => boolean}`).
+- [ ] **G8.** bigint literals (`1n`) do not parse.
+- [ ] **G9.** Tuple optional / rest / labeled elements (`[A, B?]`, `[A,
+  ...B[]]`, `[a: A]`) do not parse.
+- [ ] **G10.** Optional function parameters (`x?: T`) do not parse.
+- [ ] **G11.** Constructor types (`new () => T`) do not parse.
+- [ ] **G12.** Mapped modifier-removal (`-?`, `-readonly`) does not parse.
+
+---
+
 ## Unimplemented language features
 
 - [x] **Optional property modifier** `{ a?: T }` — grammar/parser/printer now
