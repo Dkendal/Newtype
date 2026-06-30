@@ -1,12 +1,12 @@
 use std::{collections::HashMap, rc::Rc, result};
 
+use ::pretty::RcDoc as D;
 use cond_expr::CondExpr;
 use derivative::Derivative;
 use if_expr::IfExpr;
 use let_expr::LetExpr;
 use match_expr::MatchExpr;
 use newtype_macros_lib::ast_node;
-use ::pretty::RcDoc as D;
 use serde_derive::Serialize;
 
 use crate::{

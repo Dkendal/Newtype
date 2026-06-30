@@ -79,16 +79,16 @@ fn extends_expr_parser_not_and_left() {
 
 #[test]
 fn extends_expr_parser_not_and_right() {
-    insta::assert_snapshot!(parse_extends("A <: B and (not (C <: D))").to_sexp().unwrap());
+    insta::assert_snapshot!(parse_extends("A <: B and (not (C <: D))")
+        .to_sexp()
+        .unwrap());
 }
 
 #[test]
 fn extends_expr_parser_not_and_both() {
-    insta::assert_snapshot!(
-        parse_extends("not (A <: B) and (not (C <: D))")
-            .to_sexp()
-            .unwrap()
-    );
+    insta::assert_snapshot!(parse_extends("not (A <: B) and (not (C <: D))")
+        .to_sexp()
+        .unwrap());
 }
 
 mod unittest_statement {
@@ -112,7 +112,6 @@ mod unittest_statement {
         let actual = parser::parse(pair);
         insta::assert_snapshot!(actual.to_sexp().unwrap());
     }
-
 }
 
 mod unquote {

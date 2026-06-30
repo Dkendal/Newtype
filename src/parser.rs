@@ -294,7 +294,6 @@ pub fn parse_extends_expr(pairs: Pairs) -> Ast {
             let lhs = lhs.into();
             let rhs = rhs.into();
             let extends_infix_op = ExtendsInfixOp { lhs, op, rhs, span };
-            
 
             Ast::ExtendsInfixOp(extends_infix_op)
         })
@@ -495,7 +494,12 @@ fn parse_map_expr(pair: Pair) -> MappedType {
         .find(match_tag("optional"))
         .map(|_| MappingModifier::Add);
 
-    let body = inner.clone().find(match_tag("body")).map(parse).unwrap().into();
+    let body = inner
+        .clone()
+        .find(match_tag("body"))
+        .map(parse)
+        .unwrap()
+        .into();
 
     let ipk = inner
         .clone()
@@ -965,7 +969,7 @@ fn parse_if_expr(pair: Pair) -> Ast {
 
     let condition = inner
         .find(match_tag("condition"))
-        .map(|p| parse_extends_expr(p.into_inner()) )
+        .map(|p| parse_extends_expr(p.into_inner()))
         .unwrap();
 
     let then_branch = inner.find(match_tag("then")).map(parse).unwrap().into();
@@ -1118,4 +1122,3 @@ fn filter_rule(rule: Rule) -> impl Fn(Pair) -> Option<Pair> {
 fn find_tag<'a>(mut pairs: Pairs<'a>, tag: &'a str) -> Option<Pair<'a>> {
     return pairs.find(|p| p.as_node_tag() == Some(tag));
 }
-

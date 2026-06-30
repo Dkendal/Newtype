@@ -270,9 +270,8 @@ mod tests {
 
     #[test]
     fn dedents_common_indentation() {
-        let case = parse_fixture(
-            "Name\n=======\n    if a then\n        b\n    end\n=======\n    x\n",
-        );
+        let case =
+            parse_fixture("Name\n=======\n    if a then\n        b\n    end\n=======\n    x\n");
         assert_eq!(case.source, "if a then\n    b\nend");
         assert_eq!(case.expected, "x");
     }

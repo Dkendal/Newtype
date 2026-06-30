@@ -12,10 +12,20 @@
 
 use newtype_macros_lib::equivalent_tests;
 
-#[equivalent_tests(newtype::parser::Rule, "expr", dir = "tests/corpus/newtype/expr", recursive = true)]
+#[equivalent_tests(
+    newtype::parser::Rule,
+    "expr",
+    dir = "tests/corpus/newtype/expr",
+    recursive = true
+)]
 #[cfg(test)]
 mod expr {}
 
-#[equivalent_tests(newtype::parser::Rule, "program", dir = "tests/corpus/newtype/program", recursive = true)]
+#[equivalent_tests(
+    newtype::parser::Rule,
+    "program",
+    dir = "tests/corpus/newtype/program",
+    recursive = true
+)]
 #[cfg(test)]
 mod program {}

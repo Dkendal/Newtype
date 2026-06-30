@@ -56,7 +56,9 @@ enum Outcome {
     /// The claim evaluated to something other than `true`: a definite `false`, a
     /// collapsed `never`, or an indeterminate result (an unresolved reference,
     /// which the assignability engine reports as `Both`).
-    Fail { result: ExtendsResult },
+    Fail {
+        result: ExtendsResult,
+    },
     /// The claim couldn't be evaluated: it wasn't a relational proposition, or it
     /// contained a generic application with the wrong arity. Each diagnostic
     /// carries its own source span.
@@ -73,12 +75,7 @@ struct Diagnostic {
 ///
 /// Returns once all assertions are evaluated, or — when [`Config::fail_fast`] is
 /// set — as soon as one fails. Write errors on `out` are propagated.
-pub fn run(
-    program: &Ast,
-    source: &str,
-    config: Config,
-    out: &mut dyn Write,
-) -> io::Result<Report> {
+pub fn run(program: &Ast, source: &str, config: Config, out: &mut dyn Write) -> io::Result<Report> {
     let mut report = Report::default();
 
     // Symbol table of the program's top-level `type`s and `interface`s, so a
@@ -346,17 +343,26 @@ mod tests {
             "unittest \"t\" do\n  assert string <: unknown\n  assert 1 <: number\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 2, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 2,
+                failed: 0
+            }
+        );
         assert!(!report.has_failures());
     }
 
     #[test]
     fn failing_assertion_is_counted() {
-        let (report, stderr) = run_src(
-            "unittest \"t\" do\n  assert number <: string\nend",
-            false,
+        let (report, stderr) = run_src("unittest \"t\" do\n  assert number <: string\nend", false);
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 1
+            }
         );
-        assert_eq!(report, Report { passed: 0, failed: 1 });
         assert!(report.has_failures());
         assert!(stderr.contains("assertion failed"));
     }
@@ -367,13 +373,25 @@ mod tests {
             "unittest \"t\" do\n  assert not (number <: string)\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 1, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 1,
+                failed: 0
+            }
+        );
     }
 
     #[test]
     fn equality_lowers_to_mutual_assignability() {
         let (report, _) = run_src("unittest \"t\" do\n  assert 1 == 1\nend", false);
-        assert_eq!(report, Report { passed: 1, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 1,
+                failed: 0
+            }
+        );
     }
 
     #[test]
@@ -382,7 +400,13 @@ mod tests {
             "unittest \"t\" do\n  assert number <: string\n  assert number <: string\nend",
             true,
         );
-        assert_eq!(report, Report { passed: 0, failed: 1 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 1
+            }
+        );
     }
 
     #[test]
@@ -391,13 +415,25 @@ mod tests {
             "unittest \"t\" do\n  assert number <: string\n  assert number <: string\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 0, failed: 2 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 2
+            }
+        );
     }
 
     #[test]
     fn program_without_unittests_reports_nothing() {
         let (report, stderr) = run_src("type Foo as 1", false);
-        assert_eq!(report, Report { passed: 0, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 0
+            }
+        );
         assert!(stderr.is_empty());
     }
 
@@ -407,7 +443,13 @@ mod tests {
             "type Foo as 1\nunittest \"t\" do\n  assert Foo <: number\n  assert Foo == 1\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 2, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 2,
+                failed: 0
+            }
+        );
     }
 
     #[test]
@@ -416,7 +458,13 @@ mod tests {
             "type Foo as 1\nunittest \"t\" do\n  assert Foo <: string\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 0, failed: 1 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 1
+            }
+        );
     }
 
     #[test]
@@ -425,7 +473,13 @@ mod tests {
             "type Id(T) as T\nunittest \"t\" do\n  assert Id(1) <: number\n  assert Id(string) == string\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 2, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 2,
+                failed: 0
+            }
+        );
     }
 
     #[test]
@@ -434,7 +488,13 @@ mod tests {
             "interface Point { x: number }\nunittest \"t\" do\n  assert { x: 1, y: 2 } <: Point\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 1, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 1,
+                failed: 0
+            }
+        );
     }
 
     #[test]
@@ -447,7 +507,13 @@ mod tests {
             end";
         let (report, _) = run_src(src, false);
         // The first holds; the second is missing the inherited `x`.
-        assert_eq!(report, Report { passed: 1, failed: 1 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 1,
+                failed: 1
+            }
+        );
     }
 
     #[test]
@@ -456,7 +522,13 @@ mod tests {
             "type Id(T) as T\nunittest \"t\" do\n  assert Id(1, 2) <: number\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 0, failed: 1 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 1
+            }
+        );
         assert!(stderr.contains("expects 1 type argument(s), but 2 were provided"));
     }
 
@@ -466,7 +538,13 @@ mod tests {
             "type Pair(A, B) as [A, B]\nunittest \"t\" do\n  assert Pair(1) <: [number, number]\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 0, failed: 1 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 1
+            }
+        );
         assert!(stderr.contains("expects 2 type argument(s), but 1 was provided"));
     }
 
@@ -477,7 +555,13 @@ mod tests {
             unittest \"t\" do\n  assert WithDefault(number) == [number, string]\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 1, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 1,
+                failed: 0
+            }
+        );
     }
 
     #[test]
@@ -491,7 +575,13 @@ mod tests {
             \x20 assert never <: never\n\
             end";
         let (report, _) = run_src(src, false);
-        assert_eq!(report, Report { passed: 4, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 4,
+                failed: 0
+            }
+        );
     }
 
     #[test]
@@ -502,17 +592,26 @@ mod tests {
             "unittest \"t\" do\n  assert not (never <: string)\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 0, failed: 1 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 1
+            }
+        );
     }
 
     #[test]
     fn string_is_not_never() {
         // `string <: never` is genuinely false (string is not the bottom type).
-        let (report, _) = run_src(
-            "unittest \"t\" do\n  assert string <: never\nend",
-            false,
+        let (report, _) = run_src("unittest \"t\" do\n  assert string <: never\nend", false);
+        assert_eq!(
+            report,
+            Report {
+                passed: 0,
+                failed: 1
+            }
         );
-        assert_eq!(report, Report { passed: 0, failed: 1 });
     }
 
     #[test]
@@ -529,7 +628,13 @@ mod tests {
             \x20 assert not (map K in \"a\" do string end <: { a: number })\n\
             end";
         let (report, _) = run_src(src, false);
-        assert_eq!(report, Report { passed: 6, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 6,
+                failed: 0
+            }
+        );
     }
 
     #[test]
@@ -541,6 +646,12 @@ mod tests {
             unittest \"t\" do\n  assert Rec <: Rec\n  assert Rec == Rec\nend",
             false,
         );
-        assert_eq!(report, Report { passed: 2, failed: 0 });
+        assert_eq!(
+            report,
+            Report {
+                passed: 2,
+                failed: 0
+            }
+        );
     }
 }

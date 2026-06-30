@@ -91,7 +91,10 @@ fn main() {
                 // mappings from `simplified` (the expanded AST's generated aliases
                 // carry only placeholder spans).
                 let mut mappings = expansion.mappings;
-                mappings.extend(test_codegen::collect_declaration_mappings(&simplified, input));
+                mappings.extend(test_codegen::collect_declaration_mappings(
+                    &simplified,
+                    input,
+                ));
                 (out, mappings)
             } else {
                 let out = simplified.render_pretty_ts(120);

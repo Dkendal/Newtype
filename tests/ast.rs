@@ -234,7 +234,8 @@ mod assignability_tests {
     // optional target properties (newtype prefix `?` syntax)
     #[case("{ one: number }", "{ one: number, ?two: string }", TRUE)] // optional missing ok
     #[case("{ one: number, two: string }", "{ one: number, ?two: string }", TRUE)]
-    #[case("{ one: number, two: number }", "{ one: number, ?two: string }", FALSE)] // present but wrong
+    #[case("{ one: number, two: number }", "{ one: number, ?two: string }", FALSE)]
+    // present but wrong
     // optional source property may be absent → not assignable to a required target
     #[case("{ ?two: string }", "{ two: string }", FALSE)]
     #[case("{ ?two: string }", "{ ?two: string }", TRUE)] // optional → optional ok
@@ -243,13 +244,15 @@ mod assignability_tests {
     // empty source is assignable to an all-optional target
     #[case("{}", "{ ?x: number }", TRUE)]
     #[case("{}", "{ ?a: string, ?b: number }", TRUE)]
-    #[case("{}", "{ x: number }", FALSE)] // still false: required prop missing
+    #[case("{}", "{ x: number }", FALSE)]
+    // still false: required prop missing
     // optional target/source via TypeScript postfix `?` syntax (`a?: T`)
     #[case("{ a: 1 }", "{ a?: number }", TRUE)] // required source → optional target
     #[case("{ a?: 1 }", "{ a: 1 }", FALSE)] // optional source → required target
     #[case("{}", "{ a?: 1 }", TRUE)] // empty source → all-optional target
     #[case("{ a?: 1 }", "{ a?: 1 }", TRUE)] // optional → optional ok
-    #[case("{ readonly a?: 1 }", "{ a?: number }", TRUE)] // readonly + postfix optional
+    #[case("{ readonly a?: 1 }", "{ a?: number }", TRUE)]
+    // readonly + postfix optional
     // --- Index signatures (verified against tsgo --strict) ---
     // A source index signature does NOT supply named properties.
     #[case("{ [k in string]: number }", "{ a: number }", FALSE)]
@@ -263,7 +266,8 @@ mod assignability_tests {
     #[case("{ [k in string]: number }", "{ [k in string]: number }", TRUE)]
     #[case("{ [k in string]: string }", "{ [k in string]: number }", FALSE)]
     #[case("{ [k in number]: number }", "{ [k in string]: number }", TRUE)] // number idx <: string idx
-    #[case("{ [k in string]: number }", "{ [k in number]: number }", TRUE)] // string idx <: number idx
+    #[case("{ [k in string]: number }", "{ [k in number]: number }", TRUE)]
+    // string idx <: number idx
     // A number index constrains only numeric-named props; string keys are free.
     #[case("{ a: number, b: number }", "{ [k in number]: number }", TRUE)]
     // Source index + named: the named prop satisfies a named target.
@@ -303,12 +307,17 @@ mod assignability_tests {
     // --- Intersection LHS / RHS ---
     #[case("{ one: number } & { two: string }", "{ one: number }", TRUE)] // some member
     #[case("{ one: number } & { two: string }", "{ two: string }", TRUE)]
-    #[case("{ one: number } & { two: string }", "{ one: number, two: string }", TRUE)] // merged shape
+    #[case(
+        "{ one: number } & { two: string }",
+        "{ one: number, two: string }",
+        TRUE
+    )] // merged shape
     #[case("{ one: number } & { two: string }", "{ three: boolean }", FALSE)]
     #[case("{ a: 1 } & { b: 2 }", "{ a: number, b: number } | string", TRUE)] // merged vs union
     #[case("string", "string & Object", TRUE)] // assignable to every member
     #[case("string", "string & number", FALSE)]
-    #[case("never & string", "number", NEVER)] // never & T == never
+    #[case("never & string", "number", NEVER)]
+    // never & T == never
     // Contradictory intersections of disjoint primitives are uninhabited and
     // reduce to `never` (the bottom type). TS treats `string & number`, etc.,
     // as `never`, so the LHS collapses regardless of the target.
@@ -339,7 +348,8 @@ mod assignability_tests {
     #[case("(string) => any", "(unknown) => any", FALSE)] // `unknown` param is not
     #[case("() => any", "Function", TRUE)] // functions are assignable to Function
     #[case("() => void", "{}", TRUE)] // functions are objects
-    #[case("5", "Function", FALSE)] // non-functions are not
+    #[case("5", "Function", FALSE)]
+    // non-functions are not
     // --- readonly arrays / tuples (one-directional: mutable <: readonly) ---
     #[case("string[]", "readonly string[]", TRUE)] // mutable -> readonly
     #[case("readonly string[]", "string[]", FALSE)] // readonly -> mutable
@@ -358,10 +368,19 @@ mod assignability_tests {
     #[case("keyof { a: string } | 'z'", "'a' | 'z'", TRUE)] // keyof inside a union
     #[case("'a' | 'b'", "keyof { a: 1, b: 2 }", TRUE)] // union into target keyof
     #[case("keyof { a: 1, b: 2 }", "'a'", FALSE)] // key union not assignable to one member
-    #[case("keyof string[]", "string", BOTH)] // non-object arg stays indeterminate
+    #[case("keyof string[]", "string", BOTH)]
+    // non-object arg stays indeterminate
     // --- Mapped types expanded to object literals (verified vs tsgo --strict) ---
-    #[case("map K in \"a\" | \"b\" do number end", "{ a: number, b: number }", TRUE)]
-    #[case("{ a: number, b: number }", "map K in \"a\" | \"b\" do number end", TRUE)]
+    #[case(
+        "map K in \"a\" | \"b\" do number end",
+        "{ a: number, b: number }",
+        TRUE
+    )]
+    #[case(
+        "{ a: number, b: number }",
+        "map K in \"a\" | \"b\" do number end",
+        TRUE
+    )]
     #[case("map K in \"a\" | \"b\" do number end", "{ a: number }", TRUE)] // width
     #[case("map K in \"a\" do string end", "{ a: number }", FALSE)] // value mismatch
     #[case("{}", "map K in never do number end", TRUE)] // empty key set -> {}

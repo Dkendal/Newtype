@@ -69,7 +69,11 @@ mod interface_extends {
 
     #[test]
     fn empty_body() {
-        assert_renders_like(Rule::interface, "interface Foo extends Bar {}", "interface Foo extends Bar {}");
+        assert_renders_like(
+            Rule::interface,
+            "interface Foo extends Bar {}",
+            "interface Foo extends Bar {}",
+        );
     }
 
     #[test]
@@ -107,7 +111,11 @@ mod map_expr_modifiers {
 
     #[test]
     fn readonly() {
-        assert_renders_like(Rule::map_expr, "map readonly k in t do 1 end", "{ readonly [k in t]: 1 }");
+        assert_renders_like(
+            Rule::map_expr,
+            "map readonly k in t do 1 end",
+            "{ readonly [k in t]: 1 }",
+        );
     }
 
     #[test]
@@ -117,7 +125,11 @@ mod map_expr_modifiers {
 
     #[test]
     fn remap() {
-        assert_renders_like(Rule::map_expr, "map k in t as r do 1 end", "{ [k in t as r]: 1 }");
+        assert_renders_like(
+            Rule::map_expr,
+            "map k in t as r do 1 end",
+            "{ [k in t as r]: 1 }",
+        );
     }
 }
 

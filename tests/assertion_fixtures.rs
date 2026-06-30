@@ -12,6 +12,11 @@
 
 use newtype_macros_lib::assertion_tests;
 
-#[assertion_tests(newtype::parser::Rule, "program", dir = "tests/corpus/assertions", recursive = true)]
+#[assertion_tests(
+    newtype::parser::Rule,
+    "program",
+    dir = "tests/corpus/assertions",
+    recursive = true
+)]
 #[cfg(test)]
 mod assertions {}

@@ -123,19 +123,29 @@ impl Ast {
             // `keyof` must expand before the structural arms. A non-enumerable
             // argument (arrays, primitives, unresolved refs, index signatures,
             // mapped types) leaves the relation indeterminate.
-            (A::Builtin(Builtin { name: BuiltinKeyword::Keyof, argument, .. }), rhs) => {
-                match Self::eval_keyof(argument, ctx) {
-                    Some(keys) => keys.is_assignable_to_ctx(rhs, ctx),
-                    None => T::Both,
-                }
-            }
+            (
+                A::Builtin(Builtin {
+                    name: BuiltinKeyword::Keyof,
+                    argument,
+                    ..
+                }),
+                rhs,
+            ) => match Self::eval_keyof(argument, ctx) {
+                Some(keys) => keys.is_assignable_to_ctx(rhs, ctx),
+                None => T::Both,
+            },
 
-            (lhs, A::Builtin(Builtin { name: BuiltinKeyword::Keyof, argument, .. })) => {
-                match Self::eval_keyof(argument, ctx) {
-                    Some(keys) => lhs.is_assignable_to_ctx(&keys, ctx),
-                    None => T::Both,
-                }
-            }
+            (
+                lhs,
+                A::Builtin(Builtin {
+                    name: BuiltinKeyword::Keyof,
+                    argument,
+                    ..
+                }),
+            ) => match Self::eval_keyof(argument, ctx) {
+                Some(keys) => lhs.is_assignable_to_ctx(&keys, ctx),
+                None => T::Both,
+            },
 
             // Mapped types `{ [K in T]: V }`. When the key set `T` is a
             // statically-known set of literal keys (a union/singleton of string
@@ -238,10 +248,9 @@ impl Ast {
             // domain includes `undefined`). The relation is one-directional:
             // `void <: undefined` is false, and `null` is assignable to
             // neither — those fall through to the identity check below.
-            (
-                A::Primitive(PrimitiveType::Undefined, _),
-                A::Primitive(PrimitiveType::Void, _),
-            ) => T::True,
+            (A::Primitive(PrimitiveType::Undefined, _), A::Primitive(PrimitiveType::Void, _)) => {
+                T::True
+            }
 
             (A::Primitive(lhs, _), A::Primitive(rhs, _)) => Into::into(lhs == rhs),
 
@@ -422,14 +431,9 @@ impl Ast {
             }
             // `[A, B] <: T[]` iff every element is assignable to `T`. An empty
             // tuple is vacuously assignable to any array.
-            Ast::Array(rhs_element) => {
-                tuple
-                    .items
-                    .iter()
-                    .fold(ExtendsResult::True, |acc, item| {
-                        acc.and(item.is_assignable_to_ctx(rhs_element, ctx))
-                    })
-            }
+            Ast::Array(rhs_element) => tuple.items.iter().fold(ExtendsResult::True, |acc, item| {
+                acc.and(item.is_assignable_to_ctx(rhs_element, ctx))
+            }),
             rhs if Self::accepts_any_object(rhs) => ExtendsResult::True,
             _ => ExtendsResult::False,
         }
@@ -581,11 +585,9 @@ impl Ast {
 
     /// Source union: assignable iff *every* member is assignable to `rhs`.
     fn union_source_assignable(members: &[Ast], rhs: &Ast, ctx: &ResolveCtx) -> ExtendsResult {
-        members
-            .iter()
-            .fold(ExtendsResult::True, |acc, member| {
-                acc.and(member.is_assignable_to_ctx(rhs, ctx))
-            })
+        members.iter().fold(ExtendsResult::True, |acc, member| {
+            acc.and(member.is_assignable_to_ctx(rhs, ctx))
+        })
     }
 
     /// Target union: assignable iff `lhs` is assignable to *some* member.
@@ -600,20 +602,16 @@ impl Ast {
                 .and(Self::assignable_to_union(&f, members, ctx));
         }
 
-        members
-            .iter()
-            .fold(ExtendsResult::False, |acc, member| {
-                acc.or(lhs.is_assignable_to_ctx(member, ctx))
-            })
+        members.iter().fold(ExtendsResult::False, |acc, member| {
+            acc.or(lhs.is_assignable_to_ctx(member, ctx))
+        })
     }
 
     /// Target intersection: assignable iff `lhs` is assignable to *every* member.
     fn assignable_to_intersection(lhs: &Ast, members: &[Ast], ctx: &ResolveCtx) -> ExtendsResult {
-        members
-            .iter()
-            .fold(ExtendsResult::True, |acc, member| {
-                acc.and(lhs.is_assignable_to_ctx(member, ctx))
-            })
+        members.iter().fold(ExtendsResult::True, |acc, member| {
+            acc.and(lhs.is_assignable_to_ctx(member, ctx))
+        })
     }
 
     /// Source intersection: assignable iff *some* member is assignable, or —
@@ -654,11 +652,9 @@ impl Ast {
             }
         }
 
-        let some = members
-            .iter()
-            .fold(ExtendsResult::False, |acc, member| {
-                acc.or(member.is_assignable_to_ctx(rhs, ctx))
-            });
+        let some = members.iter().fold(ExtendsResult::False, |acc, member| {
+            acc.or(member.is_assignable_to_ctx(rhs, ctx))
+        });
 
         if some == ExtendsResult::True {
             return some;

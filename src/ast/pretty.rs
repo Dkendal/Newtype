@@ -252,9 +252,7 @@ impl typescript::Pretty for Ast {
 
                 doc.append(D::text("[]"))
             }
-            Ast::Readonly(node) => {
-                D::text("readonly").append(D::space()).append(node.to_ts())
-            }
+            Ast::Readonly(node) => D::text("readonly").append(D::space()).append(node.to_ts()),
             Ast::NeverKeyword(_) => D::text("never"),
             Ast::AnyKeyword(_) => D::text("any"),
             Ast::UnknownKeyword(_) => D::text("unknown"),
