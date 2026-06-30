@@ -325,6 +325,15 @@ mod assignability_tests {
     #[case("readonly [string, number]", "[string, number]", FALSE)]
     #[case("readonly string[]", "object", TRUE)] // readonly arrays are objects
     #[case("readonly string[]", "unknown", TRUE)]
+    // --- keyof of an object literal (evaluated to the union of its keys) ---
+    #[case("keyof { a: string, b: number }", "'a' | 'b'", TRUE)] // source keyof
+    #[case("'a'", "keyof { a: 1, b: 2 }", TRUE)] // target keyof
+    #[case("keyof { a: 1 }", "'a'", TRUE)] // single-key keyof
+    #[case("keyof { a: 1 }", "'b'", FALSE)] // wrong key
+    #[case("keyof { a: string } | 'z'", "'a' | 'z'", TRUE)] // keyof inside a union
+    #[case("'a' | 'b'", "keyof { a: 1, b: 2 }", TRUE)] // union into target keyof
+    #[case("keyof { a: 1, b: 2 }", "'a'", FALSE)] // key union not assignable to one member
+    #[case("keyof string[]", "string", BOTH)] // non-object arg stays indeterminate
     #[trace]
     fn is_assignable_to_extended(
         #[case] a: &str,

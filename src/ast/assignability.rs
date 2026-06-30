@@ -1,8 +1,8 @@
 use crate::{
     ast::{
         type_env::{fingerprint, ResolveCtx},
-        Access, Ast, Builtin, FunctionType, IntersectionType, ObjectProperty, ObjectPropertyKey,
-        PrimitiveType, Tuple, TypeLiteral, UnionType,
+        Access, Ast, Builtin, BuiltinKeyword, FunctionType, IntersectionType, ObjectProperty,
+        ObjectPropertyKey, PrimitiveType, Tuple, TypeLiteral, TypeString, UnionType,
     },
     extends_result::ExtendsResult,
 };
@@ -84,6 +84,28 @@ impl Ast {
 
             (A::UnknownKeyword(_), _) => T::False,
 
+            // `keyof X` on either side. When `X` is (or resolves to) an object
+            // literal, evaluate `keyof X` to the union of its plain string-named
+            // keys and relate via the normal union logic. Both arms precede the
+            // set-operation arms below: a source `keyof` must expand before the
+            // target-union arm would otherwise distribute over it, and a target
+            // `keyof` must expand before the structural arms. A non-enumerable
+            // argument (arrays, primitives, unresolved refs, index signatures,
+            // mapped types) leaves the relation indeterminate.
+            (A::Builtin(Builtin { name: BuiltinKeyword::Keyof, argument, .. }), rhs) => {
+                match Self::eval_keyof(argument, ctx) {
+                    Some(keys) => keys.is_assignable_to_ctx(rhs, ctx),
+                    None => T::Both,
+                }
+            }
+
+            (lhs, A::Builtin(Builtin { name: BuiltinKeyword::Keyof, argument, .. })) => {
+                match Self::eval_keyof(argument, ctx) {
+                    Some(keys) => lhs.is_assignable_to_ctx(&keys, ctx),
+                    None => T::Both,
+                }
+            }
+
             // Set operations. Source-union: every member must be assignable.
             // Source-intersection: some member (or the merged shape) must be.
             // Target-union: assignable to some member. Target-intersection:
@@ -133,8 +155,6 @@ impl Ast {
             (A::ApplyGeneric(_), _) => T::Both,
 
             (A::Array(element), rhs) => Self::array_assignable_to(element, rhs, ctx),
-
-            (A::Builtin(Builtin { .. }), _) => T::Both,
 
             (A::Path(_), _) => T::Both,
 
@@ -549,6 +569,47 @@ impl Ast {
             | PrimitiveType::Undefined
             | PrimitiveType::Null => None,
         }
+    }
+
+    /// Evaluate `keyof arg` to the set of its plain string-named keys, as
+    /// `TypeString` literal nodes. Returns `None` (indeterminate) unless `arg`
+    /// is — or resolves via the environment to — an object literal whose keys
+    /// are *all* plain names (`ObjectPropertyKey::Key`). Index, computed, or
+    /// remapped keys, and non-object arguments, are not enumerable here and
+    /// yield `None`. Exposed as a reusable building block (mapped types).
+    fn keyof_string_keys(arg: &Ast, ctx: &ResolveCtx) -> Option<Vec<Ast>> {
+        let resolved = ctx.env().and_then(|env| env.resolve_head(arg));
+        let target = resolved.as_ref().unwrap_or(arg);
+
+        let Ast::TypeLiteral(literal) = target else {
+            return None;
+        };
+
+        let mut keys = Vec::with_capacity(literal.properties.len());
+        for prop in literal.iter() {
+            match &prop.key {
+                ObjectPropertyKey::Key(name) => keys.push(Ast::TypeString(TypeString {
+                    ty: name.clone(),
+                    span: literal.span,
+                })),
+                // A non-plain key can't be enumerated structurally.
+                _ => return None,
+            }
+        }
+        Some(keys)
+    }
+
+    /// Evaluate `keyof arg` to a single relatable type: the union of its
+    /// string-named keys (a bare key when there is one, `never` for the empty
+    /// object). `None` when the argument is not an enumerable object literal.
+    fn eval_keyof(arg: &Ast, ctx: &ResolveCtx) -> Option<Ast> {
+        let keys = Self::keyof_string_keys(arg, ctx)?;
+        let span = arg.as_span();
+        Some(match keys.len() {
+            0 => Ast::NeverKeyword(span),
+            1 => keys.into_iter().next().unwrap(),
+            _ => Ast::UnionType(UnionType { types: keys, span }),
+        })
     }
 
     /// The static name of a plain property key, if it has one.
