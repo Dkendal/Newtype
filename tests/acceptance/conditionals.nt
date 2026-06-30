@@ -1,0 +1,171 @@
+// conditional types & infer
+// Every assertion mirrors how `tsc --strict` (tsgo) actually evaluates the
+// equivalent TypeScript conditional / infer construct. Covers: basic
+// resolution, the not-extends operator, missing-else (never), nested
+// conditionals, and/or/not conditions, infer extraction, and distribution
+// over naked union type parameters.
+//
+// NOTE: newtype only desugars `if` expressions that appear in a type-alias
+// body, so every conditional below lives in a named alias rather than inline
+// in an `assert`.
+
+// ---------------------------------------------------------------------------
+// Helper aliases.
+// ---------------------------------------------------------------------------
+
+type Choose(T) as if T <: string then 1 else 2 end
+type ChooseNoElse(T) as if T <: string then 1 end
+type ChooseNot(T) as if T </: string then 1 else 2 end
+
+type UnionCheck as if string | number <: string then 1 else 2 end
+type RevCheck as if string <: string | number then 1 else 2 end
+type CondResult as if true <: boolean then string else number end
+
+type AndBoth as if string <: string and number <: number then 1 else 2 end
+type AndSecond as if string <: string and number <: string then 1 else 2 end
+type AndFirst as if string <: number and number <: number then 1 else 2 end
+
+type OrEither as if string <: number or number <: number then 1 else 2 end
+type OrNeither as if string <: number or number <: string then 1 else 2 end
+type OrFirst as if string <: string or number <: string then 1 else 2 end
+
+type NotPass as if not(number <: string) then 1 else 2 end
+type NotFail as if not(string <: string) then 1 else 2 end
+
+type NestInnerNoElse as if number <: number then if string <: number then 1 end else 9 end
+type NestElseBranch as if number <: string then 9 else if string <: string then 7 end end
+
+type NonNull(T) as
+  if T <: null then
+    never
+  else
+    if T <: undefined then
+      never
+    else
+      T
+    end
+  end
+
+type ToArray(T) as if T <: any then T[] else never end
+type ToArrayW(T) as if [T] <: [any] then T[] else never end
+type Excl(T, U) as if T <: U then never else T end
+type IsNever(T) as if T <: never then true else false end
+type IsNeverW(T) as if [T] <: [never] then true else false end
+
+type ElemA(T) as if T <: Array(?U) then U else never end
+type ReturnOf(T) as if T <: (any) => ?R then R else never end
+type ParamOf(T) as if T <: (?P) => any then P else never end
+type Fst(T) as if T <: [?A, ?B] then A else never end
+type Snd(T) as if T <: [?A, ?B] then B else never end
+type Unwrap(T) as if T <: Promise(?U) then U else never end
+type DupInfer(T) as if T <: {a: ?U, b: ?U} then U else never end
+
+// ---------------------------------------------------------------------------
+
+unittest "basic conditional resolution" do
+  assert Choose(string) == 1
+  assert Choose('hello') == 1
+  assert Choose(number) == 2
+  assert Choose(boolean) == 2
+  assert not(Choose(number) == 1)
+end
+
+unittest "missing else branch resolves to never" do
+  assert ChooseNoElse(string) == 1
+  assert ChooseNoElse(number) == never
+  assert not(ChooseNoElse(number) == 1)
+end
+
+unittest "not-extends operator swaps branches" do
+  assert ChooseNot(string) == 2
+  assert ChooseNot(number) == 1
+  assert ChooseNot(boolean) == 1
+end
+
+unittest "concrete union check does not distribute" do
+  assert UnionCheck == 2
+  assert RevCheck == 1
+  assert not(UnionCheck == 1)
+end
+
+unittest "conditional result participates in assignability" do
+  assert Choose(string) <: number
+  assert CondResult <: string
+  assert not(CondResult <: number)
+end
+
+unittest "nested conditionals strip null and undefined" do
+  assert NonNull(string | null | undefined) == string
+  assert NonNull(number) == number
+  assert NonNull(null) == never
+  assert NonNull(undefined) == never
+  assert not(NonNull(string | null) == string | null)
+end
+
+unittest "nested conditional false branch defaults to never" do
+  assert NestInnerNoElse == never
+  assert NestElseBranch == 7
+end
+
+unittest "and condition requires both relations" do
+  assert AndBoth == 1
+  assert AndSecond == 2
+  assert AndFirst == 2
+end
+
+unittest "or condition requires either relation" do
+  assert OrEither == 1
+  assert OrNeither == 2
+  assert OrFirst == 1
+end
+
+unittest "not condition negates the relation" do
+  assert NotPass == 1
+  assert NotFail == 2
+end
+
+unittest "infer extracts from generic, function, and tuple positions" do
+  assert ElemA(number[]) == number
+  assert ElemA(boolean[]) == boolean
+  assert ElemA(string) == never
+  assert ReturnOf((any) => string) == string
+  assert ReturnOf(string) == never
+  assert ParamOf((number) => any) == number
+  assert Fst([number, string]) == number
+  assert Snd([number, string]) == string
+  assert Unwrap(Promise(string)) == string
+  assert Unwrap(number) == never
+end
+
+unittest "duplicate infer in covariant position unions" do
+  assert DupInfer({a: string, b: number}) == string | number
+  assert DupInfer({a: string, b: string}) == string
+  assert not(DupInfer({a: string, b: number}) == string)
+end
+
+unittest "naked type parameter distributes over a union" do
+  assert ToArray(string | number) == string[] | number[]
+  assert ToArray(string) == string[]
+  assert not(ToArray(string | number) == (string | number)[])
+end
+
+unittest "tuple wrapping defeats distribution" do
+  assert ToArrayW(string | number) == (string | number)[]
+  assert not(ToArrayW(string | number) == string[] | number[])
+end
+
+unittest "distributive exclude filters union members" do
+  assert Excl(1 | 2 | 3, 2) == 1 | 3
+  assert Excl(1, 1) == never
+  assert Excl(1 | 2, 1 | 2) == never
+  assert Excl(string | number, number) == string
+  assert not(Excl(1 | 2 | 3, 2) == 1 | 2 | 3)
+end
+
+unittest "never check: naked distributes, wrapped does not" do
+  assert IsNever(never) == never
+  assert IsNever(string) == false
+  assert IsNeverW(never) == true
+  assert IsNeverW(string) == false
+  assert not(IsNeverW(never) == false)
+end

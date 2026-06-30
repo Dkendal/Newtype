@@ -1,0 +1,78 @@
+// intersection types
+// Every assertion below must hold under `tsgo --noEmit --strict`.
+// Ground truth was confirmed by hand-writing the equivalent TypeScript.
+
+unittest "intersection is assignable to each member" do
+  assert {a: 1} & {b: 2} <: {a: 1}
+  assert {a: 1} & {b: 2} <: {b: 2}
+  assert string & {a: 1} <: string
+  assert string & {a: 1} <: {a: 1}
+  assert {a: 1} & {b: 2} & {c: 3} <: {b: 2}
+  assert {a: 1} & {b: 2} & {c: 3} <: {a: 1}
+end
+
+unittest "intersection is not assignable from a single member" do
+  assert not({a: 1} <: {a: 1} & {b: 2})
+  assert not(string <: string & {a: 1})
+  assert not({b: 2} <: {a: 1} & {b: 2})
+end
+
+unittest "object intersection merges members" do
+  assert {a: 1} & {b: 2} <: {a: 1, b: 2}
+  assert {a: 1, b: 2} <: {a: 1} & {b: 2}
+end
+
+unittest "conflicting primitive intersection reduces to never" do
+  assert string & number == never
+  assert string & boolean == never
+  assert number & boolean == never
+  assert 1 & 2 == never
+  assert 'a' & 'b' == never
+  assert string & number != string
+  assert not(string <: string & number)
+end
+
+unittest "literal narrows against its primitive" do
+  assert 1 & number == 1
+  assert 'a' & string == 'a'
+  assert true & boolean == true
+  assert boolean & true == true
+  assert 1 & number != never
+end
+
+unittest "never absorbs everything in an intersection" do
+  assert string & never == never
+  assert never & {a: 1} == never
+  assert string & never <: never
+  assert never & {a: 1} <: never
+end
+
+unittest "intersection with unknown is identity" do
+  assert string & unknown == string
+  assert unknown & {a: 1} == {a: 1}
+  assert string & unknown <: string
+  assert string <: string & unknown
+end
+
+unittest "intersection with any collapses to any" do
+  assert string & any <: any
+  assert any & {a: 1} <: any
+end
+
+unittest "intersection ordering is invariant" do
+  assert string & number == number & string
+  assert {a: 1} & {b: 2} == {b: 2} & {a: 1}
+  assert {a: 1} & {b: 2} <: {b: 2} & {a: 1}
+  assert {b: 2} & {a: 1} <: {a: 1} & {b: 2}
+end
+
+unittest "intersection with a union narrows" do
+  assert ('a' | 'b') & string == 'a' | 'b'
+  assert string & ('a' | 'b') <: string
+  assert not(string <: string & ('a' | 'b'))
+end
+
+unittest "intersection with self is idempotent" do
+  assert string & string == string
+  assert number & number == number
+end

@@ -1,0 +1,97 @@
+// tuples & arrays
+// Every assertion below reflects TypeScript `tsc --strict` behavior, verified
+// by hand-checking the equivalent TS with `tsgo --noEmit --strict`.
+
+unittest "tuple element-wise assignability" do
+  assert [1, 'a'] <: [number, string]
+  assert [1, 2] <: [number, number]
+  assert not([1, 'a'] <: [string, number])
+  assert not([string, number] <: [number, string])
+  assert not([number] <: [1])
+  assert [1] <: [number]
+end
+
+unittest "tuple arity must match exactly" do
+  assert not([number, number] <: [number])
+  assert not([number] <: [number, number])
+  assert not([1, 2, 3] <: [number, number])
+  assert [number, number] == [number, number]
+  assert [number, string] != [string, number]
+end
+
+unittest "tuple is assignable to array of its element union" do
+  assert [string, number] <: (string | number)[]
+  assert [1, 2] <: (1 | 2)[]
+  assert [1, 2] <: number[]
+  assert [boolean, boolean] <: boolean[]
+  assert not(number[] <: [number, number])
+  assert not(boolean[] <: [boolean, boolean])
+end
+
+unittest "tuple is assignable to a wider array but not narrower" do
+  assert [number, number] <: number[]
+  assert [number, number] <: unknown[]
+  assert [1, 2] <: object
+  assert not([string, number] <: number[])
+end
+
+unittest "array covariance under TypeScript" do
+  assert string[] <: (string | number)[]
+  assert number[] <: unknown[]
+  assert never[] <: number[]
+  assert {a: 1}[] <: {}[]
+  assert {a: 1}[] <: object[]
+  assert not((string | number)[] <: string[])
+  assert not(unknown[] <: number[])
+  assert not({}[] <: {a: 1}[])
+end
+
+unittest "readonly arrays accept mutable but not vice versa" do
+  assert number[] <: readonly number[]
+  assert string[] <: readonly string[]
+  assert not(readonly number[] <: number[])
+  assert not(readonly string[] <: string[])
+end
+
+unittest "readonly tuples accept mutable but not vice versa" do
+  assert [number, string] <: readonly [number, string]
+  assert [1, 2] <: readonly number[]
+  assert readonly [1, 2] <: readonly number[]
+  assert not(readonly [number, string] <: [number, string])
+  assert not(readonly number[] <: readonly [number, number])
+end
+
+unittest "empty tuple behavior" do
+  assert [] <: number[]
+  assert [] <: unknown[]
+  assert [] <: readonly []
+  assert not(number[] <: [])
+  assert not([number] <: [])
+end
+
+unittest "nested tuples are checked structurally" do
+  assert [[1, 2], [3]] <: [[number, number], [number]]
+  assert [[1, 2]] <: [number[]]
+  assert not([[1, 2], [3]] <: [[number], [number]])
+end
+
+unittest "readonly covariance and identity" do
+  assert readonly [number, string] == readonly [number, string]
+  assert [1, 2] <: readonly (1 | 2)[]
+  assert string[] <: readonly (string | number)[]
+  assert readonly [1, 2] <: readonly [number, number]
+  assert [[1, 2], [3]] <: readonly [readonly [number, number], readonly [number]]
+  assert not(readonly [1, 2] <: [number, number])
+  assert not([number, number] <: readonly [number])
+end
+
+unittest "union targets and longer arity" do
+  assert [1] <: [number] | [string, number]
+  assert {}[] <: unknown[]
+  assert not([1, 2] <: [number, number, number])
+end
+
+unittest "a tuple type is not its element type" do
+  assert not([string] <: string)
+  assert [string] <: object
+end

@@ -22,8 +22,8 @@ use std::collections::{HashMap, HashSet};
 use slotmap::{new_key_type, SlotMap};
 
 use crate::ast::{
-    ApplyGeneric, Ast, Ident, Interface, IntersectionType, Span, Tuple, TypeAlias, TypeLiteral,
-    TypeParameter,
+    ApplyGeneric, Ast, ExtendsExpr, Ident, Interface, IntersectionType, Span, Tuple, TypeAlias,
+    TypeLiteral, TypeParameter, UnionType,
 };
 
 new_key_type! {
@@ -137,7 +137,7 @@ impl TypeEnv {
             def.body.clone()
         } else {
             let bindings = bind_params(&def.params, args);
-            substitute(&def.body, &bindings)
+            distribute_or_substitute(&def.body, &bindings)
         };
 
         let id = self.arena.borrow_mut().insert(body.clone());
@@ -280,6 +280,36 @@ fn interface_def(interface: &Interface) -> Def {
         params: interface.params.iter().map(Param::from).collect(),
         body,
     }
+}
+
+/// Instantiate a definition body against `bindings`, reproducing TypeScript's
+/// *distributive conditional types*: when the body is a conditional whose check
+/// type is a naked type parameter bound to a union, the conditional distributes
+/// over the union members — each member is substituted into the whole body and
+/// the results are unioned (`ToArray<A | B>` ≡ `ToArray<A> | ToArray<B>`).
+/// Otherwise the body is substituted directly. A wrapped check type (e.g.
+/// `[T] extends …`) is not a naked parameter, so it does not distribute.
+fn distribute_or_substitute(body: &Ast, bindings: &HashMap<String, Ast>) -> Ast {
+    if let Ast::ExtendsExpr(ExtendsExpr { lhs, span, .. }) = body {
+        if let Ast::Ident(Ident { name, .. }) = lhs.as_ref() {
+            if let Some(Ast::UnionType(UnionType { types, .. })) = bindings.get(name) {
+                let variants = types
+                    .iter()
+                    .map(|member| {
+                        let mut member_bindings = bindings.clone();
+                        member_bindings.insert(name.clone(), member.clone());
+                        substitute(body, &member_bindings)
+                    })
+                    .collect();
+                return Ast::UnionType(UnionType {
+                    types: variants,
+                    span: *span,
+                });
+            }
+        }
+    }
+
+    substitute(body, bindings)
 }
 
 /// Substitute bound type arguments for parameter names throughout `body`.

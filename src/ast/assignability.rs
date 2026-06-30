@@ -3,9 +3,9 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::{
         type_env::{fingerprint, substitute, ResolveCtx},
-        Access, Ast, Builtin, BuiltinKeyword, FunctionType, IntersectionType, MappedType,
-        MappingModifier, ObjectProperty, ObjectPropertyKey, PrimitiveType, Tuple, TypeLiteral,
-        TypeString, UnionType,
+        Access, ApplyGeneric, Ast, Builtin, BuiltinKeyword, ExtendsExpr, FunctionType, Ident,
+        IntersectionType, MappedType, MappingModifier, ObjectProperty, ObjectPropertyKey,
+        PrimitiveType, Span, Tuple, TypeLiteral, TypeString, UnionType,
     },
     extends_result::ExtendsResult,
 };
@@ -70,6 +70,20 @@ impl Ast {
                 ctx.discharge(&pair);
                 return result;
             }
+        }
+
+        // Conditional types (`check extends T ? then : else`) on either side are
+        // reduced to the selected branch before relating. Distribution over a
+        // naked union check type is handled upstream (at instantiation, in
+        // `TypeEnv`), so by this point the check type is a single type and a
+        // plain reduction — plus `infer` extraction — is correct.
+        if let Ast::ExtendsExpr(e) = self {
+            let reduced = Self::reduce_conditional(e, ctx);
+            return reduced.is_assignable_to_ctx(other, ctx);
+        }
+        if let Ast::ExtendsExpr(e) = other {
+            let reduced = Self::reduce_conditional(e, ctx);
+            return self.is_assignable_to_ctx(&reduced, ctx);
         }
 
         // Literal/primitive source assignable to its own bare primitive target
@@ -200,6 +214,20 @@ impl Ast {
             // primitive type and are handled structurally further down, so they
             // are excluded here. This must precede the `Object`-wrapper target
             // arm below, otherwise `Foo <: Object` would wrongly resolve to True.
+            // The global `Function` interface is an object value that carries
+            // call signatures: it is assignable to the any-object targets
+            // (`object`, `{}`, `Object`) but NOT to any specific function type
+            // (its signature is `(...args: any[]) => any`, which is not
+            // assignable to an arbitrary concrete signature). Must precede the
+            // free-variable `Ident` arm below.
+            (lhs, rhs) if lhs.is_function_interface() => {
+                if Self::accepts_any_object(rhs) {
+                    T::True
+                } else {
+                    T::False
+                }
+            }
+
             (lhs @ A::Ident(_), _) if lhs.get_primitive_type().is_none() => T::Both,
 
             (lhs, rhs) if lhs.is_non_nullish() && rhs.is_object_object_wrapper() => T::True,
@@ -293,35 +321,53 @@ impl Ast {
             };
         };
 
-        // Arity. Parameters up to the first rest parameter are required; the
-        // source must not require more than the target accepts (a trailing
-        // rest parameter on the target absorbs any extra).
-        let source_required = lhs.params.iter().take_while(|p| !p.ellipsis).count();
-        let target_has_rest = target.params.last().is_some_and(|p| p.ellipsis);
-        if !target_has_rest && source_required > target.params.len() {
+        // Normalize each signature into its fixed (leading, non-rest) parameter
+        // types plus an optional rest element type — a `...a: T[]` rest absorbs
+        // any number of trailing arguments of type `T`.
+        let (source_fixed, source_rest) = Self::split_params(&lhs.params);
+        let (target_fixed, target_rest) = Self::split_params(&target.params);
+
+        // Arity. The source must not require more parameters than the target can
+        // supply: a target rest parameter supplies unboundedly, otherwise only
+        // its fixed parameters. Fewer source parameters are fine (the source
+        // simply ignores the extra arguments the target passes).
+        let source_required = source_fixed.len();
+        let target_supply = if target_rest.is_some() {
+            usize::MAX
+        } else {
+            target_fixed.len()
+        };
+        if source_required > target_supply {
             return ExtendsResult::False;
         }
 
-        // Parameters are contravariant: each target parameter must be
-        // assignable to the source parameter in the same position. An `any` in
-        // either parameter position is bidirectionally compatible, so it
-        // satisfies the relation outright (matching the TypeScript checker,
-        // where `any` params are always related) rather than collapsing the
-        // whole signature to the indeterminate `Both`.
+        // Parameters are contravariant: at each position the target supplies, the
+        // target parameter type must be assignable to the source parameter type.
+        // An `any` in either position is bidirectionally compatible. A position
+        // the source does not cover (no fixed parameter and no rest) imposes no
+        // constraint — the source ignores that argument.
         let mut acc = ExtendsResult::True;
-        for (source_param, target_param) in lhs.params.iter().zip(target.params.iter()) {
-            let related = if matches!(source_param.kind, Ast::AnyKeyword(_))
-                || matches!(target_param.kind, Ast::AnyKeyword(_))
+        let positions = source_fixed.len().max(target_fixed.len());
+        for i in 0..positions {
+            let source_ty = source_fixed.get(i).copied().or(source_rest);
+            let target_ty = target_fixed.get(i).copied().or(target_rest);
+            let (Some(source_ty), Some(target_ty)) = (source_ty, target_ty) else {
+                continue;
+            };
+            let related = if matches!(source_ty, Ast::AnyKeyword(_))
+                || matches!(target_ty, Ast::AnyKeyword(_))
             {
                 ExtendsResult::True
             } else {
-                target_param.kind.is_assignable_to_ctx(&source_param.kind, ctx)
+                target_ty.is_assignable_to_ctx(source_ty, ctx)
             };
             acc = acc.and(related);
         }
 
         // Return type. A target return of `any` or `void` is satisfied by any
-        // source return; otherwise the relation is covariant.
+        // source return; otherwise the relation is covariant. A source return of
+        // `any` is assignable to every target return except `never` (`any` is not
+        // assignable to the bottom type).
         let target_return = target.return_type.as_ref();
         let target_return_absorbs = matches!(
             target_return,
@@ -329,11 +375,33 @@ impl Ast {
         );
         let return_relation = if target_return_absorbs {
             ExtendsResult::True
+        } else if matches!(lhs.return_type.as_ref(), Ast::AnyKeyword(_)) {
+            Into::into(!matches!(target_return, Ast::NeverKeyword(_)))
         } else {
             lhs.return_type.is_assignable_to_ctx(target_return, ctx)
         };
 
         acc.and(return_relation)
+    }
+
+    /// Split a parameter list into its leading fixed (non-rest) parameter types
+    /// and the element type of a trailing rest parameter, if any. A rest
+    /// parameter `...a: T[]` contributes element type `T`; a non-array rest type
+    /// contributes itself.
+    fn split_params(params: &[crate::ast::Parameter]) -> (Vec<&Ast>, Option<&Ast>) {
+        let mut fixed = Vec::new();
+        let mut rest = None;
+        for param in params {
+            if param.ellipsis {
+                rest = Some(match &param.kind {
+                    Ast::Array(element) => element.as_ref(),
+                    other => other,
+                });
+                break;
+            }
+            fixed.push(&param.kind);
+        }
+        (fixed, rest)
     }
 
     /// `[A, B, …]` tuple assignable to `rhs`.
@@ -808,6 +876,221 @@ impl Ast {
                 let resolved = ctx.env().and_then(|env| env.resolve_head(other))?;
                 Self::mapped_key_set(&resolved, ctx, seen)
             }
+        }
+    }
+
+    /// Reduce a conditional type `check extends extends_ty ? then : else` to the
+    /// branch it selects. When `extends_ty` carries `infer` positions, the check
+    /// type is structurally matched against the pattern to bind each `infer`
+    /// variable; on a successful match the bindings are substituted into the
+    /// `then` branch (duplicate covariant `infer` occurrences union), otherwise
+    /// the `else` branch is taken. Without `infer`, the relation `check <:
+    /// extends_ty` selects the branch (`True` → then, `False` → else, `Never` →
+    /// `never`, indeterminate → the union of both branches).
+    fn reduce_conditional(e: &ExtendsExpr, ctx: &ResolveCtx) -> Ast {
+        let ExtendsExpr {
+            lhs,
+            rhs,
+            then_branch,
+            else_branch,
+            span,
+        } = e;
+
+        // Resolve a named check type one step (e.g. an alias) before matching.
+        let check = ctx
+            .env()
+            .and_then(|env| env.resolve_head(lhs))
+            .unwrap_or_else(|| (**lhs).clone());
+
+        if Self::contains_infer(rhs) {
+            let mut bindings: HashMap<String, Vec<Ast>> = HashMap::new();
+            if Self::match_infer(&check, rhs, ctx, &mut bindings) {
+                let resolved: HashMap<String, Ast> = bindings
+                    .into_iter()
+                    .map(|(name, types)| (name, Self::union_of(types, *span)))
+                    .collect();
+                return substitute(then_branch, &resolved);
+            }
+            return (**else_branch).clone();
+        }
+
+        match check.is_assignable_to_ctx(rhs, ctx) {
+            ExtendsResult::True => (**then_branch).clone(),
+            ExtendsResult::False => (**else_branch).clone(),
+            ExtendsResult::Never => Ast::NeverKeyword(*span),
+            ExtendsResult::Both => Ast::UnionType(UnionType {
+                types: vec![(**then_branch).clone(), (**else_branch).clone()],
+                span: *span,
+            }),
+        }
+    }
+
+    /// Whether `ast` contains an `infer` node anywhere in its subtree.
+    fn contains_infer(ast: &Ast) -> bool {
+        let any = |items: &[Ast]| items.iter().any(Self::contains_infer);
+        match ast {
+            Ast::Infer(_) => true,
+            Ast::Array(inner) | Ast::Readonly(inner) => Self::contains_infer(inner),
+            Ast::ApplyGeneric(ApplyGeneric { receiver, args, .. }) => {
+                Self::contains_infer(receiver) || any(args)
+            }
+            Ast::FunctionType(f) => {
+                f.params.iter().any(|p| Self::contains_infer(&p.kind))
+                    || Self::contains_infer(&f.return_type)
+            }
+            Ast::Tuple(t) => any(&t.items),
+            Ast::TypeLiteral(l) => l.iter().any(|p| Self::contains_infer(&p.value)),
+            Ast::UnionType(u) => any(&u.types),
+            Ast::IntersectionType(i) => any(&i.types),
+            Ast::Access(a) => Self::contains_infer(&a.lhs) || Self::contains_infer(&a.rhs),
+            Ast::Builtin(b) => Self::contains_infer(&b.argument),
+            _ => false,
+        }
+    }
+
+    /// Combine inferred occurrences of a single `infer` variable into one type,
+    /// deduplicating structurally and unioning multiple covariant occurrences.
+    ///
+    /// LIMITATION: TypeScript only unions duplicate `infer`s in *covariant*
+    /// positions; in *contravariant* (parameter) positions it intersects them
+    /// (so `(a: infer U, b: infer U) => any` against `(string, number) => any`
+    /// yields `string & number`). We always union. This is currently latent —
+    /// no caller reaches a contravariant duplicate, and the parser does not yet
+    /// accept the multi-`infer` function syntax that would express it.
+    fn union_of(types: Vec<Ast>, span: Span) -> Ast {
+        let mut seen = HashSet::new();
+        let mut unique = Vec::with_capacity(types.len());
+        for ty in types {
+            if seen.insert(fingerprint(&ty)) {
+                unique.push(ty);
+            }
+        }
+        match unique.len() {
+            0 => Ast::NeverKeyword(span),
+            1 => unique.into_iter().next().unwrap(),
+            _ => Ast::UnionType(UnionType {
+                types: unique,
+                span,
+            }),
+        }
+    }
+
+    /// Structurally match a concrete `value` against an `infer`-bearing `pattern`,
+    /// binding each `infer` variable to the corresponding part of `value`.
+    /// Returns whether the shapes are compatible. `Array<T>`/`ReadonlyArray<T>`
+    /// patterns match `T[]` values; generic applications match by receiver and
+    /// arity; functions match parameter-wise and on the return type; tuples and
+    /// object literals match structurally. A pattern subtree with no `infer`
+    /// imposes the ordinary assignability constraint (`value <: pattern`).
+    fn match_infer(
+        value: &Ast,
+        pattern: &Ast,
+        ctx: &ResolveCtx,
+        bindings: &mut HashMap<String, Vec<Ast>>,
+    ) -> bool {
+        match pattern {
+            Ast::Infer(inner) => {
+                if let Ast::Ident(Ident { name, .. }) = &**inner {
+                    bindings
+                        .entry(name.clone())
+                        .or_default()
+                        .push(value.clone());
+                    true
+                } else {
+                    false
+                }
+            }
+
+            Ast::Array(p_el) => match value {
+                Ast::Array(v_el) => Self::match_infer(v_el, p_el, ctx, bindings),
+                _ => false,
+            },
+
+            Ast::ApplyGeneric(ApplyGeneric { receiver, args, .. }) => {
+                // `Array<X>` / `ReadonlyArray<X>` is the generic spelling of `X[]`.
+                if let Ast::Ident(Ident { name, .. }) = &**receiver {
+                    if (name == "Array" || name == "ReadonlyArray") && args.len() == 1 {
+                        if let Ast::Array(v_el) = value {
+                            return Self::match_infer(v_el, &args[0], ctx, bindings);
+                        }
+                    }
+                }
+                // Otherwise match against another application of the same generic.
+                if let Ast::ApplyGeneric(ApplyGeneric {
+                    receiver: v_recv,
+                    args: v_args,
+                    ..
+                }) = value
+                {
+                    if fingerprint(receiver) == fingerprint(v_recv) && args.len() == v_args.len() {
+                        return args
+                            .iter()
+                            .zip(v_args.iter())
+                            .all(|(p, v)| Self::match_infer(v, p, ctx, bindings));
+                    }
+                }
+                false
+            }
+
+            Ast::FunctionType(pattern_fn) => match value {
+                Ast::FunctionType(value_fn) => {
+                    if pattern_fn.params.len() != value_fn.params.len() {
+                        return false;
+                    }
+                    for (pp, vp) in pattern_fn.params.iter().zip(value_fn.params.iter()) {
+                        if !Self::match_infer(&vp.kind, &pp.kind, ctx, bindings) {
+                            return false;
+                        }
+                    }
+                    Self::match_infer(
+                        &value_fn.return_type,
+                        &pattern_fn.return_type,
+                        ctx,
+                        bindings,
+                    )
+                }
+                _ => false,
+            },
+
+            Ast::Tuple(pattern_tuple) => match value {
+                Ast::Tuple(value_tuple) => {
+                    if pattern_tuple.items.len() != value_tuple.items.len() {
+                        return false;
+                    }
+                    pattern_tuple
+                        .items
+                        .iter()
+                        .zip(value_tuple.items.iter())
+                        .all(|(p, v)| Self::match_infer(v, p, ctx, bindings))
+                }
+                _ => false,
+            },
+
+            Ast::TypeLiteral(pattern_lit) => match value {
+                Ast::TypeLiteral(value_lit) => {
+                    for pp in pattern_lit.iter() {
+                        let ObjectPropertyKey::Key(key) = &pp.key else {
+                            return false;
+                        };
+                        let matched = value_lit
+                            .iter()
+                            .find(|vp| matches!(&vp.key, ObjectPropertyKey::Key(vk) if vk == key));
+                        match matched {
+                            Some(vp) => {
+                                if !Self::match_infer(&vp.value, &pp.value, ctx, bindings) {
+                                    return false;
+                                }
+                            }
+                            None => return false,
+                        }
+                    }
+                    true
+                }
+                _ => false,
+            },
+
+            // A pattern subtree with no `infer` constrains the value structurally.
+            _ => value.is_assignable_to_ctx(pattern, ctx) != ExtendsResult::False,
         }
     }
 

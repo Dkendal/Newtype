@@ -1,0 +1,151 @@
+// generic aliases: application, constraints, defaults
+// Every assertion mirrors how `tsc --strict` (tsgo) evaluates the equivalent
+// TypeScript generic type alias. Covers: generic application, identity and
+// projection, multi-parameter aliases, nested application, default parameters
+// (including defaults that reference earlier parameters), bare references to
+// all-default generics, and where-clause constraints applied with satisfying
+// arguments. Both positive (assert ...) and negative (assert not(...)) cases.
+
+// ---------------------------------------------------------------------------
+// Helper aliases used across the unittests below.
+// ---------------------------------------------------------------------------
+
+// Identity: returns its sole argument unchanged.
+type Id(T) as T
+
+// Projection: first / second of two parameters.
+type Fst(A, B) as A
+type Snd(A, B) as B
+
+// Two/three parameter constructors.
+type Pair(A, B) as [A, B]
+type Tri(A, B, C) as [A, B, C]
+
+// Trailing default parameter.
+type PairD(A, B) defaults B = string as [A, B]
+
+// Default that references an earlier type parameter.
+type Wrap(A, B) defaults B = A as [A, B]
+
+// Sole parameter with a default, plus a trailing default after C.
+type Box(T) defaults T = string as T[]
+type Tri3(A, B, C) defaults C = boolean as [A, B, C]
+
+// Constrained parameters (applied only with satisfying arguments).
+type Num(T) where T <: number as T
+type NumD(T) defaults T = 0 where T <: number as T
+type Arr(T) where T <: unknown as T[]
+type Both(A, B) where A <: number, B <: string as [A, B]
+type SubOf(A, B) where B <: A as B
+
+// ---------------------------------------------------------------------------
+
+unittest "identity application preserves the argument" do
+  assert Id(1) == 1
+  assert Id(string) == string
+  assert Id(true) == true
+  assert Id(string | number) == string | number
+  assert Id([1, 2]) == [1, 2]
+  assert not(Id(1) == 2)
+  assert not(Id(string) == number)
+end
+
+unittest "application result participates in assignability" do
+  assert Id(1) <: number
+  assert Id('hi') <: string
+  assert number <: Id(number)
+  assert not(Id(string) <: number)
+  assert not(number <: Id(1))
+end
+
+unittest "projection selects the named parameter" do
+  assert Fst(1, 2) == 1
+  assert Snd(1, 2) == 2
+  assert Fst(string, number) == string
+  assert Snd(string, number) == number
+  assert not(Fst(1, 2) == 2)
+  assert not(Snd(1, 2) == 1)
+end
+
+unittest "multi-parameter application builds the body" do
+  assert Pair(number, string) == [number, string]
+  assert Pair(1, 2) == [1, 2]
+  assert Tri(1, 2, 3) == [1, 2, 3]
+  assert Pair(number, string) <: [unknown, unknown]
+  assert not(Pair(number, string) == [string, number])
+  assert not(Pair(1, 2) == [1, 2, 3])
+end
+
+unittest "nested generic application evaluates inside-out" do
+  assert Id(Id(1)) == 1
+  assert Pair(Id(1), Id(2)) == [1, 2]
+  assert Id(Pair(1, 2)) == [1, 2]
+  assert Fst(Id(string), number) == string
+  assert not(Id(Id(1)) == 2)
+end
+
+unittest "trailing default fills an omitted argument" do
+  assert PairD(number) == [number, string]
+  assert PairD(1) == [1, string]
+  assert not(PairD(number) == [number, number])
+end
+
+unittest "explicit argument overrides the default" do
+  assert PairD(number, boolean) == [number, boolean]
+  assert PairD(1, 2) == [1, 2]
+  assert not(PairD(number, boolean) == [number, string])
+end
+
+unittest "default referencing an earlier parameter" do
+  assert Wrap(number) == [number, number]
+  assert Wrap(1) == [1, 1]
+  assert Wrap(number, string) == [number, string]
+  assert not(Wrap(number) == [number, string])
+end
+
+unittest "bare reference to an all-default generic uses the default" do
+  assert Box == string[]
+  assert Box(number) == number[]
+  assert not(Box == number[])
+end
+
+unittest "default after required leading parameters" do
+  assert Tri3(1, 2) == [1, 2, boolean]
+  assert Tri3(1, 2, 3) == [1, 2, 3]
+  assert not(Tri3(1, 2) == [1, 2, 3])
+end
+
+unittest "constrained parameter behaves as identity for valid arguments" do
+  assert Num(1) == 1
+  assert Num(1) <: number
+  assert Num(number) == number
+  assert not(Num(1) == 2)
+end
+
+unittest "constrained parameter with its own default" do
+  assert NumD == 0
+  assert NumD(5) == 5
+  assert NumD(5) <: number
+  assert not(NumD == 5)
+end
+
+unittest "constraint using a builtin type expression" do
+  assert Arr(number) == number[]
+  assert Arr(string) == string[]
+  assert Arr(1) <: number[]
+  assert not(Arr(number) == string[])
+end
+
+unittest "multiple independent constraints" do
+  assert Both(1, 'x') == [1, 'x']
+  assert Both(number, string) == [number, string]
+  assert Both(1, 'x') <: [number, string]
+  assert not(Both(1, 'x') == ['x', 1])
+end
+
+unittest "constraint referencing another parameter" do
+  assert SubOf(number, 1) == 1
+  assert SubOf(string, 'hi') == 'hi'
+  assert SubOf(number, 1) <: number
+  assert not(SubOf(number, 1) == 2)
+end

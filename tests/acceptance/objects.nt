@@ -1,0 +1,105 @@
+// object types, optionality & index signatures
+
+unittest "structural width subtyping" do
+  assert {x: string, y: number} <: {x: string}
+  assert not({x: string} <: {x: string, y: number})
+  assert {x: string} <: {}
+  assert not({} <: {x: string})
+  assert {a: number, b: string, c: boolean} <: {a: number}
+  assert {a: number, b: string, c: boolean} <: {a: number, b: string}
+end
+
+unittest "missing required property fails" do
+  assert not({} <: {x: number})
+  assert not({x: string} <: {x: string, z: boolean})
+  assert not({a: number} <: {a: number, b: number})
+  assert not({name: string} <: {name: string, age: number})
+end
+
+unittest "structural depth subtyping" do
+  assert {x: {a: string, b: number}} <: {x: {a: string}}
+  assert not({x: {a: string}} <: {x: {a: string, b: number}})
+  assert {a: {b: {c: number}}} <: {a: {b: {c: number}}}
+  assert not({a: {b: number}} <: {a: {b: string}})
+  assert {p: {q: number, r: string}} <: {p: {q: number}}
+end
+
+unittest "optional properties" do
+  assert {x: string} <: {x: string, y?: number}
+  assert {x: string, y?: number} <: {x: string}
+  assert {x: string, y: number} <: {x: string, y?: number}
+  assert not({y?: number} <: {y: number})
+  assert {y: number} <: {y?: number}
+  assert {} <: {x?: number}
+  assert {a: {b: number}} <: {a: {b?: number}}
+end
+
+unittest "string index signatures" do
+  assert {x: number} <: {[k in string]: number}
+  assert not({[k in string]: number} <: {x: number})
+  assert not({x: string} <: {[k in string]: number})
+  assert {[k in string]: number} <: {[k in string]: number}
+  assert {[k in string]: number} <: {}
+  assert {a: number, b: number} <: {[k in string]: number}
+  assert not({a: number, b: string} <: {[k in string]: number})
+  assert not({[k in string]: string} <: {[k in string]: number})
+end
+
+unittest "number index signatures" do
+  assert {[k in number]: string} <: {[k in number]: string}
+  assert {[k in string]: number} <: {[k in number]: number}
+  assert {[k in number]: number} <: {[k in string]: number}
+  assert not({[k in number]: string} <: {[k in number]: number})
+end
+
+unittest "readonly properties" do
+  assert {readonly x: number} <: {x: number}
+  assert {x: number} <: {readonly x: number}
+  assert {readonly x: number} <: {readonly x: number}
+  assert {readonly a: number, readonly b: string} <: {a: number}
+  assert not({readonly x: number, readonly y: string} <: {x: number, z: boolean})
+end
+
+unittest "object top and bottom relations" do
+  assert {x: number} <: object
+  assert {x: number} <: unknown
+  assert {x: number} <: any
+  assert never <: {x: number}
+  assert {} <: {}
+end
+
+unittest "object type equality" do
+  assert {x: number, y: string} == {y: string, x: number}
+  assert {x: number} == {x: number}
+  assert {x: number} != {x: string}
+  assert not({x?: number} == {x: number})
+  assert {a: {b: number}} == {a: {b: number}}
+end
+
+interface Animal {
+  legs: number,
+}
+
+interface Dog extends Animal {
+  bark: () => void,
+}
+
+unittest "interface extends adds members" do
+  assert Dog <: Animal
+  assert not(Animal <: Dog)
+  assert Dog <: {legs: number}
+  assert Dog <: {bark: () => void}
+  assert not({legs: number} <: Dog)
+end
+
+interface Point {
+  x: number,
+  y: number,
+}
+
+unittest "interface structural identity" do
+  assert Point == {x: number, y: number}
+  assert Point <: {x: number}
+  assert {x: number, y: number, z: number} <: Point
+  assert not(Point <: {x: number, y: number, z: number})
+end

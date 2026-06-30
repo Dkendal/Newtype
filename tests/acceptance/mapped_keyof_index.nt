@@ -1,0 +1,107 @@
+// mapped types, keyof & indexed access
+// Every assertion mirrors how `tsc --strict` (tsgo) actually evaluates the
+// equivalent TypeScript construct. The subtle cases were confirmed by
+// hand-writing the equivalent TypeScript and running `tsgo --noEmit --strict`
+// before being encoded here.
+//
+// Scope note: newtype's evaluator currently reduces keyof of object types,
+// homomorphic mapped types (`map k in keyof(T) do T[k] end`), value-transforming
+// mapped types, mapped types over a literal key union, and the readonly/optional
+// modifiers on them. It does NOT yet reduce top-level indexed access (e.g.
+// `Obj['a']`), keyof of primitives/arrays/tuples, key remapping with `as`, or
+// keyof of a mapped result — those evaluate to "indeterminate", so to keep this
+// fixture in agreement with tsgo they are intentionally omitted (see syntaxNotes).
+
+// ---------------------------------------------------------------------------
+// Shared object type used across the unittests below.
+// ---------------------------------------------------------------------------
+type Obj as {a: number, b: string, c: boolean}
+
+// ---------------------------------------------------------------------------
+// keyof of an object literal collapses to the union of its keys.
+// ---------------------------------------------------------------------------
+unittest "keyof object yields union of keys" do
+  assert keyof Obj == 'a' | 'b' | 'c'
+  assert keyof {x: number, y: string} == 'x' | 'y'
+  assert keyof {a: number} == 'a'
+  assert keyof {} == never
+  assert not(keyof Obj == 'a' | 'b')
+  assert not(keyof Obj == 'a')
+  assert keyof Obj == 'c' | 'a' | 'b'
+end
+
+unittest "keyof membership via assignability" do
+  assert 'a' <: keyof Obj
+  assert 'b' <: keyof Obj
+  assert 'a' | 'c' <: keyof Obj
+  assert not('d' <: keyof Obj)
+  assert not(keyof Obj <: 'a')
+  assert keyof Obj <: 'a' | 'b' | 'c'
+  assert keyof Obj <: string
+  assert not(string <: keyof Obj)
+  assert not(keyof Obj <: 'a' | 'b')
+end
+
+// ---------------------------------------------------------------------------
+// Homomorphic mapped identity reproduces the source object.
+// `map k in keyof(T) do T[k] end` lowers to `{ [k in keyof T]: T[k] }`.
+// ---------------------------------------------------------------------------
+unittest "homomorphic mapped identity reproduces the object" do
+  assert map k in keyof(Obj) do Obj[k] end == Obj
+  assert map k in keyof(Obj) do Obj[k] end <: {a: number}
+  assert map k in keyof(Obj) do Obj[k] end <: {a: number, b: string}
+  assert Obj <: map k in keyof(Obj) do Obj[k] end
+end
+
+// ---------------------------------------------------------------------------
+// Mapped types that transform every value type.
+// ---------------------------------------------------------------------------
+unittest "mapped value transformation to boolean" do
+  assert map k in keyof(Obj) do boolean end == {a: boolean, b: boolean, c: boolean}
+  assert map k in keyof(Obj) do boolean end <: {a: boolean}
+  assert map k in keyof(Obj) do boolean end <: {a: boolean, b: boolean, c: boolean}
+  assert not(map k in keyof(Obj) do boolean end == Obj)
+  assert not(map k in keyof(Obj) do boolean end <: Obj)
+end
+
+unittest "mapped value transformation to number" do
+  assert map k in keyof(Obj) do number end == {a: number, b: number, c: number}
+  assert map k in keyof(Obj) do number end <: {a: number}
+  assert not(map k in keyof(Obj) do number end == Obj)
+end
+
+// ---------------------------------------------------------------------------
+// Mapping over a literal key union (not derived from keyof).
+// `map k in A | B do V end` lowers to `{ [k in A | B]: V }`.
+// ---------------------------------------------------------------------------
+unittest "mapped over a literal key union" do
+  assert map k in 'a' | 'b' do number end == {a: number, b: number}
+  assert map k in 'a' | 'b' do number end <: {a: number}
+  assert map k in 'x' | 'y' | 'z' do string end == {x: string, y: string, z: string}
+  assert map k in 'x' do number end == {x: number}
+  assert not(map k in 'a' | 'b' do number end == {a: number, b: number, c: number})
+  assert not(map k in 'a' | 'b' do number end <: {a: number, b: number, c: number})
+end
+
+// ---------------------------------------------------------------------------
+// readonly modifier on a mapped type.
+// readonly does not change `<:` (assignable both directions for object props)
+// but it does change `==` (the Equals helper is modifier-sensitive).
+// ---------------------------------------------------------------------------
+unittest "mapped readonly modifier" do
+  assert map readonly k in keyof(Obj) do Obj[k] end <: Obj
+  assert Obj <: map readonly k in keyof(Obj) do Obj[k] end
+  assert map readonly k in keyof(Obj) do Obj[k] end <: {a: number}
+end
+
+// ---------------------------------------------------------------------------
+// optional modifier on a mapped type.
+// optional makes required props assignable in, but optional is not assignable
+// to required (so the reverse direction fails).
+// ---------------------------------------------------------------------------
+unittest "mapped optional modifier" do
+  assert Obj <: map ?k in keyof(Obj) do Obj[k] end
+  assert not(map ?k in keyof(Obj) do Obj[k] end <: Obj)
+  assert map ?k in keyof(Obj) do Obj[k] end == {a?: number, b?: string, c?: boolean}
+  assert map ?k in keyof(Obj) do Obj[k] end <: {a?: number}
+end

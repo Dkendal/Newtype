@@ -1,0 +1,90 @@
+// function types & variance
+// Every assertion below reflects TypeScript `tsc --strict` (strictFunctionTypes on)
+// behaviour, cross-checked with `tsgo --noEmit --strict`.
+
+unittest "return types are covariant" do
+  assert () => 1 <: () => number
+  assert not(() => number <: () => 1)
+  assert (x: number) => 1 <: (x: number) => number
+  assert not((x: number) => number <: (x: number) => 1)
+  assert () => { a: 1, b: 2 } <: () => { a: 1 }
+  assert not(() => { a: 1 } <: () => { a: 1, b: 2 })
+end
+
+unittest "parameter types are contravariant under strict" do
+  assert (x: number) => void <: (x: 1) => void
+  assert not((x: 1) => void <: (x: number) => void)
+  assert (x: unknown) => void <: (x: string) => void
+  assert not((x: string) => void <: (x: unknown) => void)
+  assert (x: 1 | 2) => void <: (x: 1) => void
+  assert not((x: 1) => void <: (x: 1 | 2) => void)
+  assert (x: number | string) => void <: (x: number) => void
+  assert not((x: number) => void <: (x: number | string) => void)
+end
+
+unittest "any parameters relate bidirectionally" do
+  assert (x: any) => void <: (x: string) => void
+  assert (x: string) => void <: (x: any) => void
+end
+
+unittest "fewer parameters are assignable to more" do
+  assert () => void <: (x: number) => void
+  assert not((x: number) => void <: () => void)
+  assert (a: number) => void <: (a: number, b: number) => void
+  assert not((a: number, b: number) => void <: (a: number) => void)
+end
+
+unittest "void return type is tolerant" do
+  assert () => number <: () => void
+  assert not(() => void <: () => number)
+  assert (x: number) => string <: (x: number) => void
+  assert not(() => void <: () => string)
+end
+
+unittest "never return is the function bottom" do
+  assert () => never <: () => any
+  assert () => never <: () => number
+  assert () => never <: () => string
+  assert not(() => string <: () => never)
+  assert not(() => any <: () => never)
+end
+
+unittest "every function is assignable to Function" do
+  assert () => void <: Function
+  assert () => any <: Function
+  assert (x: number) => string <: Function
+  assert not(Function <: () => void)
+  assert Function <: object
+  assert not(object <: Function)
+end
+
+unittest "rest parameters accept fixed arity sources" do
+  assert (...a: number[]) => void <: (a: number) => void
+  assert (...a: number[]) => void <: (a: number, b: number) => void
+  assert (a: number) => void <: (...a: number[]) => void
+  assert (a: number, b: number) => void <: (...a: number[]) => void
+  assert (a: number, b: number, c: number) => void <: (...a: number[]) => void
+end
+
+unittest "multi-parameter variance combines contravariance and covariance" do
+  assert (a: number, b: number) => 1 <: (a: 1, b: 2) => number
+  assert not((a: 1, b: 2) => number <: (a: number, b: number) => 1)
+end
+
+unittest "function type identity under strict equality" do
+  assert () => void == () => void
+  assert (x: number) => string == (x: number) => string
+  assert () => number != () => void
+  assert (x: 1) => void != (x: number) => void
+  assert (x: number) => void != (x: number, y: number) => void
+  // TODO(newtype): `!=` lowers to mutual non-assignability, but a rest-param and
+  // fixed-arity signature are mutually assignable yet not structurally identical,
+  // so tsgo's invariant `Equals` reports `!=` while newtype reports `==`.
+  // assert (...a: number[]) => void != (a: number, b: number) => void
+end
+
+unittest "trivial self-assignability and unknown ceiling" do
+  assert () => any <: () => any
+  assert () => unknown <: () => any
+  assert (x: string) => number <: (x: string) => number
+end

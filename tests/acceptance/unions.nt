@@ -1,0 +1,87 @@
+// union types
+
+unittest "a member is assignable to its union" do
+  assert string <: string | number
+  assert number <: string | number
+  assert 1 <: 1 | 2 | 3
+  assert true <: boolean
+  assert 'x' <: 'x' | 'y'
+  assert {a: 1} <: {a: 1} | {b: 2}
+  assert null <: null | undefined
+  assert never <: string | number
+end
+
+unittest "a union is assignable to a supertype iff every member is" do
+  assert 1 | 2 <: number
+  assert 'x' | 'y' <: string
+  assert 'a' | 'b' | 'c' <: string
+  assert 1 | 2 | 3 <: number
+  assert string | number <: unknown
+  assert string | number <: string | number | boolean
+  assert not(1 | 'a' <: number)
+  assert not(string | number <: string | boolean)
+end
+
+unittest "union subset relations" do
+  assert 1 | 2 <: 1 | 2 | 3
+  assert not(1 | 2 | 3 <: 1 | 2)
+  assert 1 | 2 | 3 <: number | string
+  assert not(number <: 1 | 2)
+  assert string | number <: number | string
+end
+
+unittest "a union is not assignable to one of its members" do
+  assert string <: string | number
+  assert not(string | number <: string)
+  assert not(string | number <: number)
+  assert not(1 | 2 <: 1)
+end
+
+unittest "union normalization deduplicates and is order independent" do
+  assert string | string == string
+  assert 1 | 1 | 2 == 1 | 2
+  assert string | number == number | string
+  assert string | number | string == string | number
+end
+
+unittest "never is the identity element of union" do
+  assert string | never == string
+  assert never | never == never
+  assert string | never <: string
+  assert string <: string | never
+end
+
+unittest "any and unknown as union supertypes" do
+  assert string | unknown <: unknown
+  assert string | any <: any
+  assert string <: string | unknown
+  assert not(unknown <: string)
+  assert not(string | number == unknown)
+end
+
+unittest "boolean is the union of its literals" do
+  assert true | false == boolean
+  assert boolean <: true | false
+  assert true <: boolean
+  assert not(boolean <: true)
+end
+
+unittest "literal unions and primitive widening" do
+  assert not('a' | 'b' == string)
+  assert not(string <: 'a' | 'b')
+  assert 'a' | 'b' <: string
+end
+
+unittest "null and undefined unions under strict" do
+  assert null <: null | undefined
+  assert undefined <: null | undefined
+  assert not(null | undefined <: null)
+  assert not(null | undefined <: undefined)
+end
+
+unittest "distribution intuitions for union subtyping" do
+  assert 1 | 2 | 3 <: number | string
+  assert true | false <: boolean
+  assert 'x' | 'y' <: string
+  assert not(string | number <: string | boolean)
+end

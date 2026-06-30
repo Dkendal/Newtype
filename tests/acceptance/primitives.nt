@@ -1,0 +1,128 @@
+// primitives & top/bottom types
+//
+// Ground truth is TypeScript `tsc --strict`. Every assertion below was checked
+// against the same Extends/Equals helpers the harness emits:
+//   Extends<A, B> = [A] extends [B] ? true : false   (non-distributive)
+//   Equals<A, B>  = strict identity
+// Covers: every type <: unknown; never <: every type; any relating both ways;
+// primitive disjointness; object vs {} vs Object; void/undefined/null strict.
+
+unittest "every type is assignable to unknown" do
+  assert string <: unknown
+  assert number <: unknown
+  assert boolean <: unknown
+  assert bigint <: unknown
+  assert symbol <: unknown
+  assert object <: unknown
+  assert void <: unknown
+  assert undefined <: unknown
+  assert null <: unknown
+  assert any <: unknown
+  assert never <: unknown
+  assert unknown <: unknown
+end
+
+unittest "unknown is assignable only to itself and any" do
+  assert unknown <: any
+  assert unknown <: unknown
+  assert not (unknown <: string)
+  assert not (unknown <: object)
+  assert not (unknown <: never)
+  assert not (unknown <: void)
+end
+
+unittest "never is assignable to every type" do
+  assert never <: string
+  assert never <: number
+  assert never <: boolean
+  assert never <: bigint
+  assert never <: symbol
+  assert never <: object
+  assert never <: void
+  assert never <: undefined
+  assert never <: null
+  assert never <: {}
+  assert never <: any
+  assert never <: unknown
+  assert never <: never
+end
+
+unittest "values are assignable to any" do
+  assert string <: any
+  assert object <: any
+  assert null <: any
+  assert undefined <: any
+  assert never <: any
+  assert any <: unknown
+  assert unknown <: any
+end
+
+unittest "primitives are mutually disjoint" do
+  assert not (string <: number)
+  assert not (number <: string)
+  assert not (string <: boolean)
+  assert not (boolean <: number)
+  assert not (boolean <: string)
+  assert not (number <: boolean)
+  assert not (symbol <: string)
+  assert not (symbol <: number)
+  assert not (bigint <: number)
+  assert not (bigint <: symbol)
+  assert not (symbol <: bigint)
+  assert not (boolean <: bigint)
+  assert not (number <: bigint)
+end
+
+unittest "literals refine their primitive" do
+  assert 'x' <: string
+  assert not (string <: 'x')
+  assert 1 <: number
+  assert not (number <: 1)
+  assert true <: boolean
+  assert not (boolean <: true)
+end
+
+unittest "object vs empty object vs Object" do
+  assert {} <: object
+  assert object <: Object
+  assert Object <: object
+  assert {} <: Object
+  assert Object <: {}
+  assert {} <: {}
+  assert object <: object
+end
+
+unittest "primitives are not the non-primitive object type" do
+  assert not (null <: {})
+  assert not (undefined <: {})
+  assert not (void <: {})
+  assert not (string <: object)
+  assert not (number <: object)
+  assert not (symbol <: object)
+  assert not (bigint <: object)
+end
+
+unittest "void undefined and null under strict" do
+  assert undefined <: void
+  assert not (void <: undefined)
+  assert not (null <: undefined)
+  assert not (undefined <: null)
+  assert not (null <: void)
+  assert not (void <: null)
+  assert void <: void
+  assert undefined <: undefined
+  assert null <: null
+  assert void != undefined
+  assert null != undefined
+end
+
+unittest "type identity via strict equality" do
+  assert string == string
+  assert object == object
+  assert symbol == symbol
+  assert any == any
+  assert never == never
+  assert string != number
+  assert unknown != never
+  assert void != never
+end

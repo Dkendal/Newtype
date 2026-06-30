@@ -1,0 +1,92 @@
+// literal types & widening
+// Every assertion below must hold in BOTH newtype and tsgo (tsc --strict).
+// Ground truth is TypeScript: each claim mirrors how `tsc --strict` behaves.
+
+unittest "numeric literals are subtypes of number" do
+  assert 1 <: number
+  assert 0 <: number
+  assert -1 <: number
+  assert 1.5 <: number
+  assert not(number <: 1)
+  assert not(number <: 0)
+end
+
+unittest "string literals are subtypes of string" do
+  assert 'a' <: string
+  assert 'hello' <: string
+  assert not(string <: 'a')
+  assert not(string <: 'hello')
+end
+
+unittest "boolean literals are subtypes of boolean" do
+  assert true <: boolean
+  assert false <: boolean
+  assert not(boolean <: true)
+  assert not(boolean <: false)
+end
+
+unittest "boolean is exactly the union of its literals" do
+  assert boolean == true | false
+  assert true | false == boolean
+  assert true <: true | false
+  assert false <: true | false
+  assert not(true | false <: true)
+end
+
+unittest "literals do not equal their widened primitive" do
+  assert not(1 == number)
+  assert not('a' == string)
+  assert not(true == boolean)
+  assert not(false == boolean)
+end
+
+unittest "distinct numeric literals are disjoint" do
+  assert not(1 <: 2)
+  assert not(2 <: 1)
+  assert not(0 <: 1)
+  assert 1 == 1
+  assert 1 != 2
+end
+
+unittest "distinct string literals are disjoint" do
+  assert not('a' <: 'b')
+  assert not('b' <: 'a')
+  assert 'a' == 'a'
+  assert 'a' != 'b'
+end
+
+unittest "boolean literals are disjoint" do
+  assert not(true <: false)
+  assert not(false <: true)
+  assert true == true
+  assert true != false
+end
+
+unittest "a literal is a subtype of a union containing it" do
+  assert 1 <: 1 | 2
+  assert 2 <: 1 | 2
+  assert not(3 <: 1 | 2)
+  assert 'a' <: 'a' | 'b'
+  assert not('c' <: 'a' | 'b')
+end
+
+unittest "literal unions widen into their primitive" do
+  assert 1 | 2 <: number
+  assert 'a' | 'b' <: string
+  assert true | false <: boolean
+  assert not(number <: 1 | 2)
+  assert not(string <: 'a' | 'b')
+end
+
+unittest "literals across mixed primitive unions" do
+  assert 1 <: number | string
+  assert 'a' <: number | string
+  assert not(true <: number | string)
+end
+
+unittest "template literal types relate to string" do
+  assert `a${string}` <: string
+  assert `${string}` <: string
+  assert not(`a${string}` <: 'a')
+  assert not('xyz' <: `a${string}`)
+end
