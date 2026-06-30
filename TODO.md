@@ -107,11 +107,22 @@ promote the case into `tests/corpus/`.
     over-approximation (it keeps both branches and matches the existing `any`
     precedent); a follow-up could add an `Indeterminate`/deferred variant that
     re-emits the conditional verbatim for `tsc` to resolve.
+  - [x] **Implicit intersection reduction** — contradictory primitive
+    intersections now reduce to `never` (`string & number`, `1 & 2`, …) in
+    `intersection_source_assignable`, and a `never`-typed LHS makes an
+    assignability assertion hold (`src/test_harness.rs` maps a `Never` relation
+    leaf to `True` before negation), so `assert string & number <: string`
+    passes. Inhabited intersections (`1 & number`, `string & 'a'`) are not
+    reduced. _Tests:_ `assignability_tests` intersection rows, `test_harness`
+    never cases.
+  - [x] **keyof / mapped types / index signatures** — `keyof O` over an object
+    literal evaluates to its key union; `{ [K in T]: V }` mapped types expand to
+    an object literal over a known key set (incl. `keyof O` and homomorphic
+    `O[K]` bodies); `string`/`number` index signatures relate structurally. All
+    verified against `tsgo --strict`; unenumerable cases stay `Both` (sound).
   - _Known limitations (deferred, not yet handled):_
-    - [ ] **Implicit intersection reduction** — contradictory primitive
-      intersections are not reduced to `never`, so `string & number <: string`
-      returns `True` instead of `Never` (TS reduces `string & number` to
-      `never`). Explicit `never` members *are* handled (`never & T → never`).
+    - [ ] **keyof of non-objects** — `keyof T[]` / `keyof <primitive>` stay
+      `Both` (e.g. `keyof string[] <: string` is indeterminate, not `true`).
     - [x] **Object index signatures** — `type_literal_assignable_to`
       (`src/ast/assignability.rs`) now relates `string`/`number` index
       signatures structurally via a key classifier
