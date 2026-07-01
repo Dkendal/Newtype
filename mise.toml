@@ -1,4 +1,9 @@
 [tasks.test]
+alias = 't'
+run = [{ task = 'test-rust' }, { task = 'test-conformance' }]
+
+[tasks.test-rust]
+alias = 'tr'
 run = "cargo nextest run"
 
 [tasks.test-conformance]
