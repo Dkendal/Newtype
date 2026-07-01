@@ -423,6 +423,14 @@ impl typescript::Pretty for Ast {
                 .group()
             }
             Ast::NoOp(_) => D::nil(),
+            // A reference to a declared unique symbol, used as a type.
+            Ast::UniqueSymbol(sym) => D::text(format!("typeof {}", sym.name)),
+            // The declaration. `unique symbol` is only legal in TS on a `const`
+            // (a bare `type X = unique symbol` is an error), so emit a
+            // `declare const` that the `typeof <name>` references resolve to.
+            Ast::UniqueSymbolDecl(sym) => {
+                D::text(format!("declare const {}: unique symbol", sym.name))
+            }
             node @ (Ast::ExtendsPrefixOp(ExtendsPrefixOp { .. })
             | Ast::MatchExpr(match_expr::MatchExpr { .. })
             | Ast::CondExpr(cond_expr::CondExpr { .. })

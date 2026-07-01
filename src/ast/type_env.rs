@@ -23,7 +23,7 @@ use slotmap::{new_key_type, SlotMap};
 
 use crate::ast::{
     ApplyGeneric, Ast, ExtendsExpr, Ident, Interface, IntersectionType, Span, Tuple, TypeAlias,
-    TypeLiteral, TypeParameter, UnionType,
+    TypeLiteral, TypeParameter, UnionType, UniqueSymbol,
 };
 use crate::extends_result::ExtendsResult;
 
@@ -96,6 +96,21 @@ impl TypeEnv {
                 }
                 Ast::Interface(interface) => {
                     defs.insert(interface.name.clone(), interface_def(interface));
+                }
+                // Register each `unique symbol` so bare references to it in
+                // assert claims (which are not rewritten by `simplify`) resolve
+                // to the distinct `UniqueSymbol` type at evaluation time.
+                Ast::UniqueSymbolDecl(sym) => {
+                    defs.insert(
+                        sym.name.clone(),
+                        Def {
+                            params: vec![],
+                            body: Ast::UniqueSymbol(UniqueSymbol {
+                                name: sym.name.clone(),
+                                span: sym.span,
+                            }),
+                        },
+                    );
                 }
                 _ => {}
             }

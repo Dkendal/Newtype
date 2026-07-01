@@ -1,0 +1,19 @@
+a unique symbol is a distinct subtype of symbol
+
+=======
+
+unique symbol Kind
+unique symbol Capture
+
+unittest "unique symbols" do
+  assert Kind <: symbol
+  assert Kind <: Kind
+  assert not (Kind <: Capture)
+  assert not (symbol <: Kind)
+end
+
+=======
+
+declare const Kind: unique symbol;
+
+declare const Capture: unique symbol;

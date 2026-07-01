@@ -1,10 +1,9 @@
 import { A, B, I, M, Union } from 'ts-toolbelt'
 
-// match-ts brands holes and captures with `Symbol.for(...)` keys (see
-// `match-ts/src/const.ts`). newtype has no `unique symbol`, so `symbol` is the
-// closest approximation.
-type __kind__ as symbol
-type __capture__ as symbol
+// match-ts brands holes and captures with symbol keys (see
+// `match-ts/src/const.ts`); as computed keys they must be `unique symbol`s.
+unique symbol __kind__
+unique symbol __capture__
 
 type True as 1
 

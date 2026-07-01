@@ -1,0 +1,37 @@
+// unique symbols
+//
+// Ground truth is TypeScript `tsc --strict`. A `unique symbol X` declaration is
+// a nominally distinct subtype of `symbol`: it lowers to `declare const X:
+// unique symbol` and references render as `typeof X`.
+// Covers: subtype of `symbol`/`Symbol`/`{}`/`Object`; reflexivity; distinctness
+// between two declarations; `symbol` is not assignable back down; disjoint from
+// unrelated primitives.
+
+unique symbol Kind
+unique symbol Capture
+
+unittest "a unique symbol is a distinct subtype of symbol" do
+  assert Kind <: symbol
+  assert Kind <: Symbol
+  assert Kind <: {}
+  assert Kind <: Object
+  assert Kind <: unknown
+
+  // reflexive
+  assert Kind <: Kind
+
+  // distinct declarations are not interchangeable
+  assert not (Kind <: Capture)
+  assert not (Capture <: Kind)
+
+  // `symbol` is wider than a unique symbol
+  assert not (symbol <: Kind)
+
+  // disjoint from unrelated primitives
+  assert not (Kind <: number)
+  assert not (Kind <: string)
+
+  // membership in a union works through the subtype relation
+  assert Kind <: symbol | number
+  assert not (Kind <: string | number)
+end

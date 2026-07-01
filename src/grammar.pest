@@ -5,8 +5,16 @@ test_expr = _{ SOI ~ expr ~ EOI }
 statement = {
     type_alias
   | interface
+  | unique_symbol_decl
   | import_statement
   | unittest
+}
+
+// A distinct `unique symbol` type, introduced by name. Each declaration is a
+// nominally distinct type: references to the name render as `typeof <name>`
+// and the declaration itself lowers to `declare const <name>: unique symbol`.
+unique_symbol_decl = {
+    "unique" ~ "symbol" ~ #name = ident
 }
 
 import_statement = {
@@ -386,6 +394,7 @@ keyword = _{
   | "true"
   | "type"
   | "unittest"
+  | "unique"
   | "else"
   | "end"
   | primitive

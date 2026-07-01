@@ -1,0 +1,21 @@
+a unique symbol declaration lowers to `declare const` and references to `typeof`
+
+=======
+
+unique symbol Kind
+
+type K as Kind
+
+interface Hole(Label) {
+  readonly [Kind]: Label
+}
+
+=======
+
+declare const Kind: unique symbol;
+
+type K = typeof Kind;
+
+interface Hole<Label> {
+    readonly [Kind]: Label;
+};

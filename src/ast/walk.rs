@@ -1,8 +1,10 @@
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use itertools::Itertools;
 
-use crate::ast::{Ast, Bindings, UnionType};
+use crate::ast::{Assert, Ast, Bindings, Ident, UnionType, UniqueSymbol, UnitTest};
 
 impl Ast {
     pub fn map<F>(&self, f: F) -> Self
@@ -58,12 +60,67 @@ impl Ast {
         }
     }
 
+    /// The set of names declared as `unique symbol` anywhere in this tree.
+    fn unique_symbols(&self) -> HashSet<String> {
+        let acc = RefCell::new(HashSet::new());
+        self.postwalk((), &|node, ctx| {
+            if let Ast::UniqueSymbolDecl(sym) = &node {
+                acc.borrow_mut().insert(sym.name.clone());
+            }
+            (node, ctx)
+        });
+        acc.into_inner()
+    }
+
+    /// Rewrite every bare `Ident` reference to a declared `unique symbol` into a
+    /// `UniqueSymbol` type node (which renders as `typeof <name>`). Unlike the
+    /// conditional desugaring in [`Ast::simplify`], this recurses into `unittest`
+    /// bodies and `assert` claims — assert claims are otherwise left alone, but a
+    /// unique-symbol reference there must still become `typeof <name>` in both
+    /// evaluation and generated TypeScript. Computed property keys hold their
+    /// `Ident` inside `ObjectPropertyKey` (not an `Ast::Ident` the walk visits),
+    /// so they are intentionally untouched and still render as `[<name>]`.
+    fn rewrite_unique_symbols(&self, symbols: &HashSet<String>) -> Ast {
+        match self {
+            Ast::Ident(Ident { name, span }) if symbols.contains(name) => {
+                Ast::UniqueSymbol(UniqueSymbol {
+                    name: name.clone(),
+                    span: *span,
+                })
+            }
+            Ast::UnitTest(ut) => Ast::UnitTest(UnitTest {
+                span: ut.span,
+                name: ut.name.clone(),
+                body: ut
+                    .body
+                    .iter()
+                    .map(|node| node.rewrite_unique_symbols(symbols))
+                    .collect(),
+            }),
+            Ast::Assert(assert) => Ast::Assert(Assert {
+                span: assert.span,
+                claim: Rc::new(assert.claim.rewrite_unique_symbols(symbols)),
+            }),
+            other => other.map(|child| child.rewrite_unique_symbols(symbols)),
+        }
+    }
+
     pub fn simplify(&self) -> Self {
         let bindings: Bindings = Default::default();
 
         let identity = |node, ctx| (node, ctx);
 
-        let (tree, _) = self.traverse(bindings, &identity, &|ast, ctx| {
+        // First rewrite references to declared `unique symbol`s across the whole
+        // program (including `assert` claims, which the desugaring traverse below
+        // does not reach), then desugar conditionals in type-alias bodies.
+        let symbols = self.unique_symbols();
+        let rewritten = if symbols.is_empty() {
+            self.clone()
+        } else {
+            self.rewrite_unique_symbols(&symbols)
+        };
+
+        let (tree, _) = rewritten.traverse(bindings, &identity, &|ast, ctx| {
             let span = ast.as_span();
 
             match ast {

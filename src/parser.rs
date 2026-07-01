@@ -312,6 +312,7 @@ pub fn parse(pair: Pair) -> Ast {
         Rule::unittest => Ast::UnitTest(parse_unittest(pair)),
         Rule::assert_stmt => parse_assert(pair),
         Rule::interface => parse_interface(pair),
+        Rule::unique_symbol_decl => parse_unique_symbol_decl(pair),
         Rule::import_statement => parse_import_statement(pair),
         Rule::if_expr => parse_if_expr(pair),
         Rule::object_literal => Ast::TypeLiteral(parse_object_literal(pair)),
@@ -773,6 +774,18 @@ fn parse_interface(pair: Pair) -> Ast {
         params,
         definition,
     })
+}
+
+fn parse_unique_symbol_decl(pair: Pair) -> Ast {
+    let span: Span = (&pair).into();
+    let name = pair
+        .into_inner()
+        .find(match_tag("name"))
+        .unwrap()
+        .as_str()
+        .to_string();
+
+    Ast::UniqueSymbolDecl(UniqueSymbol { name, span })
 }
 
 fn parse_definition_options(inner: pest::iterators::Pairs<Rule>) -> Vec<TypeParameter> {

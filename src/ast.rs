@@ -508,6 +508,14 @@ pub enum Ast {
     AnyKeyword(),
     #[ast_node(span)]
     NoOp(),
+    /// A reference to a declared `unique symbol` used as a type; renders as
+    /// `typeof <name>`. Bare `Ident` references to a declared unique symbol are
+    /// rewritten into this during `simplify` (computed keys are left as `Ident`,
+    /// so they still render as `[<name>]`).
+    UniqueSymbol(UniqueSymbol),
+    /// The top-level `unique symbol <name>` declaration statement; renders as
+    /// `declare const <name>: unique symbol`.
+    UniqueSymbolDecl(UniqueSymbol),
 }
 
 impl Ast {
@@ -584,6 +592,13 @@ impl Ast {
             Ast::FalseKeyword(_) => P::Boolean,
 
             Ast::TypeLiteral(_) => P::Object,
+
+            // A `unique symbol` is a subtype of `symbol`, so it carries the
+            // `symbol` primitive for assignability (`X <: symbol`, `X <: Symbol`,
+            // `X <: symbol | …`). Distinctness (`X <: Y` false, `symbol <: X`
+            // false) falls out of the structural arms, since a `UniqueSymbol`
+            // target matches no primitive/wrapper arm.
+            Ast::UniqueSymbol(_) => P::Symbol,
 
             Ast::Ident(Ident { name, .. }) => match name.as_str() {
                 "String" => P::String,
@@ -691,6 +706,8 @@ impl Ast {
                 | Ast::Readonly(_)
                 | Ast::FunctionType(_)
                 | Ast::Builtin { .. }
+                | Ast::UniqueSymbol(_)
+                | Ast::UniqueSymbolDecl(_)
         )
     }
 
@@ -794,6 +811,8 @@ impl Ast {
             Ast::UnionType(x) => x.span,
             Ast::UnitTest(x) => x.span,
             Ast::UnknownKeyword(x) => *x,
+            Ast::UniqueSymbol(x) => x.span,
+            Ast::UniqueSymbolDecl(x) => x.span,
         }
     }
 }
@@ -1093,6 +1112,14 @@ impl ObjectProperty {
 
 #[ast_node(transparent)]
 pub struct Ident {
+    pub name: String,
+}
+
+/// The name of a `unique symbol` declaration/reference. Its identity is the
+/// name (the `span` is ignored in equality, like every other AST node), so two
+/// references to the same declared unique symbol compare equal.
+#[ast_node]
+pub struct UniqueSymbol {
     pub name: String,
 }
 
