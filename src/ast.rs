@@ -1149,6 +1149,8 @@ pub(crate) mod let_expr;
 
 mod pretty;
 
+pub mod validate;
+
 mod assignability;
 
 pub(crate) mod type_env;

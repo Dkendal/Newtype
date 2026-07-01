@@ -188,5 +188,5 @@ export type UnifyAll(Value, Pattern) as
       VariableCapture(Pattern),
 
     Overlapping(Value, ExpandCapture(Pattern)) ->
-      DoUnifyAll(Value, Pattern)
+       DoUnifyAll(Value, Pattern)
   end

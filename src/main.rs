@@ -53,12 +53,31 @@ fn main() {
         input
     };
 
+    // Turn internal `panic!`s that dump an AST node into a source-highlighted
+    // diagnostic pointing at the offending region of the program.
+    newtype::panic_report::install_hook(source_name.clone(), input_source.clone());
+
     let input = input_source.as_str();
 
     let result = newtype::parser::parse_newtype_program(input);
 
     match result {
         Ok(result) => {
+            // Statically validate before simplification: malformed constructs
+            // (e.g. an `if`/`cond` condition that is a bare value instead of a
+            // comparison) would otherwise panic during `simplify`. Report each
+            // diagnostic against the source and exit non-zero.
+            let diagnostics = result.validate();
+            if !diagnostics.is_empty() {
+                for diagnostic in &diagnostics {
+                    eprintln!(
+                        "{}",
+                        diagnostic.to_pest_error(input).with_path(&source_name)
+                    );
+                }
+                std::process::exit(1);
+            }
+
             let simplified = result.simplify();
 
             // Evaluate `unittest` assertions after simplification but before

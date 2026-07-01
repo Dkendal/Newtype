@@ -32,6 +32,38 @@ impl IfExpr {
     }
 }
 
+/// Walks a condition the same way [`expand_to_extends`] does and returns the
+/// span of the first leaf that is a bare value rather than a comparison — i.e.
+/// an arm like `a -> b` (or `if a then …`) where `a` has no relational operator.
+/// Returns `None` when every leaf is a comparison, so the condition is
+/// well-formed. This is the static-validation counterpart of the `_ => panic!`
+/// arms below: it lets [`crate::ast::validate`] report a readable diagnostic
+/// before simplification would otherwise panic.
+pub(crate) fn malformed_condition_span(condition: &Ast) -> Option<Span> {
+    match condition {
+        // `not`/`infer` wrap a nested condition; recurse into it. (`infer` is
+        // unsupported downstream but is not itself a missing-comparison error.)
+        Ast::ExtendsPrefixOp(ExtendsPrefixOp { op, value, .. }) => match op {
+            PrefixOp::Not => malformed_condition_span(value),
+            PrefixOp::Infer => None,
+        },
+        // `and`/`or` combine two sub-conditions; the relational operators are
+        // the well-formed leaves. Anything else is not a comparison.
+        Ast::ExtendsInfixOp(ExtendsInfixOp { lhs, op, rhs, .. }) => match op {
+            InfixOp::And | InfixOp::Or => {
+                malformed_condition_span(lhs).or_else(|| malformed_condition_span(rhs))
+            }
+            InfixOp::Extends
+            | InfixOp::NotExtends
+            | InfixOp::Equals
+            | InfixOp::NotEquals
+            | InfixOp::StrictEquals
+            | InfixOp::StrictNotEquals => None,
+        },
+        _ => Some(condition.as_span()),
+    }
+}
+
 /// Expands an if expression into a series of nested ternary expressions
 pub(crate) fn expand_to_extends(condition: &Ast, then: &Ast, else_arm: &Ast) -> Ast {
     // Recursive operations

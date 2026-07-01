@@ -18,6 +18,7 @@ extern crate quickcheck_macros;
 pub mod ast;
 pub mod corpus;
 pub mod extends_result;
+pub mod panic_report;
 pub mod parser;
 pub mod pretty;
 pub mod runtime;

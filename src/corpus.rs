@@ -25,26 +25,33 @@
 //!
 //! # Fixture format
 //!
-//! A fixture file has exactly three sections separated by a line consisting of
-//! three or more `=` characters:
+//! A fixture file has three required sections and one optional fourth, each
+//! separated by a line of three or more `=` characters:
 //!
 //! ```text
 //! Name of the test
 //!
 //! =======
 //!
-//! <first newtype snippet>
+//! <source snippet (stdin)>
 //!
 //! =======
 //!
-//! <expected output (TypeScript, or the equivalent newtype snippet)>
+//! <expected output (stdout): TypeScript, or the equivalent newtype snippet>
+//!
+//! =======
+//!
+//! <expected stderr: e.g. a validation diagnostic>   (optional)
 //! ```
 //!
-//! Only the first two separators split the file; any further `===` lines are
-//! kept verbatim as part of the third section, so output that legitimately
-//! contains such a line is preserved. Each section is dedented (common leading
-//! indentation stripped) and trimmed, mirroring the inline `assert_typescript!`
-//! / `assert_expr_eq!` macros so fixtures and inline tests stay consistent.
+//! Only the first *three* separators split the file; any further `===` lines are
+//! kept verbatim as part of the final section, so output that legitimately
+//! contains such a line is preserved. The fourth (stderr) section is optional:
+//! when present, a runner may assert that processing the source produces it on
+//! stderr (see [`run_equivalence_case`]). Each section is dedented (common
+//! leading indentation stripped) and trimmed, mirroring the inline
+//! `assert_typescript!` / `assert_expr_eq!` macros so fixtures and inline tests
+//! stay consistent.
 
 use crate::ast::Ast;
 use crate::parser::{self, NewtypeParser, Rule};
@@ -65,6 +72,10 @@ pub struct Case {
     pub name: String,
     pub source: String,
     pub expected: String,
+    /// The optional fourth section: expected stderr (e.g. a validation
+    /// diagnostic). `None` when the fixture has no stderr section, or it is
+    /// blank after trimming.
+    pub stderr: Option<String>,
 }
 
 /// Returns `true` for a separator line: trimmed, non-empty, and made up solely
@@ -93,8 +104,9 @@ fn dedent_trim(section: &str) -> String {
     dedented.join("\n").trim().to_string()
 }
 
-/// Splits a fixture file's contents into its three sections. Only the first two
-/// separator lines split the file; later `===` lines stay in the third section.
+/// Splits a fixture file's contents into its sections: name, source, expected,
+/// and an optional stderr. Only the first three separator lines split the file;
+/// later `===` lines stay in the final section.
 ///
 /// # Panics
 ///
@@ -103,7 +115,7 @@ fn dedent_trim(section: &str) -> String {
 pub fn parse_fixture(contents: &str) -> Case {
     let mut sections: Vec<String> = vec![String::new()];
     for line in contents.lines() {
-        if sections.len() < 3 && is_separator(line) {
+        if sections.len() < 4 && is_separator(line) {
             sections.push(String::new());
         } else {
             let current = sections.last_mut().unwrap();
@@ -113,16 +125,24 @@ pub fn parse_fixture(contents: &str) -> Case {
     }
 
     assert!(
-        sections.len() == 3,
+        sections.len() >= 3,
         "expected a corpus fixture with at least 2 `===` separator lines \
          (name, source, expected), found {} section(s)",
         sections.len()
     );
 
+    // The optional stderr section is dropped when blank after trimming, so a
+    // trailing separator with no content asserts nothing.
+    let stderr = sections
+        .get(3)
+        .map(|s| dedent_trim(s))
+        .filter(|s| !s.is_empty());
+
     Case {
         name: dedent_trim(&sections[0]),
         source: dedent_trim(&sections[1]),
         expected: dedent_trim(&sections[2]),
+        stderr,
     }
 }
 
@@ -162,13 +182,37 @@ pub fn run_case(rule: Rule, path: &Path) {
     pretty_assertions::assert_eq!(case.expected, actual.trim());
 }
 
+/// Parses `source` with `rule`, runs static validation, and renders the
+/// resulting diagnostics exactly as the CLI writes them to stderr (reported
+/// under the `<stdin>` filename), one per diagnostic. Returns the empty string
+/// when the source is valid.
+pub fn render_diagnostics(rule: Rule, source: &str) -> String {
+    parse_source(rule, source)
+        .validate()
+        .iter()
+        .map(|d| d.to_pest_error(source).with_path("<stdin>").to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Reads the fixture at `path` and asserts that its two newtype snippets
 /// simplify to the same AST (compared via their s-expression form, exactly as
 /// the inline `assert_expr_eq!` macro does). Intended to be called from a
 /// generated `#[test]` function.
+///
+/// When the fixture carries a fourth (stderr) section it is instead treated as
+/// a *diagnostic* fixture: the source must produce exactly those validation
+/// diagnostics on stderr, and the equivalence check is skipped (the stdout
+/// section is expected to be empty).
 pub fn run_equivalence_case(rule: Rule, path: &Path) {
     let contents = read_fixture(path);
     let case = parse_fixture(&contents);
+
+    if let Some(expected_stderr) = &case.stderr {
+        let actual = render_diagnostics(rule, &case.source);
+        pretty_assertions::assert_eq!(*expected_stderr, actual.trim());
+        return;
+    }
 
     let lhs = parse_source(rule, &case.source).simplify();
     let rhs = parse_source(rule, &case.expected).simplify();
@@ -243,6 +287,21 @@ mod tests {
         assert_eq!(case.name, "Name");
         assert_eq!(case.source, "type A as 1");
         assert_eq!(case.expected, "type A = 1;");
+        assert_eq!(case.stderr, None);
+    }
+
+    #[test]
+    fn captures_optional_stderr_section() {
+        let case = parse_fixture("Name\n=======\nsrc\n=======\n\n=======\nboom\n");
+        assert_eq!(case.source, "src");
+        assert_eq!(case.expected, "");
+        assert_eq!(case.stderr.as_deref(), Some("boom"));
+    }
+
+    #[test]
+    fn blank_stderr_section_is_none() {
+        let case = parse_fixture("Name\n=======\nsrc\n=======\nout\n=======\n\n");
+        assert_eq!(case.stderr, None);
     }
 
     #[test]
@@ -261,11 +320,14 @@ mod tests {
     }
 
     #[test]
-    fn extra_separators_stay_in_expected_section() {
-        // A `===` line inside the expected output must not start a 4th section.
-        let case = parse_fixture("Name\n=======\nsrc\n=======\nline1\n=======\nline2\n");
+    fn extra_separators_stay_in_stderr_section() {
+        // Only the first three `===` lines split; a fourth stays in the final
+        // (stderr) section, so stderr output containing `===` is preserved.
+        let case =
+            parse_fixture("Name\n=======\nsrc\n=======\nout\n=======\nline1\n=======\nline2\n");
         assert_eq!(case.source, "src");
-        assert_eq!(case.expected, "line1\n=======\nline2");
+        assert_eq!(case.expected, "out");
+        assert_eq!(case.stderr.as_deref(), Some("line1\n=======\nline2"));
     }
 
     #[test]
