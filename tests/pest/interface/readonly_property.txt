@@ -14,7 +14,7 @@ interface Foo { readonly x: number }
         (object_property
           (property_key
             (readonly_modifier: "readonly")
-            (ident: "x")
+            (property_key_name: "x")
           )
           (expr
             (primitive

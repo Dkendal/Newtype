@@ -2,7 +2,7 @@ tuple mixing primitive, literal, and string elements
 
 =======
 
-[string, 1, :a, true]
+[string, 1, 'a', true]
 
 =======
 

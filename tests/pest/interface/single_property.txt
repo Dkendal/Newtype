@@ -13,7 +13,7 @@ interface Foo { x: number }
       (object_literal
         (object_property
           (property_key
-            (ident: "x")
+            (property_key_name: "x")
           )
           (expr
             (primitive

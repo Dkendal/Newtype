@@ -1,9 +1,0 @@
-Atom literals inside a tuple lower to single-quoted strings
-
-=======
-
-[:$x, :--y__]
-
-=======
-
-['$x', '--y__']

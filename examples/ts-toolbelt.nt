@@ -1,6 +1,6 @@
 export type Assign(L, Ls, depth, ignore, fill)
     defaults
-        depth = :flat,
+        depth = 'flat',
         ignore = BuiltIn,
         fill = never,
     where

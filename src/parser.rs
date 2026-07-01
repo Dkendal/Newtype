@@ -758,10 +758,10 @@ fn parse_interface(pair: Pair) -> Ast {
 
     let definition = body.properties;
 
-    let extends = inner
-        .clone()
-        .find(match_tag("extends"))
-        .map(|p| p.into_inner().next().unwrap().as_str().to_string());
+    let extends = inner.clone().find(match_tag("extends")).map(|p| {
+        let ty = p.into_inner().find(match_tag("type")).unwrap();
+        Rc::new(parse(ty))
+    });
 
     let params = parse_definition_options(inner);
 
@@ -901,7 +901,6 @@ fn parse_string_literal(pair: Pair) -> String {
     assert_ast!(pair, Rule::string);
 
     match pair.clone().into_inner().next().unwrap().as_rule() {
-        Rule::atom_string => pair.as_str().trim_start_matches(':').to_string(),
         Rule::double_quote_string => pair.as_str().trim_matches('"').to_string(),
         Rule::single_quote_string => pair.as_str().trim_matches('\'').to_string(),
         _ => unreachable!(),
@@ -1058,7 +1057,7 @@ fn parse_object_literal(pair: Pair) -> TypeLiteral {
 
 fn parse_property_key_inner(key: Pair) -> ObjectPropertyKey {
     match key.as_rule() {
-        Rule::ident => ObjectPropertyKey::Key(key.as_str().to_string()),
+        Rule::property_key_name | Rule::ident => ObjectPropertyKey::Key(key.as_str().to_string()),
         Rule::index_property_key => parse_index_property_key(key),
         Rule::computed_property_key => {
             let inner = key.into_inner().next().unwrap();

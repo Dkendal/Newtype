@@ -1,5 +1,5 @@
 tuple with a single string atom element
 =======
-[:sup]
+['sup']
 =======
 ['sup']

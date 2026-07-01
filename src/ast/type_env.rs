@@ -311,13 +311,7 @@ fn interface_def(interface: &Interface) -> Def {
 
     let body = match &interface.extends {
         Some(parent) => Ast::IntersectionType(IntersectionType {
-            types: vec![
-                Ast::Ident(Ident {
-                    name: parent.clone(),
-                    span: interface.span,
-                }),
-                own,
-            ],
+            types: vec![parent.as_ref().clone(), own],
             span: interface.span,
         }),
         None => own,

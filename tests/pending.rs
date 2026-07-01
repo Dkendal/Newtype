@@ -86,7 +86,7 @@ mod interface_extends {
     }
 }
 
-/// Namespace imports: `import * as Foo from :a`. The renderer supports
+/// Namespace imports: `import * as Foo from 'a'`. The renderer supports
 /// `ImportClause::Namespace` (`* as <alias>`), but the parser lowering panics
 /// with "not yet implemented" (src/parser.rs).
 mod namespace_import {
@@ -96,7 +96,7 @@ mod namespace_import {
     fn star_as_alias() {
         assert_renders_like(
             Rule::program,
-            "import * as Foo from :a",
+            "import * as Foo from 'a'",
             "import type * as Foo from 'a';",
         );
     }

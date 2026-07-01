@@ -65,7 +65,7 @@ impl typescript::Pretty for Interface {
             Some(extends) => D::space()
                 .append("extends")
                 .append(D::space())
-                .append(extends),
+                .append(extends.as_ref().to_ts()),
             None => D::nil(),
         };
 

@@ -1,6 +1,6 @@
 An import followed by two type aliases
 =======
-import { Foo } from :mod
+import { Foo } from 'mod'
 type A as Foo
 type B as Foo | number
 =======

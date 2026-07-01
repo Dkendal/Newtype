@@ -65,7 +65,7 @@ definition_options = _{
 }
 
 extends_clause = {
-    "extends" ~ #name = ident
+    "extends" ~ #type = expr
 }
 
 defaults_caluse = {
@@ -206,9 +206,15 @@ property_key_prefix = _{
 }
 
 property_key_inner = _{
-    ident
+    property_key_name
   | ("[" ~ (index_property_key | computed_property_key) ~ "]")
 }
+
+// Property keys may be any identifier-like word, including words that are
+// reserved keywords elsewhere in the grammar (`string`, `number`, `object`,
+// `any`, …). TypeScript allows these as member names, so the key position uses
+// this permissive rule instead of `ident`.
+property_key_name = @{ !ASCII_DIGIT ~ ident_chars+ }
 
 computed_property_key = { ident }
 
@@ -340,9 +346,7 @@ export = @{ "export" }
 
 optional_modifier = @{ "?" }
 
-string = { atom_string | double_quote_string | single_quote_string }
-
-atom_string = @{ ":" ~ (!ASCII_DIGIT ~ (ASCII_ALPHANUMERIC | "$" | "_" | "-" | "/" | "\\" | "."))+ }
+string = { double_quote_string | single_quote_string }
 
 double_quote_string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 

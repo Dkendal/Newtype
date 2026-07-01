@@ -1,20 +1,10 @@
-import { A, B, I, M, Union } from :ts-toolbelt
+import { A, B, I, M, Union } from 'ts-toolbelt'
 
-import { __ } from :.
-
-import {
-  __capture__,
-  __kind__,
-  any_,
-  bigint_,
-  boolean_,
-  function_,
-  number_,
-  object_,
-  rest_,
-  string_,
-  symbol_,
-} from :./const
+// match-ts brands holes and captures with `Symbol.for(...)` keys (see
+// `match-ts/src/const.ts`). newtype has no `unique symbol`, so `symbol` is the
+// closest approximation.
+type __kind__ as symbol
+type __capture__ as symbol
 
 type True as 1
 
@@ -25,29 +15,31 @@ type ExtractSubcapture(T) as
   end
 
 type PartialAssignment(K, V) as
-  match V do
-    never -> never,
-    string ->
-        map k in K do
-            v
-        end,
+  cond do
+    V <: never -> never,
+    K <: string -> map k in K do V end,
+    else -> never
   end
 
 type EmptyToNever(T) as
-  if not ({} <: T) then
+  if {} <: T then
+    never
+  else
     T
   end
 
-type Kind as
-  :string
-  | :number
-  | :bigint
-  | :boolean
-  | :symbol
-  | :object
-  | :function
-  | :any
-  | :rest
+// `Kind` is `typeof any_ | typeof rest_ | …` in match-ts; each `X_` const is a
+// string literal (`any_ = 'any'`), so the union is exactly these literals.
+export type Kind as
+  'any'
+  | 'rest'
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'function'
+  | 'symbol'
+  | 'bigint'
+  | 'object'
 
 export interface Hole(Type, Label)
 defaults
@@ -56,6 +48,33 @@ defaults
 {
   T: Type,
   readonly [__kind__]: Label
+}
+
+// The per-type hole singletons and the `__` wildcard map (match-ts `index.ts`).
+interface __any extends Hole(any, 'any') {}
+export interface __string extends Hole(string, 'string') {}
+export interface __number extends Hole(number, 'number') {}
+export interface __boolean extends Hole(boolean, 'boolean') {}
+export interface __symbol extends Hole(symbol, 'symbol') {}
+export interface __bigint extends Hole(bigint, 'bigint') {}
+export interface __object extends Hole(Object, 'object') {}
+export interface __function extends Hole(Function, 'function') {}
+export interface __rest extends Hole(any[], 'rest') {}
+
+export interface __ extends Hole(any, 'any') {
+  string: __string,
+  number: __number,
+  boolean: __boolean,
+  // There is something weird going on where including this causes
+  // RecursiveCollect to think that it has a circular reference
+  object: __object,
+  function: __function,
+  symbol: __symbol,
+  bigint: __bigint,
+  any: __any,
+  rest: __rest,
+  tail: __rest,
+  tl: __rest,
 }
 
 export type HoleInnerType(T) as
@@ -70,8 +89,7 @@ defaults
   Name = any,
   Pattern = any,
 where
-  Name <: string,
-  Pattern <: any,
+  Name <: String,
 {
   readonly [__capture__]: Name,
   readonly pattern: Pattern,
@@ -101,16 +119,6 @@ type RecursiveExpandCapture(T) as
     end
   end
 
-type RecursiveExpandCapture(T) as
-  cond do
-    A::Equals(T, any) <: True -> T,
-    T <: Hole | Capture -> ExpandCapture(T),
-    T <: Record(string, any) ->
-        map K in keyof(T) do
-          ExpandCapture(T[K])
-        end
-  end
-
 export type ExpandCapture(T) as
   T
   |> HoleInnerType()
@@ -118,7 +126,9 @@ export type ExpandCapture(T) as
   |> RecursiveExpandCapture()
 
 type NeverToEmpty(T) as
-  if [T] </: never then
+  if [T] <: [never] then
+    {}
+  else
     T
   end
 
@@ -142,7 +152,9 @@ type WalkChildren(Node) as
   |> Explode()
 
 type DoRecursiveCollect(Node) as
-  if IfLeafNode(Node) </: True then
+  if IsLeafNode(Node) <: True then
+    never
+  else
     if Node <: Capture(any, ?P) then
       Node | DoRecursiveCollect(P)
     else
@@ -187,6 +199,81 @@ export type UnifyAll(Value, Pattern) as
     IsTopType(Value) <: True ->
       VariableCapture(Pattern),
 
-    Overlapping(Value, ExpandCapture(Pattern)) ->
-       DoUnifyAll(Value, Pattern)
+    Overlapping(Value, ExpandCapture(Pattern)) <: {} ->
+      DoUnifyAll(Value, Pattern)
+  end
+
+export type DoUnifyAll(Value, Pattern) as
+  cond do
+    Pattern <: Capture(?VarName, ?Child) ->
+      PartialAssignment(VarName, Overlapping(Value, ExpandCapture(Child)))
+      | UnifyAll(Value, Child),
+
+    Overlapping(Value, ExpandCapture(Pattern)) <: object ->
+      ExtractSubcapture(
+        map K in keyof(Value) do
+          if K <: keyof(Pattern) then
+            UnifyAll(Value[K], Pattern[K])
+          else
+            never
+          end
+        end
+      )
+  end
+
+export type ShouldUnifyAll(Value, Pattern) as
+  B::Not(
+    B::Or(
+      A::Equals(Pattern, any) & A::Equals(Value, any),
+      A::Extends(Pattern, M::Primitive) & A::Extends(Value, M::Primitive)
+    )
+  )
+
+export type CaseParameters(Value, Pattern) as
+  UnifyAll(Value, Pattern)
+  |> Union::Merge()
+  |> EmptyToNever()
+
+export type Overlapping(A, B, Depth)
+defaults
+  Depth = I::IterationOf(0)
+where
+  Depth <: I::Iteration
+as
+  cond do
+    A::Equals(A, any) <: True -> B,
+    A <: B -> A,
+    [A, B, keyof(A)] <: [any[], any[], any] | [object, object, keyof(B)] ->
+      RejectMismatch(
+        map Key in keyof(A) do
+          if Key <: keyof(B) then
+            Overlapping(A[Key], B[Key], I::Next(Depth))
+          else
+            A[Key]
+          end
+        end
+      )
+  end
+
+export type RejectMismatch(T) as
+  cond do
+    {} <: T -> never,
+    T <: AnyNever(A::Cast(T, object)) -> never,
+    else -> T
+  end
+
+export type AnyNever(T)
+where
+  T <: object
+as
+  if keyof(T) <: ?S then
+    if S <: any then
+      map K in A::Cast(S, string | number | symbol) do
+        never
+      end
+    else
+      never
+    end
+  else
+    never
   end

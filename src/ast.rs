@@ -207,7 +207,7 @@ impl TypeLiteral {
 pub struct Interface {
     pub export: bool,
     pub name: String,
-    pub extends: Option<String>,
+    pub extends: Option<Rc<Ast>>,
     pub params: Vec<TypeParameter>,
     pub definition: Vec<ObjectProperty>,
 }
